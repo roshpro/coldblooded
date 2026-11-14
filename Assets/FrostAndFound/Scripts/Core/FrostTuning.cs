@@ -120,8 +120,9 @@ namespace FrostAndFound
             set { PlayerPrefs.SetInt("frost.tips", value ? 1 : 0); PlayerPrefs.Save(); Changed?.Invoke(); }
         }
 
-        /// <summary>The hand holding the Polaroid (right unless lefty mode).</summary>
-        public static HandSide CameraHand => LeftHanded ? HandSide.Left : HandSide.Right;
-        public static HandSide FreeHand => LeftHanded ? HandSide.Right : HandSide.Left;
+        /// <summary>The hand holding the Polaroid: your left, so your right is free to pull prints and throw.
+        /// Lefty mode swaps them.</summary>
+        public static HandSide CameraHand => LeftHanded ? HandSide.Right : HandSide.Left;
+        public static HandSide FreeHand => LeftHanded ? HandSide.Left : HandSide.Right;
     }
 }

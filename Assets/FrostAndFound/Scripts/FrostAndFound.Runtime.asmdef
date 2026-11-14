@@ -8,7 +8,8 @@
         "Unity.RenderPipelines.Core.Runtime",
         "Unity.XR.Management",
         "Oculus.VR",
-        "meta.xr.mrutilitykit"
+        "meta.xr.mrutilitykit",
+        "Meta.XR.EnvironmentDepth"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -19,7 +20,9 @@
     "defineConstraints": [],
     "versionDefines": [
         { "name": "com.meta.xr.sdk.core", "expression": "1.0.0", "define": "FROST_META" },
-        { "name": "com.meta.xr.mrutilitykit", "expression": "1.0.0", "define": "FROST_MRUK" }
+        { "name": "com.meta.xr.mrutilitykit", "expression": "1.0.0", "define": "FROST_MRUK" },
+        { "name": "com.unity.xr.meta-openxr", "expression": "0.0.1", "define": "FROST_META_OPENXR" },
+        { "name": "com.unity.xr.oculus", "expression": "0.0.1", "define": "FROST_OCULUS_XR" }
     ],
     "noEngineReferences": false
 }

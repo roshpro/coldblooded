@@ -29,6 +29,8 @@ namespace FrostAndFound
     {
         public const float Width = 0.088f, Height = 0.107f, ImageSize = 0.078f;
         public PhotoData Data { get; private set; }
+        /// <summary>The picture has fully come through (only then can you show it to someone).</summary>
+        public bool IsDeveloped { get; private set; }
 
         Material m_ImageMat;
         Transform m_Circle, m_Stamp, m_Content;
@@ -56,7 +58,8 @@ namespace FrostAndFound
             // image (sits in the upper part like a real instant photo)
             m_ImageMat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Photo)) { name = "PhotoImage" };
             m_ImageMat.SetTexture("_BaseMap", data.Image);
-            m_ImageMat.SetFloat("_Flash", 1f);
+            m_ImageMat.SetFloat("_Flash", 0f);
+            m_ImageMat.SetFloat("_Develop", 0f);   // a blank print until it's pulled out and develops
             var img = ProcMesh.Part("Image", m_Content, ProcMesh.Quad(), m_ImageMat,
                 new Vector3(0, (Height - ImageSize) * 0.5f - 0.005f, -0.0014f), new Vector3(ImageSize, ImageSize, 1f));
             img.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -90,10 +93,12 @@ namespace FrostAndFound
             m_Label.alignment = TextAlignmentOptions.Center;
         }
 
-        /// <summary>Eject → develop flash → (circle draws on) → done. Runs relative to the camera slot.</summary>
-        public IEnumerator Develop(float flashSeconds)
+        /// <summary>Instant film developing in your hand: blank → the picture surfaces → colour → (circle draws on).</summary>
+        public IEnumerator Develop(float seconds)
         {
-            yield return Ease.Tween(flashSeconds, t => m_ImageMat.SetFloat("_Flash", 1f - t), Ease.OutCubic, false);
+            yield return Ease.Tween(seconds, t => m_ImageMat.SetFloat("_Develop", t), Ease.InOutCubic, false);
+            m_ImageMat.SetFloat("_Develop", 1f);
+            IsDeveloped = true;
             if (m_Circle)
             {
                 AudioDirector.PlayAt(Sfx.Marker, transform.position, 0.5f, 1f);
@@ -162,6 +167,8 @@ namespace FrostAndFound
         }
 
         public void MarkArrived() { m_Arrived = true; if (IsTucked && Current) Current.gameObject.SetActive(false); }
+        /// <summary>Photos join the album the moment they're taken (the case file needs them even if a print is still in the slot).</summary>
+        public void AddToAlbum(PolaroidPhoto photo) { if (photo && !Album.Contains(photo)) Album.Add(photo); }
 
         public void TuckAway()
         {

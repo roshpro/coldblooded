@@ -76,7 +76,12 @@ namespace FrostAndFound
             UpdateHand(Right, OVRInput.Controller.RTouch, cameraRig.rightControllerAnchor, cameraRig.rightHandAnchor, rightHand, rightSkeleton);
         }
 
-        void LateUpdate() => SampleTrackers();
+        void LateUpdate()
+        {
+            SampleJoints(Left, leftSkeleton);
+            SampleJoints(Right, rightSkeleton);
+            SampleTrackers();
+        }
 
         void UpdateHand(HandRig h, OVRInput.Controller ctrl, Transform controllerAnchor, Transform handAnchor, OVRHand ovrHand, OVRSkeleton skel)
         {
@@ -95,6 +100,8 @@ namespace FrostAndFound
                 h.Grip = OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger, ctrl);
                 h.UpdateTrigger(OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, ctrl));
                 h.PrimaryDown = OVRInput.GetDown(OVRInput.Button.One, ctrl);
+                h.PhotoPose = h.Trigger;
+                h.HasJoints = false;
             }
             else if (handTracked)
             {
@@ -113,12 +120,54 @@ namespace FrostAndFound
                 float pinch = ovrHand.GetFingerPinchStrength(OVRHand.HandFinger.Index);
                 h.UpdateTrigger(pinch, 0.85f, 0.55f);
                 h.PrimaryDown = false;
+                h.PhotoPose = pinch;
             }
             else
             {
                 h.UpdateTrigger(0f);
                 h.PrimaryDown = false;
+                h.PhotoPose = 0f;
+                h.HasJoints = false;
             }
+        }
+
+        static readonly OVRSkeleton.BoneId[][] s_XrChains =
+        {
+            new[] { OVRSkeleton.BoneId.XRHand_ThumbMetacarpal, OVRSkeleton.BoneId.XRHand_ThumbProximal, OVRSkeleton.BoneId.XRHand_ThumbDistal, OVRSkeleton.BoneId.XRHand_ThumbTip },
+            new[] { OVRSkeleton.BoneId.XRHand_IndexProximal, OVRSkeleton.BoneId.XRHand_IndexIntermediate, OVRSkeleton.BoneId.XRHand_IndexDistal, OVRSkeleton.BoneId.XRHand_IndexTip },
+            new[] { OVRSkeleton.BoneId.XRHand_MiddleProximal, OVRSkeleton.BoneId.XRHand_MiddleIntermediate, OVRSkeleton.BoneId.XRHand_MiddleDistal, OVRSkeleton.BoneId.XRHand_MiddleTip },
+            new[] { OVRSkeleton.BoneId.XRHand_RingProximal, OVRSkeleton.BoneId.XRHand_RingIntermediate, OVRSkeleton.BoneId.XRHand_RingDistal, OVRSkeleton.BoneId.XRHand_RingTip },
+            new[] { OVRSkeleton.BoneId.XRHand_LittleProximal, OVRSkeleton.BoneId.XRHand_LittleIntermediate, OVRSkeleton.BoneId.XRHand_LittleDistal, OVRSkeleton.BoneId.XRHand_LittleTip },
+        };
+        static readonly OVRSkeleton.BoneId[][] s_OvrChains =
+        {
+            new[] { OVRSkeleton.BoneId.Hand_Thumb1, OVRSkeleton.BoneId.Hand_Thumb2, OVRSkeleton.BoneId.Hand_Thumb3, OVRSkeleton.BoneId.Hand_ThumbTip },
+            new[] { OVRSkeleton.BoneId.Hand_Index1, OVRSkeleton.BoneId.Hand_Index2, OVRSkeleton.BoneId.Hand_Index3, OVRSkeleton.BoneId.Hand_IndexTip },
+            new[] { OVRSkeleton.BoneId.Hand_Middle1, OVRSkeleton.BoneId.Hand_Middle2, OVRSkeleton.BoneId.Hand_Middle3, OVRSkeleton.BoneId.Hand_MiddleTip },
+            new[] { OVRSkeleton.BoneId.Hand_Ring1, OVRSkeleton.BoneId.Hand_Ring2, OVRSkeleton.BoneId.Hand_Ring3, OVRSkeleton.BoneId.Hand_RingTip },
+            new[] { OVRSkeleton.BoneId.Hand_Pinky1, OVRSkeleton.BoneId.Hand_Pinky2, OVRSkeleton.BoneId.Hand_Pinky3, OVRSkeleton.BoneId.Hand_PinkyTip },
+        };
+
+        /// <summary>Copies this frame's tracked joints into the HandRig for the knitted mittens (runs in LateUpdate,
+        /// after OVRSkeleton has moved its bones).</summary>
+        static void SampleJoints(HandRig h, OVRSkeleton skel)
+        {
+            h.HasJoints = false;
+            if (!h.IsOpticalHand || !skel || !skel.IsInitialized || !skel.IsDataValid || skel.Bones == null || skel.Bones.Count == 0) return;
+            var t = skel.GetSkeletonType();
+            bool xr = t == OVRSkeleton.SkeletonType.XRHandLeft || t == OVRSkeleton.SkeletonType.XRHandRight;
+            var chains = xr ? s_XrChains : s_OvrChains;
+            var wristId = xr ? OVRSkeleton.BoneId.XRHand_Wrist : OVRSkeleton.BoneId.Hand_WristRoot;
+            bool wrist = false; int found = 0;
+            foreach (var b in skel.Bones)
+            {
+                if (b == null || !b.Transform) continue;
+                if (b.Id == wristId) { h.Wrist = b.Transform.position; wrist = true; continue; }
+                for (int f = 0; f < 5; f++)
+                    for (int j = 0; j < 4; j++)
+                        if (chains[f][j] == b.Id) { h.Joints[f * 4 + j] = b.Transform.position; found++; }
+            }
+            h.HasJoints = wrist && found == 20;
         }
 
         static Transform Bone(OVRSkeleton skel, OVRSkeleton.BoneId a, OVRSkeleton.BoneId b)

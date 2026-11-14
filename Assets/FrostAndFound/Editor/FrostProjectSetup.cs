@@ -91,6 +91,7 @@ namespace FrostAndFound.EditorTools
             hub.photo = Shader.Find("FrostAndFound/Photo");
             hub.blur = Shader.Find("FrostAndFound/Blur");
             hub.uiGlass = Shader.Find("FrostAndFound/UIGlass");
+            hub.wool = Shader.Find("FrostAndFound/Wool");
             EditorUtility.SetDirty(hub);
 
             var tunePath = Root + "/Resources/FrostTuning.asset";
@@ -98,9 +99,9 @@ namespace FrostAndFound.EditorTools
                 AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<FrostTuning>(), tunePath);
             AssetDatabase.SaveAssets();
             int missing = 0;
-            foreach (var s in new Shader[] { hub.toon, hub.toonOutlined, hub.snow, hub.unlit, hub.unlitTransparent, hub.particle, hub.sky, hub.photo, hub.blur, hub.uiGlass })
+            foreach (var s in new Shader[] { hub.toon, hub.toonOutlined, hub.snow, hub.unlit, hub.unlitTransparent, hub.particle, hub.sky, hub.photo, hub.blur, hub.uiGlass, hub.wool })
                 if (!s) missing++;
-            return missing == 0 ? "asset hub ok (10 shaders)" : $"asset hub: {missing} shaders missing!";
+            return missing == 0 ? "asset hub ok (11 shaders)" : $"asset hub: {missing} shaders missing!";
         }
 
         [MenuItem("Frost & Found/Setup/Rebuild Fonts")]

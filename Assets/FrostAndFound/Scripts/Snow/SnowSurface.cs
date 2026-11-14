@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Collections;
 using UnityEngine;
 
@@ -14,8 +15,13 @@ namespace FrostAndFound
     {
         public static SnowSurface Instance { get; private set; }
 
-        public float thickness = 0.035f;
+        public float thickness = 0.05f;
         public float driftHeight = 0.07f;
+        [Tooltip("Tallest of the soft flat-topped mounds scattered over the open floor (m).")]
+        public float moundHeight = 0.035f;
+        [Tooltip("Average floor area (m²) per mound.")]
+        public float areaPerMound = 1.8f;
+        float[] m_Relief;   // mound + drift height per mask texel (m), for SurfaceHeightAt
 
         RoomInfo m_Room;
         Rect m_Rect;
@@ -59,18 +65,53 @@ namespace FrostAndFound
             m_Mask = new Texture2D(m_MaskW, m_MaskH, TextureFormat.RGBA32, false, true) { name = "SnowMask", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             var px = new Color32[m_MaskW * m_MaskH];
             m_MaskAlpha = new byte[px.Length];
+            m_Relief = new float[px.Length];
+            var edges = new float[px.Length];
+            var drifts = new float[px.Length];
+            int open = 0;
             for (int y = 0; y < m_MaskH; y++)
                 for (int x = 0; x < m_MaskW; x++)
                 {
-                    var p = new Vector2(Mathf.Lerp(m_Rect.xMin, m_Rect.xMax, (x + 0.5f) / m_MaskW), Mathf.Lerp(m_Rect.yMin, m_Rect.yMax, (y + 0.5f) / m_MaskH));
+                    int i = y * m_MaskW + x;
+                    var p = TexelToWorld(x, y);
                     float edge = room.EdgeDistance(p);
                     float alpha = Mathf.Clamp01((edge + 0.01f) / 0.05f);
                     if (alpha > 0f && room.IsBlocked != null && room.IsBlocked(new Vector3(p.x, room.FloorY, p.y), 0.0f)) alpha = 0f;
                     float drift = edge > 0f ? Mathf.Pow(Mathf.Clamp01(1f - edge / 0.38f), 2f) : 0f;
                     drift *= 0.75f + 0.25f * Mathf.PerlinNoise(p.x * 3.1f, p.y * 3.1f);
-                    byte a = (byte)(alpha * 255);
-                    m_MaskAlpha[y * m_MaskW + x] = a;
-                    px[y * m_MaskW + x] = new Color32(a, (byte)(drift * 255), 0, 255);
+                    m_MaskAlpha[i] = (byte)(alpha * 255);
+                    edges[i] = edge;
+                    drifts[i] = drift;
+                    if (alpha > 0.5f) open++;
+                }
+
+            // ---- mounds: soft flat-topped humps scattered over the open floor, so the snow has body
+            // (B channel, 0..1 of moundHeight). They flatten out into the drifts near walls and furniture.
+            var rng = new System.Random(1234);
+            float area = open * (m_Rect.width / m_MaskW) * (m_Rect.height / m_MaskH);
+            int moundCount = Mathf.Max(1, Mathf.RoundToInt(area / Mathf.Max(0.3f, areaPerMound)));
+            var mounds = new List<Vector4>(moundCount);   // centre xz, radius, height (0..1)
+            for (int tries = 0; mounds.Count < moundCount && tries < moundCount * 12; tries++)
+            {
+                var c = new Vector2(Mathf.Lerp(m_Rect.xMin, m_Rect.xMax, (float)rng.NextDouble()), Mathf.Lerp(m_Rect.yMin, m_Rect.yMax, (float)rng.NextDouble()));
+                if (room.EdgeDistance(c) < 0.25f) continue;
+                if (room.IsBlocked != null && room.IsBlocked(new Vector3(c.x, room.FloorY, c.y), 0f)) continue;
+                mounds.Add(new Vector4(c.x, c.y, Mathf.Lerp(0.5f, 1.3f, (float)rng.NextDouble()), Mathf.Lerp(0.43f, 1f, (float)rng.NextDouble())));
+            }
+            for (int y = 0; y < m_MaskH; y++)
+                for (int x = 0; x < m_MaskW; x++)
+                {
+                    int i = y * m_MaskW + x;
+                    var p = TexelToWorld(x, y);
+                    float mound = 0f;
+                    foreach (var m in mounds)
+                    {
+                        float t = Vector2.Distance(p, new Vector2(m.x, m.y)) / m.z;
+                        if (t < 1f) mound = Mathf.Max(mound, m.w * (1f - Smooth(Smooth(Mathf.InverseLerp(0.5f, 1f, t)))));
+                    }
+                    mound *= Smooth(Mathf.Clamp01(edges[i] / 0.3f));
+                    m_Relief[i] = mound * moundHeight + drifts[i] * driftHeight;
+                    px[i] = new Color32(m_MaskAlpha[i], (byte)(drifts[i] * 255), (byte)(mound * 255), 255);
                 }
             m_Mask.SetPixels32(px);
             m_Mask.Apply(false, false);
@@ -100,6 +141,7 @@ namespace FrostAndFound
             m_Mat.SetTexture("_TrailMap", m_Trail);
             m_Mat.SetFloat("_Thickness", thickness);
             m_Mat.SetFloat("_DriftHeight", driftHeight);
+            m_Mat.SetFloat("_MoundHeight", moundHeight);
             m_Mat.SetFloat("_TexelSize", 1f / Mathf.Max(m_TrailW, m_TrailH));
             mr.sharedMaterial = m_Mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -212,8 +254,23 @@ namespace FrostAndFound
 
         static float Band(float x, float w) => Mathf.Abs(x) < w ? 1f - Mathf.Abs(x) / w * 0.4f : 0f;
 
-        /// <summary>Snow surface height at a point (approximate; ignores drifts).</summary>
-        public float HeightAt(Vector3 world) => HasSnowAt(world) ? SurfaceHeight : (m_Room != null ? m_Room.FloorY : 0f);
+        /// <summary>Snow surface height at a point, including mounds and wall drifts (ignores the small dunes and prints).</summary>
+        public float HeightAt(Vector3 world) => SurfaceHeightAt(world);
+
+        public float SurfaceHeightAt(Vector3 world)
+        {
+            float floor = m_Room != null ? m_Room.FloorY : 0f;
+            if (m_MaskAlpha == null || m_Relief == null) return floor + thickness;
+            var uv = WorldToUV(world);
+            if (uv.x < 0 || uv.y < 0 || uv.x >= 1 || uv.y >= 1) return floor;
+            int i = Mathf.Clamp((int)(uv.y * m_MaskH), 0, m_MaskH - 1) * m_MaskW + Mathf.Clamp((int)(uv.x * m_MaskW), 0, m_MaskW - 1);
+            return m_MaskAlpha[i] > 140 ? floor + 0.002f + thickness + m_Relief[i] : floor;
+        }
+
+        Vector2 TexelToWorld(int x, int y) =>
+            new Vector2(Mathf.Lerp(m_Rect.xMin, m_Rect.xMax, (x + 0.5f) / m_MaskW), Mathf.Lerp(m_Rect.yMin, m_Rect.yMax, (y + 0.5f) / m_MaskH));
+
+        static float Smooth(float t) => t * t * (3f - 2f * t);
 
         void OnDestroy()
         {

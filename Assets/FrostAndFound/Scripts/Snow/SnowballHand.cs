@@ -7,6 +7,7 @@ namespace FrostAndFound
     /// packs into your palm with a crunch (your current photo tucks away). Open your hand mid-swing to throw —
     /// the ball leaves with your hand's real release velocity, plus a light aim nudge.
     /// </summary>
+    [DefaultExecutionOrder(200)] // after the mittens have placed this frame's hold point
     public class SnowballHand : MonoBehaviour
     {
         public static SnowballHand Instance { get; private set; }
@@ -24,6 +25,12 @@ namespace FrostAndFound
 
         void OnEnable() => Instance = this;
         void OnDisable() { if (Instance == this) Instance = null; }
+
+        // the ball sits inside the curled mitten (its hold point), not at the bare palm bone
+        void LateUpdate()
+        {
+            if (m_Ball && m_Hand != null && m_Hand.Hold) m_Ball.Hold(m_Hand.Hold);
+        }
 
         void Update()
         {
@@ -43,7 +50,7 @@ namespace FrostAndFound
             {
                 if (!Enabled || m_ReleaseCooldown > 0f) return;
                 var palm = hand.Palm.position;
-                float above = palm.y - snow.SurfaceHeight;
+                float above = palm.y - snow.SurfaceHeightAt(palm);
                 bool inSnowZone = above < tune.scoopHeight && above > -0.12f && snow.HasSnowAt(palm);
                 bool closing = hand.Grip > tune.gripClosed;
                 bool wasOpenRecently = Time.time - m_LastOpenTime < 1.0f;
@@ -62,7 +69,7 @@ namespace FrostAndFound
         void FormBall(HandRig hand, SnowSurface snow, Vector3 palm)
         {
             var tune = FrostTuning.I;
-            var ground = new Vector3(palm.x, snow.SurfaceHeight, palm.z);
+            var ground = new Vector3(palm.x, snow.SurfaceHeightAt(palm), palm.z);
             snow.Stamp(ground, Random.Range(0f, 360f), StampShape.Scoop, 0.15f, 1f);
             Fx.SnowPuff(ground + Vector3.up * 0.02f, Vector3.up, 16, 0.8f);
             AudioDirector.PlayAt(Sfx.ScoopCrunch, ground, 0.9f, Random.Range(0.93f, 1.07f));

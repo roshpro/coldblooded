@@ -5,9 +5,11 @@ using UnityEngine;
 namespace FrostAndFound
 {
     /// <summary>
-    /// The chunky retro instant camera in your camera hand, with a live viewfinder on its back.
-    /// Trigger (or pinch) → flash, ka-CHUNK, and the photo pops out already developed with a quick white fade,
-    /// then lands in your other hand. No film limit; a missed shot is just a photo of snow.
+    /// The chunky retro instant camera, with a live viewfinder on its back. It only appears in your camera hand
+    /// (left by default) when you make the camera gesture — a slight pinch, or a light squeeze of the trigger —
+    /// otherwise you just see mittens. Pinch fully (pull the trigger) → flash, ka-CHUNK, and the print slides out
+    /// of the slot and waits there, blank, until your other hand pulls it free; it develops in your hand over ~2 s.
+    /// No film limit; a missed shot is just a photo of snow.
     /// </summary>
     public class PolaroidCamera : MonoBehaviour
     {
@@ -20,6 +22,16 @@ namespace FrostAndFound
         public Transform Slot { get; private set; }
         public int PhotoCount { get; private set; }
         public bool Enabled { get; set; } = true;
+        /// <summary>True while the camera is up in your hand (the mittens wrap it).</summary>
+        public bool IsRaised => m_Raise > 0.5f;
+        /// <summary>A print is sticking out of the slot, waiting for your other hand.</summary>
+        public bool PrintWaiting => m_Waiting != null;
+
+        const float RaiseAt = 0.22f;        // pinch strength / trigger travel that brings the camera up
+        const float LowerDelay = 0.6f;      // the camera lingers this long after you relax your fingers
+        const float EjectSeconds = 0.9f;
+        const float DevelopSeconds = 2f;
+        const float GrabReach = 0.085f;     // how close your free hand has to get to the print
 
         RenderTexture m_Viewfinder;
         Transform m_Body;
@@ -29,6 +41,10 @@ namespace FrostAndFound
         float m_Cooldown;
         Material m_BlurMat;
         bool m_ForceRender;
+        float m_Raise, m_PoseTime, m_LastPose = -10f, m_FreeOpenTime = -10f;
+        bool m_QueuedShot, m_Busy, m_Hidden, m_InReach;
+        PolaroidPhoto m_Waiting;
+        Vector3 m_SmoothPos; Quaternion m_SmoothRot = Quaternion.identity; bool m_HasSmooth;
 
         public static PolaroidCamera Create()
         {
@@ -123,31 +139,104 @@ namespace FrostAndFound
             var rig = PlayerRig.Active;
             if (!rig) return;
             var hand = rig.CameraHand;
+            float dt = Time.deltaTime;
+            if (m_Cooldown > 0f) m_Cooldown -= dt;
+
+            // ---- raise: the camera gesture brings it up; otherwise your hand is just a mitten
+            bool wantsUp;
+            if (!rig.IsXR) wantsUp = true;   // desktop stand-in: always in hand
+            else
+            {
+                bool pose = Enabled && hand.IsTracked && hand.PhotoPose >= RaiseAt;
+                m_PoseTime = pose ? m_PoseTime + dt : 0f;
+                if (pose && m_PoseTime >= 0.06f) m_LastPose = Time.time;
+                wantsUp = Time.time - m_LastPose < LowerDelay;
+            }
+            if (m_Waiting || m_Busy) wantsUp = true;    // mid-shot, or a print still in the slot
+            if (m_Hidden || !hand.IsTracked) wantsUp = false;
+            m_Raise = Mathf.MoveTowards(m_Raise, wantsUp ? 1f : 0f, dt / (wantsUp ? 0.16f : 0.2f));
+            float scale = wantsUp ? Ease.OutBack(m_Raise) : Mathf.SmoothStep(0f, 1f, m_Raise);
+            if (m_Body)
+            {
+                bool show = scale > 0.01f;
+                if (m_Body.gameObject.activeSelf != show) m_Body.gameObject.SetActive(show);
+                m_Body.localScale = Vector3.one * Mathf.Max(scale, 0.001f);
+            }
+
+            // ---- sit in the hand
             if (hand.Anchor)
             {
-                // sit in the hand: grip under the body, lens pointing where the hand points
-                var target = hand.Anchor.TransformPoint(rig.IsXR ? new Vector3(0, 0.03f, 0.03f) : Vector3.zero);
-                transform.SetPositionAndRotation(target, hand.Anchor.rotation * Quaternion.Euler(rig.IsXR ? 15f : 0f, 0, 0));
+                Vector3 pos; Quaternion rot;
+                HoldPose(rig, hand, out pos, out rot);
+                if (!m_HasSmooth || m_Raise < 0.05f) { m_SmoothPos = pos; m_SmoothRot = rot; m_HasSmooth = true; }
+                // tracked fingers jitter a little; a light damp keeps the viewfinder steady without lag you can feel
+                float k = hand.HasJoints ? 1f - Mathf.Exp(-28f * dt) : 1f;
+                m_SmoothPos = Vector3.Lerp(m_SmoothPos, pos, k);
+                m_SmoothRot = Quaternion.Slerp(m_SmoothRot, rot, k);
+                transform.SetPositionAndRotation(m_SmoothPos, m_SmoothRot);
             }
-            if (m_Cooldown > 0f) m_Cooldown -= Time.deltaTime;
 
-            // the viewfinder renders at a third of the frame rate in XR (~24–30 fps) to save the Quest's draw calls; every frame while shooting
-            if (Lens) Lens.enabled = !rig.IsXR || m_ForceRender || (Time.frameCount % 3) == 0;
+            // the viewfinder renders at a third of the frame rate in XR (~24–30 fps) to save the Quest's draw calls;
+            // every frame while shooting, and not at all while the camera is down
+            if (Lens) Lens.enabled = m_Raise > 0.5f && (!rig.IsXR || m_ForceRender || (Time.frameCount % 3) == 0);
             m_ForceRender = false;
 
-            if (Enabled && hand.TriggerDown && m_Cooldown <= 0f) TakePhoto();
+            // ---- shutter: a full pinch / trigger pull. Pressed while the camera is still coming up, it fires once it's there.
+            if (Enabled && hand.TriggerDown && m_Cooldown <= 0f)
+            {
+                if (m_Waiting) Jammed(hand);
+                else if (m_Raise >= 0.95f) TakePhoto();
+                else if (wantsUp || hand.PhotoPose >= RaiseAt) { m_QueuedShot = true; m_LastPose = Time.time; }
+            }
+            if (m_QueuedShot && (!Enabled || !hand.IsTracked)) m_QueuedShot = false;
+            if (m_QueuedShot && m_Raise >= 0.95f) { m_QueuedShot = false; if (!m_Waiting) TakePhoto(); }
+        }
+
+        /// <summary>Where the camera sits: held by its top corner between thumb and index (hand tracking),
+        /// or on the controller's grip, lens pointing where your hand points.</summary>
+        void HoldPose(PlayerRig rig, HandRig hand, out Vector3 pos, out Quaternion rot)
+        {
+            if (!rig.IsXR)
+            {
+                pos = hand.Anchor.position;
+                rot = hand.Anchor.rotation;
+                return;
+            }
+            if (hand.HasJoints)
+            {
+                var j = hand.Joints;
+                Vector3 fwd = (j[8] - hand.Wrist);
+                if (fwd.sqrMagnitude < 1e-6f) fwd = hand.Anchor.forward;
+                // aim halfway between where the hand points and where you look, levelled so shots aren't tilted
+                var aim = Vector3.Slerp(fwd.normalized, rig.Head.forward, 0.5f);
+                rot = Quaternion.LookRotation(aim, Vector3.up);
+                float side = hand.Side == HandSide.Left ? 1f : -1f;   // the body extends toward your middle
+                pos = hand.PinchPoint + rot * new Vector3(0.05f * side, -0.032f, 0.012f);
+                return;
+            }
+            pos = hand.Anchor.TransformPoint(new Vector3(0, 0.03f, 0.03f));
+            rot = hand.Anchor.rotation * Quaternion.Euler(15f, 0, 0);
+        }
+
+        void Jammed(HandRig hand)
+        {
+            m_Cooldown = 0.4f;
+            AudioDirector.PlayAt(Sfx.Whirr, transform.position, 0.25f, 0.6f);
+            hand.Haptic(0.2f, 0.03f);
+            HToast.Show("Pull the photo out first, with your other hand", UIKit.Icon.Camera, 3f);
         }
 
         public void TakePhoto()
         {
-            if (m_Cooldown > 0f) return;
+            if (m_Cooldown > 0f || m_Busy || m_Waiting) return;
             m_Cooldown = 0.55f;
+            m_LastPose = Time.time;
             StartCoroutine(Shoot());
         }
 
         IEnumerator Shoot()
         {
-            var tune = FrostTuning.I;
+            m_Busy = true;
             m_ForceRender = true;
             AudioDirector.PlayAt(Sfx.Shutter, transform.position, 1f, Random.Range(0.97f, 1.03f));
             PlayerRig.Active?.CameraHand.Haptic(0.7f, 0.07f);
@@ -172,8 +261,9 @@ namespace FrostAndFound
             data.Image = rt;
 
             var photo = PolaroidPhoto.Create(data);
+            PhotoHolder.Instance?.AddToAlbum(photo);
             PhotoTaken?.Invoke(data);
-            yield return Eject(photo, tune.developFadeSeconds);
+            yield return EjectAndWait(photo);
         }
 
         IEnumerator FlashBulb()
@@ -184,47 +274,91 @@ namespace FrostAndFound
             yield return Ease.Tween(0.25f, t => m_FlashMat.SetColor("_BaseColor", Color.Lerp(Color.white * 1.6f, Palette.SkyHorizon, t)), Ease.OutCubic, false);
         }
 
-        IEnumerator Eject(PolaroidPhoto photo, float developSeconds)
+        /// <summary>The print slides out of the slot and waits there, blank, until your free hand pulls it free.</summary>
+        IEnumerator EjectAndWait(PolaroidPhoto photo)
         {
-            var holder = PhotoHolder.Instance;
-            holder?.Receive(photo, false);
+            m_Waiting = photo;
+            m_Busy = false;
             var p = photo.transform;
             p.localScale = Vector3.one;
             AudioDirector.PlayAt(Sfx.Whirr, transform.position, 0.6f, 1f);
-            // slide out of the slot (picture side up/toward the lens), developing as it goes
-            float slide = 0.32f;
-            var develop = StartCoroutine(photo.Develop(developSeconds));
-            for (float t = 0; t < 1f; t += Time.deltaTime / slide)
+            for (float t = 0; t < 1f; t += Time.deltaTime / EjectSeconds)
             {
-                if (!Slot) break;
-                var rot = Slot.rotation * Quaternion.Euler(-90f, 0f, 0f) * Quaternion.Euler(0, 180f, 0);
-                var pos = Slot.position + Slot.forward * (PolaroidPhoto.Height * 0.5f * Ease.OutCubic(t) - PolaroidPhoto.Height * 0.45f) + Slot.up * -0.004f;
-                p.SetPositionAndRotation(pos, rot);
+                PlaceInSlot(p, Ease.OutCubic(t));
                 yield return null;
             }
-            yield return new WaitForSeconds(0.08f);
-            // pops out and lands in your free hand
+            float waitStart = Time.time;
+            bool tipped = false;
+            m_InReach = false;
+            while (photo)
+            {
+                PlaceInSlot(p, 1f);
+                var rig = PlayerRig.Active;
+                bool closing = CaseDirector.I != null && CaseDirector.I.CaseClosed;
+                if (closing || (rig && !rig.IsXR && Time.time - waitStart > 0.7f)) break;   // finale / desktop: handed over
+                if (rig && TryGrab(rig)) break;
+                if (!tipped && Time.time - waitStart > 4f && rig && rig.IsXR)
+                {
+                    tipped = true;
+                    HToast.Show("Pull the photo out of the camera with your other hand", UIKit.Icon.Camera, 3.5f);
+                }
+                yield return null;
+            }
+            m_Waiting = null;
+            if (photo) yield return TakeOut(photo);
+        }
+
+        void PlaceInSlot(Transform p, float out01)
+        {
+            if (!Slot) return;
+            var rot = Slot.rotation * Quaternion.Euler(-90f, 0f, 0f) * Quaternion.Euler(0, 180f, 0);
+            float along = Mathf.Lerp(-PolaroidPhoto.Height * 0.45f, PolaroidPhoto.Height * 0.2f, out01);
+            p.SetPositionAndRotation(Slot.position + Slot.forward * along + Slot.up * -0.004f, rot);
+        }
+
+        /// <summary>Your free hand pulls the print: reach the bit sticking out and close your fingers on it.</summary>
+        bool TryGrab(PlayerRig rig)
+        {
+            var hand = rig.FreeHand;
+            if (!hand.IsTracked || !Slot || (SnowballHand.Instance && SnowballHand.Instance.IsHolding)) return false;
+            bool closed = hand.Grip > 0.6f || hand.Trigger > 0.6f;
+            if (!closed) m_FreeOpenTime = Time.time;
+            var grabAt = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
+            var edge = Slot.position + Slot.forward * (PolaroidPhoto.Height * 0.62f);
+            bool reach = Vector3.Distance(grabAt, edge) < GrabReach;
+            if (reach && !m_InReach) hand.Haptic(0.12f, 0.02f);   // a little tick: you're touching it
+            m_InReach = reach;
+            return reach && closed && Time.time - m_FreeOpenTime < 0.8f;
+        }
+
+        IEnumerator TakeOut(PolaroidPhoto photo)
+        {
+            var holder = PhotoHolder.Instance;
             var rig = PlayerRig.Active;
+            var p = photo.transform;
+            AudioDirector.PlayAt(Sfx.Whirr, p.position, 0.35f, 1.7f);
             if (rig && holder)
             {
+                holder.Receive(photo, false);
                 var from = p.position; var fromRot = p.rotation;
-                for (float t = 0; t < 1f; t += Time.deltaTime / 0.26f)
+                for (float t = 0; t < 1f; t += Time.deltaTime / 0.16f)
                 {
                     var hand = rig.FreeHand;
-                    if (!hand.Palm) break;
+                    if (!hand.Palm || !hand.Anchor) break;
                     var to = hand.Palm.position + hand.Anchor.up * 0.035f;
                     var toRot = Quaternion.LookRotation(-(rig.Head.position - to).normalized, rig.Head.up);
-                    var k = Ease.InOutCubic(t);
-                    p.SetPositionAndRotation(Vector3.Lerp(from, to, k) + Vector3.up * Ease.Bump(t) * 0.06f, Quaternion.Slerp(fromRot, toRot, k));
+                    var k = Ease.OutCubic(t);
+                    p.SetPositionAndRotation(Vector3.Lerp(from, to, k), Quaternion.Slerp(fromRot, toRot, k));
                     yield return null;
                 }
                 holder.MarkArrived();
-                rig.FreeHand.Haptic(0.25f, 0.04f);
+                rig.FreeHand.Haptic(0.3f, 0.05f);
             }
-            yield return develop;
+            bool fast = CaseDirector.I != null && CaseDirector.I.CaseClosed;
+            yield return photo.Develop(fast ? 0.6f : DevelopSeconds);
         }
 
-        public void SetVisible(bool on) { if (m_Body) m_Body.gameObject.SetActive(on); }
+        public void SetVisible(bool on) { m_Hidden = !on; if (!on) m_Raise = 0f; }
 
         void OnDestroy()
         {

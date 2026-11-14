@@ -22,6 +22,20 @@ namespace FrostAndFound
             visual.localScale = Vector3.one * rig.Scale;
             rig.Visual = visual;
 
+            GameObject custom = null;
+            if (customModel)
+            {
+                custom = Object.Instantiate(customModel, visual, false);
+                custom.name = "Model";
+                custom.SetLayerRecursive(Layers.Kid);
+                var anim = custom.GetComponentInChildren<Animator>();
+                if (anim && anim.avatar && anim.avatar.isHuman)
+                {
+                    BindHumanoid(rig, custom.transform, anim, FrostAssets.SlotFor(id));
+                    return rig;
+                }
+            }
+
             // joints
             rig.Hips = ProcMesh.Pivot("Hips", visual, new Vector3(0, HipY, 0));
             rig.Spine = ProcMesh.Pivot("Spine", rig.Hips, new Vector3(0, 0.02f, 0));
@@ -35,11 +49,9 @@ namespace FrostAndFound
             rig.LegR = ProcMesh.Pivot("Leg_R", rig.Hips, new Vector3(0.08f, 0, 0));
             rig.BubbleAnchor = ProcMesh.Pivot("BubbleAnchor", rig.Head, new Vector3(0, HeadR * 2f + 0.28f, 0));
 
-            if (customModel)
+            if (custom)
             {
-                var m = Object.Instantiate(customModel, visual, false);
-                m.SetLayerRecursive(Layers.Kid);
-                BindCustom(rig, m.transform);
+                BindCustom(rig, custom.transform);
                 return rig;
             }
 
@@ -53,6 +65,44 @@ namespace FrostAndFound
             }
             MeshMerger.Merge(visual);
             return rig;
+        }
+
+        /// <summary>A rigged Humanoid kid (the team's Meshy models): the Animator drives the body; the rig's joints
+        /// are the real bones, so everything that attaches to a head or hand follows the animation.</summary>
+        static void BindHumanoid(KidRig rig, Transform model, Animator anim, CharacterModelSlot slot)
+        {
+            if (slot != null && slot.animator) anim.runtimeAnimatorController = slot.animator;
+            anim.applyRootMotion = false;   // the game walks the kid; the clips animate the body in place
+            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            var smr = model.GetComponentInChildren<SkinnedMeshRenderer>();
+            if (smr)
+            {
+                // our kids stand ~1.05 m tall (Visual carries each character's scale on top)
+                float h = smr.bounds.size.y / Mathf.Max(1e-4f, rig.Visual.lossyScale.y);
+                float want = 1.05f * (slot != null && slot.scale > 0f ? slot.scale : 1f);
+                if (h > 0.05f) model.localScale *= want / h;
+                rig.Height = want * rig.Visual.lossyScale.y;
+                smr.sharedMaterial = Palette.SoftTextured(slot != null ? slot.texture : null, "Kid_" + model.root.name);
+                smr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                smr.receiveShadows = true;
+                smr.updateWhenOffscreen = true;
+            }
+            Transform B(HumanBodyBones b) => anim.GetBoneTransform(b);
+            rig.Hips = B(HumanBodyBones.Hips);
+            rig.Spine = B(HumanBodyBones.Chest) ?? B(HumanBodyBones.Spine) ?? rig.Hips;
+            rig.Neck = B(HumanBodyBones.Neck) ?? rig.Spine;
+            rig.Head = B(HumanBodyBones.Head) ?? rig.Neck;
+            rig.ArmL = B(HumanBodyBones.LeftUpperArm);
+            rig.ArmR = B(HumanBodyBones.RightUpperArm);
+            rig.HandL = B(HumanBodyBones.LeftHand);
+            rig.HandR = B(HumanBodyBones.RightHand);
+            rig.LegL = B(HumanBodyBones.LeftUpperLeg);
+            rig.LegR = B(HumanBodyBones.RightUpperLeg);
+            rig.HipHeight = rig.Hips ? rig.Visual.InverseTransformPoint(rig.Hips.position).y : HipY;
+            var bubble = new GameObject("BubbleAnchor").transform;
+            bubble.SetParent(rig.Head, false);
+            bubble.position = rig.Head.position + Vector3.up * 0.3f * rig.Visual.lossyScale.y;
+            rig.BubbleAnchor = bubble;
         }
 
         static void BindCustom(KidRig rig, Transform model)

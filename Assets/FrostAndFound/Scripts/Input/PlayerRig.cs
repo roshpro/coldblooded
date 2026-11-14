@@ -101,6 +101,18 @@ namespace FrostAndFound
         public bool TriggerDown;        // went past the press threshold this frame
         public bool TriggerHeld;
         public bool PrimaryDown;        // A/X button (desktop: unused)
+        /// <summary>0..1, how far into the "camera" gesture this hand is: a slight pinch (hand tracking) or a light
+        /// squeeze of the index trigger (controllers). Desktop: always 1.</summary>
+        public float PhotoPose;
+
+        /// <summary>Hand-tracking joints in world space (thumb, index, middle, ring, little × base→tip), valid when HasJoints.</summary>
+        public readonly Vector3[] Joints = new Vector3[20];
+        public Vector3 Wrist;
+        public bool HasJoints;
+        /// <summary>Between thumb and index tips (hand tracking), or just in front of the fingers otherwise.</summary>
+        public Vector3 PinchPoint => HasJoints ? (Joints[3] + Joints[7]) * 0.5f : (Tip ? Tip.position : (Anchor ? Anchor.position : Vector3.zero));
+        /// <summary>Set by the mittens each frame: where a held snowball sits, inside the curled mitten.</summary>
+        public Transform Hold;
 
         public readonly VelocityTracker Tracker = new VelocityTracker();
         /// <summary>Desktop simulation can dictate the release velocity of a scripted throw.</summary>

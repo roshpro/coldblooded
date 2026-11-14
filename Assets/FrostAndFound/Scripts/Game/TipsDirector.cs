@@ -32,7 +32,11 @@ namespace FrostAndFound
             {
                 m_PhotoTip = true;
                 var rig = PlayerRig.Active;
-                HToast.Show(rig && rig.IsXR ? "Take a photo: pull the trigger, or pinch" : "Take a photo: left click (WASD to walk, C to crouch)", UIKit.Icon.Camera, 4.5f);
+                string side = rig ? (rig.CameraHand.Side == HandSide.Left ? "left" : "right") : "left";
+                string tip = !(rig && rig.IsXR) ? "Take a photo: left click (WASD to walk, C to crouch)"
+                    : rig.CameraHand.IsOpticalHand ? $"Pinch your {side} fingers slightly to raise the camera, then pinch to shoot"
+                    : $"Squeeze the {side} trigger lightly to raise the camera, pull it to shoot";
+                HToast.Show(tip, UIKit.Icon.Camera, 5f);
             }
             if (!m_ShowTip && m_EvidenceAt > 0f && Time.time - m_EvidenceAt > 7f && d.Shows == 0 && !DialogueRunner.AnyoneSpeaking)
             {
