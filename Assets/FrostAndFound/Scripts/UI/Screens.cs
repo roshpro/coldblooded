@@ -5,96 +5,15 @@ using UnityEngine;
 
 namespace FrostAndFound
 {
-    /// <summary>Renders the key art for the title panel: Frosty slumped in his chalk outline, in the snow.</summary>
-    public static class TitleArt
-    {
-        static RenderTexture s_Art;
-
-        public static Texture Get()
-        {
-            if (s_Art) return s_Art;
-            s_Art = new RenderTexture(1344, 400, 24, RenderTextureFormat.ARGB32) { name = "Title Art", antiAliasing = 4 };
-            s_Art.Create();
-            CoroutineHost.Run(Render(s_Art));
-            return s_Art;
-        }
-
-        static IEnumerator Render(RenderTexture target)
-        {
-            var origin = new Vector3(0, -200f, 0);
-            var studio = new GameObject("Title Art Studio");
-            studio.transform.position = origin;
-            ProcMesh.Part("Snow", studio.transform, ProcMesh.Disc(48), Palette.Toon(Palette.Snow, false, 0.2f), origin + Vector3.down * 0.01f, new Vector3(9f, 0.02f, 9f));
-            var sky = new GameObject("Sky");
-            sky.transform.SetParent(studio.transform, false);
-            sky.transform.position = origin;
-            sky.transform.localScale = Vector3.one * 30f;
-            sky.AddComponent<MeshFilter>().sharedMesh = ProcMesh.Sphere(24, 16);
-            var skyMat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Sky));
-            skyMat.SetColor("_TopColor", Palette.SkyTop); skyMat.SetColor("_HorizonColor", Palette.SkyHorizon); skyMat.SetColor("_BottomColor", Palette.SkyGround);
-            skyMat.SetFloat("_Flakes", 0.9f);
-            sky.AddComponent<MeshRenderer>().sharedMaterial = skyMat;
-            var frosty = Frosty.CreateProp(origin, Quaternion.Euler(0, 200f, 0));
-            frosty.transform.SetParent(studio.transform, true);
-            // drips leading out of frame, like the real scene
-            for (int i = 0; i < 9; i++)
-                ProcMesh.Part("Drip", studio.transform, ProcMesh.Sphere(8, 5), Palette.Toon(i % 3 == 0 ? Palette.CocoaLight : Palette.Cocoa, false), origin + new Vector3(-0.4f - i * 0.13f, 0.004f, -0.35f - i * 0.05f + Mathf.Sin(i) * 0.04f), new Vector3(0.05f, 0.01f, 0.06f));
-            var camGo = new GameObject("Art Camera");
-            camGo.transform.SetParent(studio.transform, false);
-            var cam = camGo.AddComponent<Camera>();
-            cam.fieldOfView = 17f;
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = Palette.SkyHorizon;
-            cam.cullingMask = Layers.Mask(Layers.Default, Layers.Kid);
-            cam.nearClipPlane = 0.05f; cam.farClipPlane = 40f;
-            cam.stereoTargetEye = StereoTargetEyeMask.None;
-            cam.depth = -20;
-            var data = camGo.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
-            data.renderPostProcessing = false;
-            // store-style hero framing: Frosty sits in the right third, the left stays calm for the title
-            camGo.transform.position = origin + new Vector3(-1.1f, 1.3f, -3.1f);
-            camGo.transform.LookAt(origin + new Vector3(0f, 0.34f, 0f));
-            camGo.transform.Rotate(Vector3.up, -12.5f, Space.World);
-            cam.targetTexture = target;
-            cam.aspect = target.width / (float)target.height;
-            // render for a couple of real frames (shaders warm up), then tear the studio down
-            yield return null;
-            yield return null;
-            yield return new WaitForEndOfFrame();
-            cam.enabled = false;
-            cam.targetTexture = null;   // destroying a camera releases its target texture — detach first
-            Object.Destroy(studio);
-        }
-
-        static Texture2D s_Scrim;
-        /// <summary>Hero scrim: dark on the left (under the title) and along the bottom, clear over the art.</summary>
-        public static Texture2D Scrim
-        {
-            get
-            {
-                if (s_Scrim) return s_Scrim;
-                const int W = 128, H = 48;
-                s_Scrim = new Texture2D(W, H, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "Scrim" };
-                for (int y = 0; y < H; y++)
-                    for (int x = 0; x < W; x++)
-                    {
-                        float u = x / (W - 1f), v = y / (H - 1f);
-                        float left = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((0.68f - u) / 0.68f)) * 0.93f;
-                        float bottom = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((0.5f - v) / 0.5f)) * 0.55f;
-                        float a = 1f - (1f - left) * (1f - bottom);
-                        s_Scrim.SetPixel(x, y, Palette.UiScrimBottom.WithAlpha(a));
-                    }
-                s_Scrim.Apply();
-                return s_Scrim;
-            }
-        }
-    }
-
-    /// <summary>The home panel: key art, title, one big primary action, how-to-play, and settings.</summary>
+    /// <summary>The home screen: nothing but one big round Play button floating in front of you.</summary>
     public class TitleScreen : MonoBehaviour
     {
+        const float ButtonSize = 0.24f;
+
         public System.Action OnStart;
         Transform m_Content;
+        HButton m_Play;
+        bool m_Dismissing;
 
         public static TitleScreen Create(System.Action onStart)
         {
@@ -104,124 +23,32 @@ namespace FrostAndFound
             t.OnStart = onStart;
             t.Build();
             var f = go.AddComponent<HFollow>();
-            f.distance = 1.1f; f.drop = 0.12f; f.maxAngle = 45f;
+            f.distance = 0.9f; f.drop = 0.12f; f.maxAngle = 45f;
             return t;
         }
 
         void Build()
         {
-            const float W = 1.04f, H = 0.7f;
             m_Content = new GameObject("Content").transform;
             m_Content.SetParent(transform, false);
             m_Content.gameObject.layer = Layers.UI3D;
-            var glass = HUI.Panel(m_Content, "Panel", new Vector2(W, H));
-            HUI.Winterize(glass.Root, new Vector2(W, H), HUI.PanelRadius, 3);
-
-            // ---- hero
-            const float heroW = W - 0.03f, heroH = 0.3f;
-            float heroY = H * 0.5f - 0.015f - heroH * 0.5f;
-            var hero = UIKit.Quad(m_Content, "Hero", UIKit.RoundedRect(heroW, heroH, 0.024f), Palette.UnlitTextured(TitleArt.Get(), Color.white, false, "Hero"), -0.001f);
-            hero.localPosition = new Vector3(0, heroY, -0.001f);
-            var scrim = UIKit.Quad(m_Content, "Scrim", UIKit.RoundedRect(heroW, heroH, 0.024f), Palette.UnlitTextured(TitleArt.Scrim, Color.white, true, "Scrim"), -0.0015f);
-            scrim.localPosition = new Vector3(0, heroY, -0.0015f);
-            scrim.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Scrim;
-            var chip = UIKit.Pill(m_Content, "Genre", "MURDER MYSTERY  ·  MIXED REALITY", UIKit.Face.Heading, 0.135f, Palette.UiDeep, Palette.UiText, out float chipW, 0.032f, 0.014f);
-            chip.localPosition = new Vector3(-heroW * 0.5f + 0.03f + chipW * 0.5f, heroY + heroH * 0.5f - 0.034f, -0.004f);
-            var title = HUI.Label(m_Content, "Frost & Found", UIKit.Face.Display, 0.86f, Color.white, new Vector2(heroW - 0.06f, 0.1f), TextAlignmentOptions.BottomLeft, -1f, false);
-            title.fontStyle = FontStyles.Normal;
-            title.enableVertexGradient = true;   // snow-white fading to ice at the base of the letters
-            title.colorGradient = new VertexGradient(Color.white, Color.white, Palette.Hex("#C9EAFF"), Palette.Hex("#C9EAFF"));
-            UIKit.Shadowed(title);
-            title.transform.localPosition = new Vector3(0, heroY - heroH * 0.5f + 0.098f, -0.004f);
-            var tagline = HUI.Label(m_Content, "A murder mystery where the victim is a snowman — and the suspects are knee-high.", UIKit.Face.Regular, 0.19f, Palette.UiTextDim, new Vector2(heroW - 0.06f, 0.03f), TextAlignmentOptions.TopLeft, 0f, false);
-            tagline.transform.localPosition = new Vector3(0, heroY - heroH * 0.5f + 0.038f, -0.004f);
-
-            // ---- left column: pitch, facts, the primary action
-            float top = heroY - heroH * 0.5f - 0.032f;
-            float leftX = -W * 0.5f + 0.035f, leftW = 0.48f;
-            var desc = HUI.Label(m_Content, "Snap the clues with your Polaroid, show each photo to the kid it points to, and follow the chain to the culprit. Your only tools: a camera and a snowball.",
-                UIKit.Face.Regular, 0.18f, Palette.UiTextDim, new Vector2(leftW, 0.1f), TextAlignmentOptions.TopLeft);
-            desc.transform.localPosition = new Vector3(leftX + leftW * 0.5f, top - 0.045f, -0.002f);
-            float cx = leftX;
-            foreach (var (icon, text) in new[] { (UIKit.Icon.Clock, "2 min"), (UIKit.Icon.Snowflake, "Room-scale"), (UIKit.Icon.Hand, "Hands or controllers") })
-            {
-                var p = MetaChip(m_Content, icon, text, out float w);
-                p.localPosition = new Vector3(cx + w * 0.5f, top - 0.122f, -0.002f);
-                cx += w + 0.01f;
-            }
-            var start = HButton.Create(m_Content, "Open the case", HButton.Variant.Primary, new Vector2(0.3f, 0.066f), UIKit.Icon.Play, () => OnStart?.Invoke());
-            start.transform.localPosition = new Vector3(leftX + 0.15f, top - 0.2f, -0.004f);
-            var hint = HUI.Label(m_Content, "Trigger, pinch or poke", UIKit.Face.Regular, 0.14f, Palette.UiTextFaint, new Vector2(0.17f, 0.03f), TextAlignmentOptions.Left, 0f, false);
-            hint.transform.localPosition = new Vector3(leftX + 0.3f + 0.02f + 0.085f, top - 0.2f, -0.002f);
-
-            // ---- right column: how to play
-            float rightX = 0.045f, rightW = W * 0.5f - 0.035f - rightX;
-            var ov = HUI.Overline(m_Content, "How to play");
-            ov.rectTransform.sizeDelta = new Vector2(rightW, 0.03f);
-            ov.transform.localPosition = new Vector3(rightX + rightW * 0.5f, top - 0.012f, -0.002f);
-            (UIKit.Icon, string, string)[] rows =
-            {
-                (UIKit.Icon.Camera, "Snap the clue", "Trigger or pinch. Get within arm's reach."),
-                (UIKit.Icon.Hand, "Show the evidence", "Hold your newest photo out to a kid."),
-                (UIKit.Icon.Snowball, "Play in the snow", "Reach down, squeeze, and throw."),
-            };
-            for (int i = 0; i < rows.Length; i++)
-            {
-                var row = HowToRow(m_Content, rows[i].Item1, rows[i].Item2, rows[i].Item3, rightW);
-                row.localPosition = new Vector3(rightX + rightW * 0.5f, top - 0.06f - i * 0.064f, -0.002f);
-            }
-
-            // ---- footer: settings
-            float footY = -H * 0.5f + 0.045f;
-            float tw = (W - 0.07f - 0.02f) / 3f;
-            var t1 = HToggle.Create(m_Content, "Lefty mode", "Camera in right hand, throw left", new Vector2(tw, 0.062f), () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v);
-            var t2 = HToggle.Create(m_Content, "Subtitles", "Speech bubbles & captions", new Vector2(tw, 0.062f), () => FrostPrefs.Subtitles, v => FrostPrefs.Subtitles = v);
-            var t3 = HToggle.Create(m_Content, "Tips", "Short control hints", new Vector2(tw, 0.062f), () => FrostPrefs.Tips, v => FrostPrefs.Tips = v);
-            t1.transform.localPosition = new Vector3(-tw - 0.01f, footY, -0.002f);
-            t2.transform.localPosition = new Vector3(0, footY, -0.002f);
-            t3.transform.localPosition = new Vector3(tw + 0.01f, footY, -0.002f);
-
+            m_Play = HButton.Create(m_Content, "Play", HButton.Variant.Round, new Vector2(ButtonSize, ButtonSize), UIKit.Icon.Play, () => OnStart?.Invoke());
+            m_Play.transform.localPosition = new Vector3(0, 0, -0.004f);
             m_Content.gameObject.SetLayerRecursive(Layers.UI3D);
             m_Content.localScale = Vector3.one * 0.9f;
             StartCoroutine(Ease.Tween(0.35f, k => m_Content.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, Ease.OutCubic(k)), Ease.Linear, true));
         }
 
-        public static Transform MetaChip(Transform parent, UIKit.Icon icon, string text, out float width)
+        void Update()
         {
-            var root = new GameObject("Chip · " + text).transform;
-            root.SetParent(parent, false);
-            root.gameObject.layer = Layers.UI3D;
-            var label = HUI.Label(root, text, UIKit.Face.Body, 0.16f, Palette.UiText, new Vector2(1f, 0.03f), TextAlignmentOptions.Left, 0f, false);
-            float tw = UIKit.Measure(label, text, 1f).x;
-            float h = 0.038f, iconS = 0.019f;
-            width = 0.012f + iconS + 0.008f + tw + 0.014f;
-            UIKit.Panel(root, "Shape", new Vector2(width, h), h * 0.5f, Palette.UiSurface, null, 0f, false);
-            var ic = UIKit.IconQuad(root, icon, iconS, Palette.UiTextDim, -0.002f);
-            ic.localPosition = new Vector3(-width * 0.5f + 0.012f + iconS * 0.5f, 0, -0.002f);
-            label.rectTransform.sizeDelta = new Vector2(tw + 0.005f, h);
-            label.transform.localPosition = new Vector3(-width * 0.5f + 0.012f + iconS + 0.008f + tw * 0.5f, 0, -0.003f);
-            return root;
-        }
-
-        static Transform HowToRow(Transform parent, UIKit.Icon icon, string title, string desc, float width)
-        {
-            var root = new GameObject("How · " + title).transform;
-            root.SetParent(parent, false);
-            root.gameObject.layer = Layers.UI3D;
-            const float tile = 0.05f;
-            var t = HUI.Card(root, "Tile", new Vector2(tile, tile), 0.014f, Palette.UiSurface);
-            t.Root.localPosition = new Vector3(-width * 0.5f + tile * 0.5f, 0, 0);
-            UIKit.IconQuad(t.Root, icon, tile * 0.56f, Palette.UiAccentHover, -0.002f);
-            float tx = -width * 0.5f + tile + 0.014f, tW = width - tile - 0.014f;
-            var a = HUI.Label(root, title, UIKit.Face.Body, 0.18f, Palette.UiText, new Vector2(tW, 0.028f), TextAlignmentOptions.Left, 0f, false);
-            a.transform.localPosition = new Vector3(tx + tW * 0.5f, 0.011f, -0.002f);
-            var b = HUI.Label(root, desc, UIKit.Face.Regular, 0.158f, Palette.UiTextDim, new Vector2(tW, 0.025f), TextAlignmentOptions.Left, 0f, false);
-            b.transform.localPosition = new Vector3(tx + tW * 0.5f, -0.013f, -0.002f);
-            return root;
+            // a slow "breathing" pulse that invites a press
+            if (m_Dismissing || !m_Play) return;
+            m_Play.transform.localScale = Vector3.one * (1f + 0.03f * Mathf.Sin(Time.unscaledTime * (2f * Mathf.PI / 1.6f)));
         }
 
         public IEnumerator Dismiss()
         {
+            m_Dismissing = true;
             var from = m_Content.localScale;
             yield return Ease.Tween(0.22f, k => m_Content.localScale = from * Mathf.Lerp(1f, 0.9f, k), Ease.InCubic, true);
             Destroy(gameObject);
