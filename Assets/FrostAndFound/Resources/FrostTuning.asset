@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5cedc4f2c2f440a686caf9419e8ecef, type: 3}
+  m_Name: FrostTuning
+  m_EditorClassIdentifier: FrostAndFound.Runtime::FrostAndFound.FrostTuning
+  clueRange: 1.5
+  frameForgiveness: 0.06
+  tonyPhotoRange: 3
+  photoFov: 52
+  photoResolution: 512
+  developFadeSeconds: 0.3
+  showRange: 1.5
+  armExtendedDistance: 0.46
+  showConeDegrees: 38
+  showDwellSeconds: 0.3
+  scoopHeight: 0.16
+  gripClosed: 0.72
+  gripOpen: 0.35
+  snowballRadius: 0.04
+  throwMultiplierHands: 1.2
+  throwMultiplierControllers: 1.05
+  minThrowSpeed: 0.9
+  maxThrowSpeed: 18
+  aimAssistConeDegrees: 11
+  aimAssistStrength: 0.35
+  aimAssistMaxDegrees: 4.5
+  tonyDazeSeconds: 4.2
+  tonyRunSpeed: 1.15
+  tonyPanicSpeed: 1.7
+  tonyTripAfterSeconds: 25
+  tonyDodgeCooldown: 0.35
+  idleNudgeSeconds: 15
+  kidWallInset: 0.55
+  minKidSpacing: 0.9
+  fallbackRoomSize: {x: 4, y: 4}
+  musicVolume: 0.32
+  sfxVolume: 0.9
+  voiceVolume: 1

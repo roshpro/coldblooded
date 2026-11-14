@@ -1,0 +1,63 @@
+using UnityEngine;
+
+namespace FrostAndFound
+{
+    /// <summary>
+    /// A few short control tips (toggle "Tips" in the menu). They teach controls, never answers — the doc's
+    /// safety nets for the mystery itself are Lucy's nudges, and the finale's snowball is left for you to work out.
+    /// </summary>
+    public class TipsDirector : MonoBehaviour
+    {
+        bool m_PhotoTip, m_ShowTip, m_ThrowTip, m_CrouchTip;
+        float m_EvidenceAt = -1f;
+
+        void OnEnable()
+        {
+            PolaroidCamera.PhotoTaken += OnPhoto;
+            SnowballHand.Formed += OnFormed;
+        }
+
+        void OnDisable()
+        {
+            PolaroidCamera.PhotoTaken -= OnPhoto;
+            SnowballHand.Formed -= OnFormed;
+        }
+
+        void Update()
+        {
+            var gm = GameManager.I;
+            var d = CaseDirector.I;
+            if (!gm || d == null || gm.State != GameState.Investigating || gm.IsPaused) return;
+            if (!m_PhotoTip && d.Photos.Count == 0 && !DialogueRunner.AnyoneSpeaking)
+            {
+                m_PhotoTip = true;
+                var rig = PlayerRig.Active;
+                HToast.Show(rig && rig.IsXR ? "Take a photo: pull the trigger, or pinch" : "Take a photo: left click (WASD to walk, C to crouch)", UIKit.Icon.Camera, 4.5f);
+            }
+            if (!m_ShowTip && m_EvidenceAt > 0f && Time.time - m_EvidenceAt > 7f && d.Shows == 0 && !DialogueRunner.AnyoneSpeaking)
+            {
+                m_ShowTip = true;
+                var rig = PlayerRig.Active;
+                HToast.Show(rig && rig.IsXR ? "Show it: hold your photo out toward a kid" : "Show it: walk up to a kid and hold F", UIKit.Icon.Hand, 5f);
+            }
+            if (!m_CrouchTip && d.CurrentClue == ClueId.RedScrape && Time.time - d.StepStartedAt > 20f && !d.FinaleStarted)
+            {
+                m_CrouchTip = true;
+                HToast.Show("Some clues are low. Crouch down for a closer look.", UIKit.Icon.Magnifier, 4.5f);
+            }
+        }
+
+        void OnPhoto(PhotoData p)
+        {
+            if (p.IsEvidence && m_EvidenceAt < 0f) m_EvidenceAt = Time.time;
+        }
+
+        void OnFormed()
+        {
+            if (m_ThrowTip) return;
+            m_ThrowTip = true;
+            var rig = PlayerRig.Active;
+            HToast.Show(rig && rig.IsXR ? "Throw: swing and open your hand" : "Throw: hold and release right click", UIKit.Icon.Snowball, 3.5f);
+        }
+    }
+}

@@ -1,0 +1,25 @@
+{
+    "name": "FrostAndFound.Runtime",
+    "rootNamespace": "FrostAndFound",
+    "references": [
+        "Unity.TextMeshPro",
+        "Unity.InputSystem",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.XR.Management",
+        "Oculus.VR",
+        "meta.xr.mrutilitykit"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        { "name": "com.meta.xr.sdk.core", "expression": "1.0.0", "define": "FROST_META" },
+        { "name": "com.meta.xr.mrutilitykit", "expression": "1.0.0", "define": "FROST_MRUK" }
+    ],
+    "noEngineReferences": false
+}

@@ -1,0 +1,268 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace FrostAndFound
+{
+    public enum GameState { Boot, Title, Intro, Investigating, Outro, Ended }
+
+    /// <summary>
+    /// The shell: boots the right player (Quest via Meta XR SDK, or the desktop simulation), finds the room,
+    /// lays snow, shows the title, runs the case, and closes with the outro and the Case File.
+    /// </summary>
+    [DefaultExecutionOrder(-100)]
+    public class GameManager : MonoBehaviour
+    {
+        public static GameManager I { get; private set; }
+
+        [Tooltip("The Meta XR camera rig in the scene (used on device / Link / Meta XR Simulator).")]
+        public GameObject xrRig;
+        [Tooltip("Force the desktop simulation even if an XR device is active.")]
+        public bool forceDesktop;
+        [Tooltip("Play the perfect run automatically (desktop only) — for testing and demo capture.")]
+        public bool autopilot;
+        [Tooltip("Size of the stand-in room used by the desktop simulation (try 3 × 3 to test a tight venue).")]
+        public Vector2 simulatedRoomSize = new Vector2(4.4f, 4.0f);
+
+        public GameState State { get; private set; } = GameState.Boot;
+        public bool IsPaused { get; private set; }
+        public bool AllowsGameplay => State == GameState.Investigating && !IsPaused;
+        public PlayerRig Player { get; private set; }
+        public LayoutDirector.Result Layout { get; private set; }
+
+        TitleScreen m_Title;
+        MenuScreen m_Pause;
+        LoadingCard m_Loading;
+        PolaroidCamera m_Camera;
+        CaseDirector m_Director;
+
+        void Awake()
+        {
+            I = this;
+            Fx.Reset();
+            AudioDirector.Ensure();
+            DialogueRunner.Ensure();
+            HPointer.Ensure();
+            Application.targetFrameRate = -1;
+            RoomService.Clear();
+        }
+
+        void OnDestroy() { if (I == this) I = null; Time.timeScale = 1f; }
+
+        IEnumerator Start()
+        {
+            bool xr = !forceDesktop && XRActive();
+#if FROST_META
+            if (xr && xrRig)
+            {
+                xrRig.SetActive(true);
+                Player = xrRig.GetComponentInChildren<MetaPlayerRig>(true);
+                if (!Player) Player = xrRig.AddComponent<MetaPlayerRig>();
+                var provider = gameObject.AddComponent<MetaRoomProvider>();
+                provider.Begin(Player);
+                m_Loading = LoadingCard.Show("Finding your room…", "Reading your Space Setup. Allow spatial data if the headset asks.", provider.SkipRoomScan);
+            }
+            else
+#endif
+            {
+                if (xrRig) xrRig.SetActive(false);
+                var size = new Vector2(Mathf.Max(2.5f, simulatedRoomSize.x), Mathf.Max(2.5f, simulatedRoomSize.y));
+                var room = SimRoom.Build(size, out _);
+                Player = DesktopPlayerRig.Create(new Vector3(0.2f, 0f, -size.y * 0.5f + 0.45f), Quaternion.Euler(0, -4f, 0));
+                RoomService.Set(room);
+            }
+            Debug.Log("[Frost] Player: " + (Player && Player.IsXR ? "Meta XR (Quest)" : "desktop simulation"));
+            while (RoomService.Current == null) yield return null;
+            if (m_Loading) Destroy(m_Loading.gameObject);
+            var r = RoomService.Current;
+            Player.FloorY = r.FloorY;
+
+            // the world: snow on the floor, light snowfall, your footprints
+            SnowSurface.Create(r);
+            Snowfall.Create(r);
+            gameObject.AddComponent<FootprintTracker>();
+            PhotoBackdrop.Create(r);
+
+            // your kit: Polaroid (camera hand), photo slot + snow (free hand), mittens
+            m_Camera = PolaroidCamera.Create();
+            m_Camera.Enabled = false;
+            gameObject.AddComponent<PhotoHolder>();
+            gameObject.AddComponent<SnowballHand>().Enabled = false;
+            gameObject.AddComponent<ShowPhotoDetector>();
+            Mittens.Create();
+            m_Director = gameObject.AddComponent<CaseDirector>();
+
+            gameObject.AddComponent<TipsDirector>();
+            yield return null;
+            EnterTitle();
+            if (autopilot && !Player.IsXR) gameObject.AddComponent<Autopilot>();
+        }
+
+        static bool XRActive()
+        {
+            var settings = UnityEngine.XR.Management.XRGeneralSettings.Instance;
+            bool loader = settings && settings.Manager && settings.Manager.activeLoader != null;
+            return loader && UnityEngine.XR.XRSettings.isDeviceActive;
+        }
+
+        // ------------------------------------------------------------------ title
+        void EnterTitle()
+        {
+            State = GameState.Title;
+            m_Title = TitleScreen.Create(StartCaseNow);
+        }
+
+        void Update()
+        {
+            if (!Player) return;
+            if (Player.MenuDown && State != GameState.Boot && State != GameState.Title) TogglePause();
+            if (m_Camera) m_Camera.Enabled = AllowsGameplay && !HPointer.ConsumedThisFrame && !HPointer.IsOverUI;
+            if (SnowballHand.Instance) SnowballHand.Instance.Enabled = State == GameState.Investigating && !IsPaused;
+        }
+
+        public void StartCaseNow() { if (State == GameState.Title) StartCoroutine(BeginCase()); }
+
+        IEnumerator BeginCase()
+        {
+            if (State != GameState.Title) yield break;
+            State = GameState.Intro;
+            AudioDirector.Play2D(Sfx.UiClick, 1f);
+            if (m_Title) yield return m_Title.Dismiss();
+            Layout = LayoutDirector.Build(RoomService.Current, Player);
+            // kids pop in out of little snow puffs
+            foreach (var kv in Layout.Kids) StartCoroutine(PopIn(kv.Value.transform, Random.Range(0f, 0.5f)));
+            yield return m_Director.RunIntro();
+            State = GameState.Investigating;
+        }
+
+        IEnumerator PopIn(Transform t, float delay)
+        {
+            var s = t.localScale;
+            t.localScale = Vector3.zero;
+            yield return new WaitForSeconds(delay);
+            Fx.SnowPuff(t.position + Vector3.up * 0.1f, Vector3.up, 18, 0.9f);
+            yield return Ease.Tween(0.4f, k => t.localScale = s * Ease.OutBack(k), Ease.Linear, false);
+        }
+
+        // ------------------------------------------------------------------ pause
+        public void TogglePause()
+        {
+            if (IsPaused)
+            {
+                IsPaused = false;
+                Time.timeScale = 1f;
+                if (m_Pause) Destroy(m_Pause.gameObject);
+                AudioListener.pause = false;
+            }
+            else
+            {
+                IsPaused = true;
+                Time.timeScale = 0f;
+                m_Pause = MenuScreen.Open(TogglePause, Restart, PauseContext());
+            }
+        }
+
+        string PauseContext()
+        {
+            var d = m_Director;
+            if (State == GameState.Title || d == null) return "Case #0001 · not opened yet";
+            if (d.CaseClosed) return "Case #0001 · closed";
+            if (d.FinaleStarted) return "Case #0001 · finale — catch Tony";
+            return $"Case #0001 · clue {Mathf.Min(d.Step + 1, 5)} of 5";
+        }
+
+        public void Restart()
+        {
+            Time.timeScale = 1f;
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
+        // ------------------------------------------------------------------ outro (doc §6.7, ~5 s)
+        public void EnterOutro(PhotoData guilty) => StartCoroutine(Outro(guilty));
+
+        IEnumerator Outro(PhotoData guilty)
+        {
+            if (State == GameState.Outro || State == GameState.Ended) yield break;
+            State = GameState.Outro;
+            var tony = Kid.Find(CastId.Tony) as TonyKid;
+            if (tony) yield return tony.SayAndWait("tony_caught");
+            // the kids gather around the culprit, on the far side from you, so the crowd frames the scene
+            var feet = Player.FeetPosition;
+            var center = tony ? tony.transform.position : (Frosty.Instance ? Frosty.Instance.transform.position : RoomService.Current.Center);
+            var away = (center - feet).Flat();
+            away = away.sqrMagnitude > 1e-3f ? away.normalized : Player.FlatForward;
+            float[] angles = { -78f, -34f, 34f, 78f };
+            int i = 0;
+            foreach (var kid in Kid.All)
+            {
+                if (!kid || kid.id == CastId.Tony || i >= angles.Length) continue;
+                var spot = center + Quaternion.Euler(0, angles[i], 0) * away * 0.95f;
+                spot = RoomService.Current.ClampInside(spot, 0.32f);
+                if (FrostUtil.FlatDistance(spot, feet) < 1.25f) spot = RoomService.Current.ClampInside(spot + away * (1.25f - FrostUtil.FlatDistance(spot, feet)), 0.32f);
+                kid.CanMove = true;
+                kid.Busy = false;
+                var k = kid;
+                kid.MoveTo(spot, 1.0f, () => k.Face(Player.Head.position));
+                i++;
+            }
+            yield return new WaitForSeconds(1.0f);
+            var lucy = Kid.Find(CastId.Lucy) as LucyKid;
+            if (lucy) lucy.Anim.StrikePose(Pose.Cheer, 1.2f);
+            yield return CaseClosedStamp.Slam();
+            if (lucy) DialogueRunner.Say(Lines.Get("lucy_case_closed"), lucy, true);
+            foreach (var kid in Kid.All) if (kid && kid.id != CastId.Tony) kid.Anim.StrikePose(Pose.Cheer, 1.5f);
+
+            // your photos fan out as a Case File collage
+            var d = m_Director;
+            var evidence = new List<PolaroidPhoto>();
+            PolaroidPhoto guiltyPhoto = null;
+            var holder = PhotoHolder.Instance;
+            if (holder)
+            {
+                // the newest good shot of each clue, in chain order, then the GUILTY photo
+                foreach (var step in CaseDirector.Chain)
+                {
+                    PolaroidPhoto found = null;
+                    for (int k = holder.Album.Count - 1; k >= 0 && !found; k--)
+                    {
+                        var p = holder.Album[k];
+                        if (p && p.Data.Clue == step.clue && p.Data.IsEvidence) found = p;
+                    }
+                    evidence.Add(found);
+                }
+                foreach (var p in holder.Album) if (p && p.Data.Guilty) { guiltyPhoto = p; break; }
+                holder.enabled = false;
+            }
+            float secs = d.EndTime - d.StartTime;
+            string time = $"{(int)(secs / 60)}:{(int)(secs % 60):00}";
+            ResultsScreen.Show(guiltyPhoto, evidence, time, d.Photos.Count, d.Shows, d.WrongShows, d.Throws, Restart);
+            State = GameState.Ended;
+        }
+    }
+
+    /// <summary>
+    /// The virtual Polaroid can't see the real room through passthrough, so photos would come out black behind
+    /// the subject. The fix from the doc: a snowy backdrop only the Polaroid lens can see.
+    /// </summary>
+    public static class PhotoBackdrop
+    {
+        public static void Create(RoomInfo room)
+        {
+            var go = new GameObject("Photo Backdrop (Polaroid only)");
+            go.layer = Layers.PhotoOnly;
+            go.transform.position = room.Center + Vector3.up * 1.2f;
+            go.transform.localScale = Vector3.one * 40f;
+            go.AddComponent<MeshFilter>().sharedMesh = ProcMesh.Sphere(24, 16);
+            var mat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Sky)) { name = "PhotoSky" };
+            mat.SetColor("_TopColor", Palette.SkyTop);
+            mat.SetColor("_HorizonColor", Palette.SkyHorizon);
+            mat.SetColor("_BottomColor", Palette.SkyGround);
+            mat.SetFloat("_Flakes", 0.6f);
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+        }
+    }
+}

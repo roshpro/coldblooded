@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5178c49a62c594f65aa15c0b21e6c32d, type: 3}
+  m_Name: FrostAssets
+  m_EditorClassIdentifier: FrostAndFound.Runtime::FrostAndFound.FrostAssets
+  toon: {fileID: 4800000, guid: 1489c119118784f6e92696b82bef8fd7, type: 3}
+  toonOutlined: {fileID: 4800000, guid: 9b49c68419b70451fa5dbb19e10c8c00, type: 3}
+  snow: {fileID: 4800000, guid: 272b88ff4aea145bb8879b3b3d1ed357, type: 3}
+  unlit: {fileID: 4800000, guid: 2c9c8d46778024116ad369fdb2635d18, type: 3}
+  unlitTransparent: {fileID: 4800000, guid: 1aa5b58033d5d42b398953c89ea3b80e, type: 3}
+  particle: {fileID: 4800000, guid: fd3641110fd2846fa88b59688acba705, type: 3}
+  sky: {fileID: 4800000, guid: 4ba6b9187327347a9a87b79c183e6487, type: 3}
+  photo: {fileID: 4800000, guid: 4089386ac67e04453b1d4cf89cdb5337, type: 3}
+  blur: {fileID: 4800000, guid: c9d90c657abcf4a409fe093027f19304, type: 3}
+  uiGlass: {fileID: 4800000, guid: 123d5bf7822e34ae8b5e67a234c71fe8, type: 3}
+  displayFont: {fileID: 11400000, guid: 734e6fc6550be4b8a855127bba238963, type: 2}
+  headingFont: {fileID: 11400000, guid: 015cf08d5754243de82ca9cbc143153b, type: 2}
+  bodyFont: {fileID: 11400000, guid: b13c1380ca78d49c18fbb786eb0bcc54, type: 2}
+  regularFont: {fileID: 11400000, guid: 61a738080d72b40b99515f1a35225035, type: 2}
+  monoFont: {fileID: 11400000, guid: d64721600b9ce458396a15e88ecca6db, type: 2}
+  handFont: {fileID: 11400000, guid: 6bc8fc2e7232144c89cc5419c8e1851c, type: 2}
+  speechFont: {fileID: 11400000, guid: b13c1380ca78d49c18fbb786eb0bcc54, type: 2}
+  titleFont: {fileID: 11400000, guid: 734e6fc6550be4b8a855127bba238963, type: 2}
+  characterModels: []
+  frostyModel: {fileID: 0}
+  polaroidModel: {fileID: 0}
+  sledModel: {fileID: 0}
+  music: {fileID: 0}
