@@ -137,12 +137,11 @@ crashlytics-build.properties
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
 
-# agent captures & helper scripts
-Screenshots/
-Assets/Captures/
-AgentScripts/
-Builds/
-AudioPreview/
+# agent captures & helper scripts (root only: Docs/Screenshots is kept)
+/Screenshots/
+/Assets/Captures/
+/AgentScripts/
+/Builds/
 
 # macOS
 .DS_Store
