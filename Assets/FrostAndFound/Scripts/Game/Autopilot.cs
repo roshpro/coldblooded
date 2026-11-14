@@ -126,8 +126,22 @@ namespace FrostAndFound
             yield return new WaitForSeconds(0.35f);
             m_Rig.LookAt(focus);
             m_Rig.PressShutter();
-            yield return new WaitForSeconds(1.3f);
+            yield return WaitForPrint();
             m_Rig.ClearScriptCrouch();
+        }
+
+        /// <summary>The print ejects, gets pulled out and develops (~3.5 s) before it can be shown to anyone.</summary>
+        static IEnumerator WaitForPrint()
+        {
+            yield return new WaitForSeconds(0.4f);
+            float until = Time.time + 6f;
+            while (Time.time < until)
+            {
+                var cam = PolaroidCamera.Instance; var holder = PhotoHolder.Instance;
+                bool ready = cam && !cam.PrintWaiting && holder && holder.Current && holder.Current.IsDeveloped;
+                if (ready) break;
+                yield return null;
+            }
         }
 
         IEnumerator ShowTo(Kid kid)

@@ -22,6 +22,7 @@ MonoBehaviour:
   photo: {fileID: 4800000, guid: 4089386ac67e04453b1d4cf89cdb5337, type: 3}
   blur: {fileID: 4800000, guid: c9d90c657abcf4a409fe093027f19304, type: 3}
   uiGlass: {fileID: 4800000, guid: 123d5bf7822e34ae8b5e67a234c71fe8, type: 3}
+  wool: {fileID: 4800000, guid: 666a243c1867a4565a799830bf8fc82f, type: 3}
   displayFont: {fileID: 11400000, guid: 734e6fc6550be4b8a855127bba238963, type: 2}
   headingFont: {fileID: 11400000, guid: 015cf08d5754243de82ca9cbc143153b, type: 2}
   bodyFont: {fileID: 11400000, guid: b13c1380ca78d49c18fbb786eb0bcc54, type: 2}
@@ -30,7 +31,32 @@ MonoBehaviour:
   handFont: {fileID: 11400000, guid: 6bc8fc2e7232144c89cc5419c8e1851c, type: 2}
   speechFont: {fileID: 11400000, guid: b13c1380ca78d49c18fbb786eb0bcc54, type: 2}
   titleFont: {fileID: 11400000, guid: 734e6fc6550be4b8a855127bba238963, type: 2}
-  characterModels: []
+  characterModels:
+  - character: 0
+    prefab: {fileID: 919132149155446097, guid: 41908928a07efb543a15a545d9b6cd46, type: 3}
+    animator: {fileID: 9100000, guid: 465b78c2940d84fd4accb61fafab58e5, type: 2}
+    scale: 1
+    texture: {fileID: 2800000, guid: f15eca592e6917046ad702f89765284c, type: 3}
+  - character: 1
+    prefab: {fileID: 919132149155446097, guid: 2f07548b4e17e3e46a4d10af49b936e5, type: 3}
+    animator: {fileID: 9100000, guid: 465b78c2940d84fd4accb61fafab58e5, type: 2}
+    scale: 1
+    texture: {fileID: 2800000, guid: b8479eed0a3d029438c3245a2d8b3cbb, type: 3}
+  - character: 2
+    prefab: {fileID: 919132149155446097, guid: e6b116a945fd0d5428601d4f44519521, type: 3}
+    animator: {fileID: 9100000, guid: a061d148278e34833b40bf22bc6f172e, type: 2}
+    scale: 1
+    texture: {fileID: 2800000, guid: 226b9fa08b623734686b848eb67bf5b8, type: 3}
+  - character: 3
+    prefab: {fileID: 919132149155446097, guid: c543744facba005479932497ff9c92ca, type: 3}
+    animator: {fileID: 9100000, guid: a061d148278e34833b40bf22bc6f172e, type: 2}
+    scale: 1
+    texture: {fileID: 2800000, guid: 0aa7337caa4f69145b86153bc5bf7f4a, type: 3}
+  - character: 4
+    prefab: {fileID: 919132149155446097, guid: 784f297e6a2901a468858df3dfe371ed, type: 3}
+    animator: {fileID: 9100000, guid: 465b78c2940d84fd4accb61fafab58e5, type: 2}
+    scale: 1
+    texture: {fileID: 2800000, guid: 6c6075b8eac2e6f47b392edf2759e6a0, type: 3}
   frostyModel: {fileID: 0}
   polaroidModel: {fileID: 0}
   sledModel: {fileID: 0}

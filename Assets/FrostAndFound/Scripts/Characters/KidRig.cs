@@ -16,6 +16,8 @@ namespace FrostAndFound
         public Transform EyeL, EyeR, Mouth, BubbleAnchor;
         public float HipHeight = 0.32f;
         public float Scale = 1f;
+        /// <summary>Standing height in metres (rigged kids; set when the model is fitted).</summary>
+        public float Height = 1.05f;
     }
 
     /// <summary>
@@ -24,7 +26,7 @@ namespace FrostAndFound
     /// dive, sit dazed, trip). If the character has an Animator (final model), the same calls also set its
     /// parameters so the art team can drive real clips.
     /// </summary>
-    public class KidAnimator : MonoBehaviour
+    public partial class KidAnimator : MonoBehaviour
     {
         [System.NonSerialized] public KidRig Rig;
         public Animator Animator;          // optional, for final rigged models
@@ -49,6 +51,7 @@ namespace FrostAndFound
             m_Seed = Random.value * 10f;
             m_NextBlink = Time.time + Random.Range(1f, 4f);
             if (Rig.EyeL) m_EyeScale = Rig.EyeL.localScale;
+            SetupHumanoid();
         }
 
         // ------------------------------------------------------------------ one-shots
@@ -118,7 +121,7 @@ namespace FrostAndFound
         {
             StopCoroutine(nameof(SitRoutine));
             StartCoroutine(SitRoutine(dazed));
-            if (Animator) Animator.SetBool("Dazed", dazed);
+            if (Animator && (!m_Humanoid || HasParam("Dazed"))) Animator.SetBool("Dazed", dazed);
         }
         IEnumerator SitRoutine(bool down)
         {
@@ -128,6 +131,7 @@ namespace FrostAndFound
 
         void Trigger(string name)
         {
+            if (m_Humanoid) return;   // the humanoid kids do these with IK, not controller triggers
             if (Animator && Animator.runtimeAnimatorController) Animator.SetTrigger(name);
         }
 
@@ -143,8 +147,9 @@ namespace FrostAndFound
             float speedN = Mathf.Clamp01(m_SpeedSmoothed / 1.6f);
             float stepHz = Mathf.Lerp(1.6f, 3.2f, speedN);
             if (speedN > 0.02f) m_Phase += dt * stepHz * Mathf.PI * 2f;
-            if (Animator) Animator.SetFloat("Speed", m_SpeedSmoothed);
+            if (Animator && !m_Humanoid) Animator.SetFloat("Speed", m_SpeedSmoothed);
             m_HitKick = Mathf.Max(0f, m_HitKick - dt * 4f);
+            if (m_Humanoid) { HumanoidLate(dt, t); return; }
 
             float s = Rig.Scale;
             // ---------- hips: gait bob, breathing, duck, sit

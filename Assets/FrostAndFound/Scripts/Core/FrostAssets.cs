@@ -11,7 +11,7 @@ namespace FrostAndFound
     [CreateAssetMenu(menuName = "Frost & Found/Asset Hub", fileName = "FrostAssets")]
     public class FrostAssets : ScriptableObject
     {
-        public enum ShaderId { Toon, ToonOutlined, Snow, Unlit, UnlitTransparent, Particle, Sky, Photo, Blur, UIGlass }
+        public enum ShaderId { Toon, ToonOutlined, Snow, Unlit, UnlitTransparent, Particle, Sky, Photo, Blur, UIGlass, Wool }
 
         [Header("Shaders (auto-filled by Setup)")]
         public Shader toon;
@@ -24,6 +24,7 @@ namespace FrostAndFound
         public Shader photo;
         public Shader blur;
         public Shader uiGlass;
+        public Shader wool;
 
         [Header("Fonts (auto-filled by Setup from Assets/FrostAndFound/Fonts)")]
         public TMPro.TMP_FontAsset displayFont;   // Roboto Black
@@ -73,6 +74,7 @@ namespace FrostAndFound
                     case ShaderId.Photo: s = a.photo; break;
                     case ShaderId.Blur: s = a.blur; break;
                     case ShaderId.UIGlass: s = a.uiGlass; break;
+                    case ShaderId.Wool: s = a.wool; break;
                 }
             }
             if (s) return s;
@@ -88,12 +90,14 @@ namespace FrostAndFound
 
         public static Shader ToonShader(bool outlined) => Shader(outlined ? ShaderId.ToonOutlined : ShaderId.Toon);
 
-        public static GameObject ModelFor(CastId id)
+        public static GameObject ModelFor(CastId id) => SlotFor(id)?.prefab;
+
+        public static CharacterModelSlot SlotFor(CastId id)
         {
             var a = Instance;
             if (!a || a.characterModels == null) return null;
             foreach (var slot in a.characterModels)
-                if (slot != null && slot.character == id && slot.prefab) return slot.prefab;
+                if (slot != null && slot.character == id && slot.prefab) return slot;
             return null;
         }
     }
@@ -107,5 +111,7 @@ namespace FrostAndFound
         [Tooltip("Optional Animator controller with the parameters documented in README (Speed, Talk, Point, Hit, Dodge, Dazed, Pose).")]
         public RuntimeAnimatorController animator;
         public float scale = 1f;
+        [Tooltip("Colour texture for the soft character material (Meshy texture_0).")]
+        public Texture2D texture;
     }
 }

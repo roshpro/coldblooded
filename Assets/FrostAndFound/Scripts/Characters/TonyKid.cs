@@ -46,6 +46,7 @@ namespace FrostAndFound
         }
 
         protected override Pose PoseFor() => Pose.Flex;
+        protected override bool WandersWhenIdle => State == TonyState.Idle;
 
         public override void OnPhotographed(PhotoData photo)
         {

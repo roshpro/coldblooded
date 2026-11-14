@@ -17,6 +17,10 @@ Shader "FrostAndFound/Snow"
         _Thickness ("Snow Thickness (m)", Float) = 0.035
         _DriftHeight ("Drift Height (m)", Float) = 0.07
         _DuneHeight ("Dune Height (m)", Float) = 0.022
+        _MoundHeight ("Mound Height (m)", Float) = 0.035
+        _HollowTint ("Hollow Tint", Color) = (0.8,0.86,0.95,1)
+        _GrainStrength ("Grain", Range(0,0.3)) = 0.07
+        _EnvironmentDepthBias ("Environment Depth Bias", Float) = 0.06
         _Sparkle ("Sparkle", Range(0,1)) = 0.65
         _SparkleScale ("Sparkle Density", Float) = 140
         _TexelSize ("Trail Texel (uv)", Float) = 0.002
@@ -38,8 +42,11 @@ Shader "FrostAndFound/Snow"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_instancing
+            // Meta Depth API: real things in front of the snow (your feet, furniture) hide it
+            #pragma multi_compile _ HARD_OCCLUSION SOFT_OCCLUSION
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.meta.xr.sdk.core/Shaders/EnvironmentDepth/URP/EnvironmentOcclusionURP.hlsl"
 
             TEXTURE2D(_MaskMap); SAMPLER(sampler_MaskMap);
             TEXTURE2D(_TrailMap); SAMPLER(sampler_TrailMap);
@@ -51,6 +58,10 @@ Shader "FrostAndFound/Snow"
                 float _Thickness;
                 float _DriftHeight;
                 float _DuneHeight;
+                float _MoundHeight;
+                half4 _HollowTint;
+                half _GrainStrength;
+                float _EnvironmentDepthBias;
                 half _Sparkle;
                 float _SparkleScale;
                 float _TexelSize;
@@ -66,15 +77,16 @@ Shader "FrostAndFound/Snow"
                 float3 positionWS : TEXCOORD1;
                 half3 normalWS : TEXCOORD2;
                 float2 mpu : TEXCOORD3;          // metres per uv (x, z)
+                half2 vary : TEXCOORD4;          // x = piled-up snow (mounds, drifts) 0..1, y = dune noise 0..1
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
             float HeightAt(float2 uv)
             {
-                float2 m = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0).rg;
+                float3 m = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0).rgb;
                 float t = SAMPLE_TEXTURE2D_LOD(_TrailMap, sampler_TrailMap, uv, 0).r;
-                float h = _Thickness * smoothstep(0.0, 0.6, m.r) + m.g * _DriftHeight;
+                float h = _Thickness * smoothstep(0.0, 0.6, m.r) + m.g * _DriftHeight + m.b * _MoundHeight;
                 return h - t * _Thickness * 0.85;
             }
 
@@ -102,8 +114,10 @@ Shader "FrostAndFound/Snow"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 float2 uv = input.uv;
                 float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
-                float inside = smoothstep(0.0, 0.6, SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0).r);
+                float3 mk = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0).rgb;
+                float inside = smoothstep(0.0, 0.6, mk.r);
                 float2 xz = posWS.xz;
+                o.vary = half2(saturate(mk.b + mk.g * 0.6), VNoise(xz * 1.7) * 0.65 + VNoise(xz * 4.6 + 7.1) * 0.35);
                 posWS.y += HeightAt(uv) + Dunes(xz) * inside;
 
                 // normal from the height field (texture part in uv steps, dunes in world steps)
@@ -156,6 +170,15 @@ Shader "FrostAndFound/Snow"
                 half3 sunCol = _SnowColor.rgb * lerp(half3(1, 1, 1), lc / lum, 0.4h);
                 half3 col = lerp(_ShadeColor.rgb, sunCol, lit);
 
+                // body: mound tops and drifts catch the light, hollows stay cool, soft blotches and a fine grain
+                // keep it from reading as one flat sheet
+                float2 wxz = input.positionWS.xz;
+                half blotch = VNoise(wxz * 9.0 + 50.0);
+                half bright = saturate(0.42h + input.vary.x * 0.7h + (input.vary.y - 0.5h) * 0.55h + (blotch - 0.5h) * 0.3h);
+                col *= lerp(_HollowTint.rgb, half3(1, 1, 1), bright);
+                half grain = VNoise(wxz * 35.0) * 0.6h + VNoise(wxz * 94.5) * 0.4h;
+                col *= 1.0h - _GrainStrength + grain * _GrainStrength;
+
                 // prints and divots: cool soft occlusion at the bottom
                 col = lerp(col, _DeepColor.rgb, saturate(trail * 1.2h) * (0.6h - 0.3h * lit));
                 // sky bounce keeps the shade alive, grazing angles glow (forward scattering)
@@ -173,6 +196,7 @@ Shader "FrostAndFound/Snow"
                 col += glint * 1.7h * lerp(0.35h, 1.0h, lit) * (1.0h - trail);
 
                 half alpha = smoothstep(0.02h, 0.55h, mask.r);
+                alpha *= META_DEPTH_GET_OCCLUSION_VALUE_WORLDPOS(input.positionWS, _EnvironmentDepthBias);
                 return half4(col, alpha);
             }
             ENDHLSL

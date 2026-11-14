@@ -53,6 +53,15 @@ namespace FrostAndFound
         IEnumerator Start()
         {
             bool xr = !forceDesktop && XRActive();
+            if (!xr && !forceDesktop && Application.platform == RuntimePlatform.Android)
+            {
+                // On the headset the OpenXR session is often still starting when the scene loads, so isDeviceActive
+                // reads false for the first frames. Give it a moment, but the APK only ever runs on a Quest: never
+                // build the desktop stand-in room there (it would cover the real room with virtual walls).
+                for (float t = 0f; t < 2f && !(xr = XRActive()); t += Time.unscaledDeltaTime) yield return null;
+                if (!xr) Debug.LogWarning("[Frost] XR not reported active after 2 s; using the headset rig anyway.");
+                xr = true;
+            }
 #if FROST_META
             if (xr && xrRig)
             {
@@ -77,6 +86,9 @@ namespace FrostAndFound
             if (m_Loading) Destroy(m_Loading.gameObject);
             var r = RoomService.Current;
             Player.FloorY = r.FloorY;
+#if FROST_META && (FROST_META_OPENXR || FROST_OCULUS_XR)
+            if (Player.IsXR) EnableDepthOcclusion();   // needs a Depth API provider (Meta OpenXR or Oculus XR plug-in)
+#endif
 
             // the world: snow on the floor, light snowfall, your footprints
             SnowSurface.Create(r);
@@ -98,6 +110,24 @@ namespace FrostAndFound
             EnterTitle();
             if (autopilot && !Player.IsXR) gameObject.AddComponent<Autopilot>();
         }
+
+#if FROST_META && (FROST_META_OPENXR || FROST_OCULUS_XR)
+        /// <summary>Meta's Depth API: real things in front of the snow (your feet, the sofa) hide it, so it reads as
+        /// lying in your room rather than painted over it. Hands are removed from the depth map because the
+        /// mittens stand in for them.</summary>
+        void EnableDepthOcclusion()
+        {
+            if (!Meta.XR.EnvironmentDepth.EnvironmentDepthManager.IsSupported)
+            {
+                Debug.Log("[Frost] Depth API not supported here; snow drawn without occlusion.");
+                return;
+            }
+            var depth = gameObject.AddComponent<Meta.XR.EnvironmentDepth.EnvironmentDepthManager>();
+            depth.OcclusionShadersMode = Meta.XR.EnvironmentDepth.OcclusionShadersMode.SoftOcclusion;
+            depth.RemoveHands = true;
+            Debug.Log("[Frost] Depth occlusion on (soft, hands removed).");
+        }
+#endif
 
         static bool XRActive()
         {

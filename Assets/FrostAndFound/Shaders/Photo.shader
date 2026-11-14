@@ -6,6 +6,7 @@ Shader "FrostAndFound/Photo"
         _BaseMap ("Photo", 2D) = "white" {}
         _BaseColor ("Tint", Color) = (1,1,1,1)
         _Flash ("Develop Flash", Range(0,1)) = 0
+        _Develop ("Developed", Range(0,1)) = 1
         _Vignette ("Vignette", Range(0,1)) = 0.45
         _Grain ("Grain", Range(0,0.2)) = 0.04
     }
@@ -24,7 +25,7 @@ Shader "FrostAndFound/Photo"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             TEXTURE2D(_BaseMap); SAMPLER(sampler_BaseMap);
             CBUFFER_START(UnityPerMaterial)
-                float4 _BaseMap_ST; half4 _BaseColor; half _Flash; half _Vignette; half _Grain;
+                float4 _BaseMap_ST; half4 _BaseColor; half _Flash; half _Develop; half _Vignette; half _Grain;
             CBUFFER_END
             struct A { float4 positionOS : POSITION; float2 uv : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct V { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID UNITY_VERTEX_OUTPUT_STEREO };
@@ -50,6 +51,11 @@ Shader "FrostAndFound/Photo"
                 c *= vig;
                 float n = frac(sin(dot(i.uv * 913.7, float2(12.9898, 78.233))) * 43758.5453);
                 c += (n - 0.5) * _Grain;
+                // instant film developing: a murky blue-grey blank, the picture surfaces cool and desaturated, then colour arrives
+                half dev = saturate(_Develop);
+                half lumc = dot(c, half3(0.3, 0.59, 0.11));
+                half3 early = lerp(half3(0.19, 0.21, 0.24), lumc * half3(0.84, 0.92, 1.0), smoothstep(0.0, 0.7, dev));
+                c = lerp(early, c, smoothstep(0.35, 1.0, dev));
                 c = lerp(c, half3(1, 1, 1), _Flash);
                 return half4(c, 1);
             }

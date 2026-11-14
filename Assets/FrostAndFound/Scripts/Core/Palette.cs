@@ -132,6 +132,13 @@ namespace FrostAndFound
         public static Color WithAlpha(this Color c, float a) { c.a = a; return c; }
 
         /// <summary>A darker, cooler sibling of a base colour used for the toon shadow band.</summary>
+        /// <summary>A soft edge line: a deeper, slightly cooler tone of the object's own colour.</summary>
+        public static Color OutlineOf(Color c)
+        {
+            var s = ShadeOf(c);
+            return new Color(s.r * 0.72f, s.g * 0.74f, s.b * 0.8f, 1f);
+        }
+
         public static Color ShadeOf(Color c)
         {
             var cool = Color.Lerp(c, Shadow, 0.38f);
@@ -155,8 +162,12 @@ namespace FrostAndFound
             m.SetFloat("_RimStrength", rim * 0.75f);
             m.SetFloat("_AmbientStrength", 0.1f);
             m.SetColor("_EmissionColor", c * emission);
-            m.SetColor("_OutlineColor", Ink);
-            m.SetFloat("_OutlineWidth", outline ? 1.0f : 0f);
+            // soft, painterly shading: a wide gradient instead of a hard cel band, and where an object keeps an
+            // outline it's a thin line in a deeper tone of its own colour, never black ink
+            m.SetFloat("_BandThreshold", 0.46f);
+            m.SetFloat("_BandSoftness", 0.26f);
+            m.SetColor("_OutlineColor", OutlineOf(c));
+            m.SetFloat("_OutlineWidth", outline ? 0.45f : 0f);
             m.enableInstancing = true;
             s_Cache[key] = m;
             return m;
@@ -170,8 +181,27 @@ namespace FrostAndFound
             m.SetColor("_ShadeColor", ShadeOf(tint));
             m.SetColor("_RimColor", Color.Lerp(tint, Color.white, 0.6f));
             m.SetFloat("_RimStrength", 0.2f);
-            m.SetColor("_OutlineColor", Ink);
-            m.SetFloat("_OutlineWidth", outline ? 1.0f : 0f);
+            m.SetFloat("_BandThreshold", 0.46f);
+            m.SetFloat("_BandSoftness", 0.26f);
+            m.SetColor("_OutlineColor", OutlineOf(tint));
+            m.SetFloat("_OutlineWidth", outline ? 0.45f : 0f);
+            return m;
+        }
+
+        /// <summary>A painted character texture with soft, gradual shading and no ink outline.</summary>
+        public static Material SoftTextured(Texture tex, string name)
+        {
+            var m = new Material(FrostAssets.ToonShader(false)) { name = name };
+            if (tex) m.SetTexture("_BaseMap", tex);
+            m.SetColor("_BaseColor", Color.white);
+            m.SetColor("_ShadeColor", new Color(0.7f, 0.74f, 0.88f));   // a cool, light shade (multiplied by the texture)
+            m.SetColor("_RimColor", new Color(0.92f, 0.96f, 1f));
+            m.SetFloat("_RimStrength", 0.14f);
+            m.SetFloat("_RimPower", 3f);
+            m.SetFloat("_BandThreshold", 0.42f);
+            m.SetFloat("_BandSoftness", 0.34f);
+            m.SetFloat("_AmbientStrength", 0.22f);
+            m.SetFloat("_OutlineWidth", 0f);
             return m;
         }
 

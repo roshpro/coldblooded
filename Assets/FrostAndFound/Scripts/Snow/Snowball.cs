@@ -56,6 +56,10 @@ namespace FrostAndFound
         float m_FlightTime;
         public Vector3 ThrowOrigin { get; private set; }
         public float ThrowSpeed { get; private set; }
+        /// <summary>The kid who threw this one (null = the player's).</summary>
+        public Kid Thrower { get; set; }
+        /// <summary>A kid's snowball reached the player's head (for a future snowball fight).</summary>
+        public static event System.Action<Snowball> HitPlayer;
 
         public static Snowball Create(Vector3 pos, float radius)
         {
@@ -108,6 +112,20 @@ namespace FrostAndFound
             m_Rb.linearVelocity *= 1f - 0.08f * Time.fixedDeltaTime;
             var room = RoomService.Current;
             if (m_FlightTime > 6f || (room != null && transform.position.y < room.FloorY - 1f)) Splat(transform.position, Vector3.up, null, false);
+            // a kid's snowball that reaches you bursts on your face/chest
+            var rig = PlayerRig.Active;
+            if (Thrower && rig && !m_Done && m_FlightTime > 0.1f)
+            {
+                var head = rig.Head.position;
+                var p = transform.position;
+                bool hit = Vector3.Distance(p, head) < 0.22f || (p.y < head.y && p.y > head.y - 0.6f && FrostUtil.FlatDistance(p, head) < 0.17f);
+                if (hit)
+                {
+                    HitPlayer?.Invoke(this);
+                    rig.Left.Haptic(0.4f, 0.08f); rig.Right.Haptic(0.4f, 0.08f);
+                    Splat(p, (p - head).normalized, null, false);
+                }
+            }
         }
 
         void OnCollisionEnter(Collision c)

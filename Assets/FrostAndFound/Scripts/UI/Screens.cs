@@ -174,7 +174,7 @@ namespace FrostAndFound
             // ---- footer: settings
             float footY = -H * 0.5f + 0.045f;
             float tw = (W - 0.07f - 0.02f) / 3f;
-            var t1 = HToggle.Create(m_Content, "Lefty mode", "Camera in left hand", new Vector2(tw, 0.062f), () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v);
+            var t1 = HToggle.Create(m_Content, "Lefty mode", "Camera in right hand, throw left", new Vector2(tw, 0.062f), () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v);
             var t2 = HToggle.Create(m_Content, "Subtitles", "Speech bubbles & captions", new Vector2(tw, 0.062f), () => FrostPrefs.Subtitles, v => FrostPrefs.Subtitles = v);
             var t3 = HToggle.Create(m_Content, "Tips", "Short control hints", new Vector2(tw, 0.062f), () => FrostPrefs.Tips, v => FrostPrefs.Tips = v);
             t1.transform.localPosition = new Vector3(-tw - 0.01f, footY, -0.002f);
@@ -249,7 +249,7 @@ namespace FrostAndFound
             float y = H * 0.5f - 0.155f;
             foreach (var (label, desc, get, set) in new (string, string, System.Func<bool>, System.Action<bool>)[]
             {
-                ("Lefty mode", "Camera in left hand", () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v),
+                ("Lefty mode", "Camera in right hand, throw left", () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v),
                 ("Subtitles", "Speech bubbles & captions", () => FrostPrefs.Subtitles, v => FrostPrefs.Subtitles = v),
                 ("Tips", "Short control hints", () => FrostPrefs.Tips, v => FrostPrefs.Tips = v),
             })

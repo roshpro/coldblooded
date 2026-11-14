@@ -110,9 +110,9 @@ half4 ToonShade(Varyings input)
     // the ambient answer: SH keeps shadow sides alive
     col += SampleSH(N) * baseCol * _AmbientStrength;
 
-    // a soft highlight band on the brightest side
-    half hi = smoothstep(0.86h, 0.9h, ndl) * band;
-    col += baseCol * hi * 0.08h;
+    // a soft sheen on the brightest side (broad, so it reads as soft material rather than a painted stripe)
+    half hi = smoothstep(0.7h, 1.0h, ndl) * band;
+    col += baseCol * hi * 0.07h;
 
     // rim
     half rim = pow(1.0h - saturate(dot(N, V)), _RimPower) * _RimStrength;
