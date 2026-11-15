@@ -44,6 +44,14 @@ namespace FrostAndFound
         public override Camera ViewCamera => m_Camera;
         public override bool IsXR => false;
         public override bool MenuDown => m_MenuDown;
+        public override bool MenuHeld
+        {
+            get
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                return kb != null && (kb.pKey.isPressed || kb.escapeKey.isPressed);
+            }
+        }
         public bool IsScoopingOrThrowing => m_FreeMode == FreeHandMode.Scooping || m_FreeMode == FreeHandMode.Throwing;
 
         static readonly Vector3 kCamHandLocal = new Vector3(0.2f, -0.21f, 0.46f);

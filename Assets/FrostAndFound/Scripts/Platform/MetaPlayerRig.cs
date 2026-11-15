@@ -26,6 +26,7 @@ namespace FrostAndFound
         public override Camera ViewCamera => m_Camera;
         public override bool IsXR => true;
         public override bool MenuDown => m_MenuDown;
+        public override bool MenuHeld => OVRInput.Get(OVRInput.Button.Start);
 
         void Awake()
         {

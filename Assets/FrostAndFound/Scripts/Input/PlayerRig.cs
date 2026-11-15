@@ -166,6 +166,8 @@ namespace FrostAndFound
         public abstract bool IsXR { get; }
         /// <summary>Pause / menu button pressed this frame.</summary>
         public abstract bool MenuDown { get; }
+        /// <summary>Pause / menu button held down (hold during the intro to skip it).</summary>
+        public virtual bool MenuHeld => false;
         /// <summary>The floor height under the player in world space.</summary>
         public float FloorY { get; set; }
 

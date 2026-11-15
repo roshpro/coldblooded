@@ -46,6 +46,14 @@ namespace FrostAndFound
         Material m_Mat;
         byte[] m_MaskAlpha; int m_MaskW, m_MaskH;
 
+        /// <summary>0 = bare floor, 1 = snowed in (the intro lets it settle). Drifts and prints scale with it.</summary>
+        public float Coverage
+        {
+            get => m_Coverage;
+            set { m_Coverage = Mathf.Clamp01(value); if (m_Mat) m_Mat.SetFloat("_Coverage", m_Coverage); }
+        }
+        float m_Coverage = 1f;
+
         public float SurfaceHeight => (m_Room != null ? m_Room.FloorY : 0f) + thickness;
         public RoomInfo Room => m_Room;
 

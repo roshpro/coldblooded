@@ -158,14 +158,18 @@ namespace FrostAndFound
         {
             m_DuckTarget = m_Speaking > 0 ? 0.45f : 1f;
             m_Duck = Ease.Damp(m_Duck, m_DuckTarget, 4f, Time.unscaledDeltaTime);
-            if (m_Music.clip) m_Music.volume = Ease.Damp(m_Music.volume, MusicVolume * m_Duck * MusicBoost, 2f, Time.unscaledDeltaTime);
-            m_Room.volume = RoomToneMuted ? 0f : 0.1f * SfxVolume;
+            if (m_Music.clip) m_Music.volume = Ease.Damp(m_Music.volume, MusicVolume * m_Duck * MusicBoost * MusicGate, 2f, Time.unscaledDeltaTime);
+            m_Room.volume = RoomToneMuted || Quiet ? 0f : 0.1f * SfxVolume;
         }
 
         /// <summary>Silences the plain room tone (Satie's wind and snowfall beds take its place).</summary>
         public static bool RoomToneMuted;
 
         public static float MusicBoost = 1f;
+        /// <summary>0 keeps the score silent (the title screen and the start of the intro), 1 lets it play.</summary>
+        public static float MusicGate = 1f;
+        /// <summary>The room is quiet: no room tone (the title screen and the start of the intro).</summary>
+        public static bool Quiet;
 
         AudioSource Grab()
         {
@@ -326,7 +330,7 @@ namespace FrostAndFound
                         float target = to.sqrMagnitude > 1e-4f && fwd.sqrMagnitude > 1e-4f ? (1f - Vector3.Dot(to.normalized, fwd.normalized)) * 0.5f : 0f;
                         away = away < 0f ? target : Mathf.MoveTowards(away, target, Time.deltaTime * 3f);   // smooth as they turn
                         src.volume = volume * Mathf.Lerp(1f, 0.55f, away);
-                        if (lp) lp.cutoffFrequency = Mathf.Lerp(22000f, 2800f, away * away);
+                        if (lp) lp.cutoffFrequency = body && body.VoiceMuffled ? 900f : Mathf.Lerp(22000f, 2800f, away * away);
                     }
                 }
                 t += Time.deltaTime;

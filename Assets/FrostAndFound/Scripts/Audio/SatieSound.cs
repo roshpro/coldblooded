@@ -93,7 +93,7 @@ namespace FrostAndFound
         {
             var gm = GameManager.I;
             var cd = CaseDirector.I;
-            if (!gm || gm.IsPaused || gm.State == GameState.Boot || gm.State == GameState.Title) return "menu";
+            if (!gm || gm.IsPaused || gm.State == GameState.Boot || gm.State == GameState.Title || gm.State == GameState.Intro) return "menu";
             if (gm.State == GameState.Outro || gm.State == GameState.Ended || (cd != null && cd.CaseClosed)) return "case_closed";
             if (SnowballFight.Active) return "snowball_fight";
             if (cd != null && cd.FinaleStarted) return "chase";

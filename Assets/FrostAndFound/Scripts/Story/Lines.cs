@@ -54,6 +54,9 @@ namespace FrostAndFound
         static Lines()
         {
             // ---------------------------------------------------------------- intro (0:00–0:10)
+            // the opening: through the door, then bursting in
+            L("lucy_knock", CastId.Lucy, "Hello? It's SNOWING! Come build a snowman, you're wasting daylight!");
+            L("lucy_murder", CastId.Lucy, "It's a cold-blooded MURDER!!");
             L("lucy_intro", CastId.Lucy, "Great. Another detective. Don't touch anything. I touched everything already. All I've got is that big brown stain. Smells... sweet. That'll be five cents.");
 
             // ---------------------------------------------------------------- the clue chain (doc §3)

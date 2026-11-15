@@ -7,7 +7,9 @@ namespace FrostAndFound
     public enum Sfx
     {
         Footstep, ScoopCrunch, Shutter, Whirr, Whoosh, Splat, Bonk, Tweet, Sting, Twinkle, Marker, StampSlam,
-        UiClick, Plop, Scribble, BookThud, Whistle, Fanfare, RoomTone, Boing, Gasp, UiHover, Alarm
+        UiClick, Plop, Scribble, BookThud, Whistle, Fanfare, RoomTone, Boing, Gasp, UiHover, Alarm,
+        // the opening sequence
+        Knock, Thud, DoorBang, RecordScratch, Siren, Jingle
     }
 
     /// <summary>
@@ -189,6 +191,12 @@ namespace FrostAndFound
                     Fade(d); return d;
                 }
                 case Sfx.Sting: return Sting(rng);
+                case Sfx.Knock: return Knock(rng);
+                case Sfx.Thud: return Thud(rng);
+                case Sfx.DoorBang: return DoorBang(rng);
+                case Sfx.RecordScratch: return RecordScratch(rng);
+                case Sfx.Siren: return Siren();
+                case Sfx.Jingle: return Jingle(rng);
                 case Sfx.Alarm: return Alarm();
                 case Sfx.Twinkle:
                 {
@@ -372,6 +380,134 @@ namespace FrostAndFound
             }
             Normalize(d, 0.85f); Fade(d, 0.01f, 0.3f);
             return d;
+        }
+
+        // ------------------------------------------------------------------ the opening sequence
+        /// <summary>One knuckle rap on a wooden door: a woody knock with a low body.</summary>
+        static float[] Knock(System.Random rng)
+        {
+            var d = Buf(0.28f);
+            var bp = Biquad.BandPass(320f, 1.4f, SR);
+            var bp2 = Biquad.BandPass(1300f, 3f, SR);
+            for (int i = 0; i < d.Length; i++)
+            {
+                float t = i / (float)SR;
+                float n = (float)(rng.NextDouble() * 2 - 1);
+                d[i] = bp.Process(n) * Env(t, 0.001f, 0.035f) * 2.4f
+                     + bp2.Process(n) * Env(t, 0.0005f, 0.012f) * 0.9f
+                     + Mathf.Sin(2f * Mathf.PI * 150f * t) * Env(t, 0.002f, 0.06f) * 0.7f;
+            }
+            Normalize(d, 0.95f); Fade(d); return d;
+        }
+
+        /// <summary>Something big and heavy hitting the snow behind you.</summary>
+        static float[] Thud(System.Random rng)
+        {
+            var d = Buf(1.1f);
+            var lp = Biquad.LowPass(380f, 0.8f, SR);
+            double ph = 0;
+            for (int i = 0; i < d.Length; i++)
+            {
+                float t = i / (float)SR;
+                ph += Mathf.Lerp(95f, 42f, Mathf.Clamp01(t / 0.35f)) / SR;
+                float n = (float)(rng.NextDouble() * 2 - 1);
+                d[i] = Sin(ph) * Env(t, 0.003f, 0.32f) * 1.1f + lp.Process(n) * Env(t, 0.002f, 0.12f) * 1.6f;
+            }
+            var crunch = Crunch(0.5f, 30, 0.6f, rng);
+            for (int i = 0; i < crunch.Length && i < d.Length; i++) d[i] += crunch[i] * 0.35f;
+            Normalize(d, 0.95f); Fade(d); return d;
+        }
+
+        /// <summary>A door flung open and banging against its stop, with a rattle.</summary>
+        static float[] DoorBang(System.Random rng)
+        {
+            var d = Buf(0.8f);
+            var bp = Biquad.BandPass(240f, 1.2f, SR);
+            var hp = Biquad.HighPass(1800f, 0.7f, SR);
+            for (int i = 0; i < d.Length; i++)
+            {
+                float t = i / (float)SR;
+                float n = (float)(rng.NextDouble() * 2 - 1);
+                float slam = bp.Process(n) * Env(t, 0.001f, 0.09f) * 2.6f + Mathf.Sin(2f * Mathf.PI * 85f * t) * Env(t, 0.003f, 0.18f);
+                // the handle and hinges rattle after the hit
+                float rt = t - 0.05f;
+                float rattle = rt > 0f ? hp.Process(n) * Env(rt, 0.002f, 0.2f) * (0.5f + 0.5f * Sq(rt * 38.0)) * 0.5f : 0f;
+                d[i] = slam + rattle;
+            }
+            Normalize(d, 0.95f); Fade(d); return d;
+        }
+
+        /// <summary>The needle dragged across the record: the music's over.</summary>
+        static float[] RecordScratch(System.Random rng)
+        {
+            var d = Buf(0.6f);
+            double ph = 0;
+            var bp = Biquad.BandPass(900f, 1.5f, SR);
+            for (int i = 0; i < d.Length; i++)
+            {
+                float t = i / (float)SR;
+                // forward-back-forward: the pitch rides the hand
+                float u = t / 0.55f;
+                float speed = u < 0.35f ? Mathf.Lerp(0.4f, 2.6f, u / 0.35f) : u < 0.6f ? Mathf.Lerp(2.6f, -1.8f, (u - 0.35f) / 0.25f) : Mathf.Lerp(-1.8f, 0.2f, (u - 0.6f) / 0.4f);
+                ph += 260f * Mathf.Abs(speed) / SR;
+                if (i % 64 == 0) bp = Biquad.BandPass(500f + 900f * Mathf.Abs(speed), 1.6f, SR);
+                float n = (float)(rng.NextDouble() * 2 - 1);
+                d[i] = (Saw(ph) * 0.45f + bp.Process(n) * 1.8f) * Mathf.Clamp01(Mathf.Abs(speed)) * Env(t, 0.005f, 0.4f);
+            }
+            Normalize(d, 0.9f); Fade(d); return d;
+        }
+
+        /// <summary>Police sirens swelling up: a wail and a hi-lo, together.</summary>
+        static float[] Siren()
+        {
+            var d = Buf(3.2f);
+            double a = 0, b = 0;
+            for (int i = 0; i < d.Length; i++)
+            {
+                float t = i / (float)SR;
+                float wail = 820f + 260f * Mathf.Sin(2f * Mathf.PI * 0.85f * t);
+                float hilo = (int)(t / 0.42f) % 2 == 0 ? 960f : 720f;
+                a += wail / SR; b += hilo / SR;
+                float tri = 1f - 4f * Mathf.Abs((float)(a - Math.Floor(a)) - 0.5f);
+                float swell = Mathf.SmoothStep(0f, 1f, t / 1.3f) * Mathf.Clamp01((3.2f - t) / 0.7f);
+                d[i] = (tri * 0.55f + Sq(b) * 0.12f + Sin(b) * 0.25f) * swell;
+            }
+            Normalize(d, 0.75f); Fade(d); return d;
+        }
+
+        /// <summary>A bouncy little snow-day tune (glockenspiel, plucked bass, shaker), 120 bpm.</summary>
+        static float[] Jingle(System.Random rng)
+        {
+            const float eighth = 0.25f;
+            var d = Buf(8.4f);
+            int[] mel =
+            {
+                72, 76, 79, 76, 72, 76, 79, 84,
+                71, 74, 79, 74, 71, 74, 79, 83,
+                72, 76, 81, 76, 72, 76, 81, 84,
+                77, 81, 84, 81, 79, 83, 86, 83,
+            };
+            int[] bass = { 48, 48, 48, 48, 43, 43, 43, 43, 45, 45, 45, 45, 41, 41, 43, 43 };
+            for (int k = 0; k < mel.Length; k++)
+            {
+                int start = (int)(k * eighth * SR);
+                float f = Mtof(mel[k]);
+                int len = (int)(0.7f * SR);
+                for (int i = 0; i < len && start + i < d.Length; i++)
+                {
+                    float t = i / (float)SR;
+                    d[start + i] += (Mathf.Sin(2f * Mathf.PI * f * t) + 0.35f * Mathf.Sin(2f * Mathf.PI * f * 2.76f * t) * Env(t, 0.001f, 0.08f)) * Env(t, 0.002f, 0.32f) * 0.32f;
+                }
+            }
+            for (int k = 0; k < bass.Length; k++) Pluck(d, (int)(k * 2 * eighth * SR), Mtof(bass[k]), 0.45f, 0.5f, rng);
+            var hp = Biquad.HighPass(6000f, 0.7f, SR);
+            for (int k = 0; k < 32; k++)
+            {
+                int start = (int)((k + 0.5f) * eighth * SR);
+                for (int i = 0; i < (int)(0.06f * SR) && start + i < d.Length; i++)
+                    d[start + i] += hp.Process((float)(rng.NextDouble() * 2 - 1)) * Env(i / (float)SR, 0.002f, 0.02f) * 0.25f;
+            }
+            Normalize(d, 0.85f); Fade(d, 0.004f, 0.3f); return d;
         }
 
         static float[] Sting(System.Random rng)

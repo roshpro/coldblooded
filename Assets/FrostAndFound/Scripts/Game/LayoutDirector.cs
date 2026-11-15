@@ -14,9 +14,12 @@ namespace FrostAndFound
         {
             public Frosty Frosty;
             public readonly Dictionary<CastId, Kid> Kids = new Dictionary<CastId, Kid>();
+            /// <summary>Things left in the snow (Tony's sled, the sand bucket).</summary>
+            public readonly List<GameObject> Props = new List<GameObject>();
         }
 
-        public static Result Build(RoomInfo room, PlayerRig player)
+        /// <param name="frostyAt">Where Frosty's body should lie (the intro puts him behind you); null = mid-room.</param>
+        public static Result Build(RoomInfo room, PlayerRig player, Vector3? frostyAt = null)
         {
             var tune = FrostTuning.I;
             var res = new Result();
@@ -28,19 +31,38 @@ namespace FrostAndFound
             // ---------------- Frosty: near the centre of the floor (somewhere a little different each time), nudged
             // off the player and off furniture
             var center = room.Center;
-            float wander = Mathf.Min(0.5f, Mathf.Min(room.Width, room.Depth) * 0.12f);
-            float wa = R(0f, Mathf.PI * 2f), wr = wander * Mathf.Sqrt(R(0f, 1f));
-            center += new Vector3(Mathf.Cos(wa), 0f, Mathf.Sin(wa)) * wr;
-            float dPlayer = FrostUtil.FlatDistance(center, feet);
-            if (dPlayer < 1.3f) center += fwd * (1.3f - dPlayer);
-            center = room.ClampInside(center, 0.8f);
             float fr = Frosty.FootprintRadius * 0.7f;
-            if (!room.IsFree(center, fr, 0.7f))
+            if (frostyAt.HasValue)
             {
-                for (int i = 0; i < 40; i++)
+                // as close to where he's wanted as there's free floor
+                var want = room.ClampInside(frostyAt.Value, 0.8f);
+                center = want;
+                if (!room.IsFree(center, fr, 0.7f))
                 {
-                    var c = room.RandomFreePoint(fr, 0.7f, rng, 1);
-                    if (room.IsFree(c, fr, 0.7f) && FrostUtil.FlatDistance(c, feet) > 1.1f) { center = c; break; }
+                    float best = float.MaxValue;
+                    for (int i = 0; i < 80; i++)
+                    {
+                        var c = room.RandomFreePoint(fr, 0.7f, rng, 1);
+                        float d = FrostUtil.FlatDistance(c, want);
+                        if (room.IsFree(c, fr, 0.7f) && FrostUtil.FlatDistance(c, feet) > 1.1f && d < best) { best = d; center = c; }
+                    }
+                }
+            }
+            else
+            {
+                float wander = Mathf.Min(0.5f, Mathf.Min(room.Width, room.Depth) * 0.12f);
+                float wa = R(0f, Mathf.PI * 2f), wr = wander * Mathf.Sqrt(R(0f, 1f));
+                center += new Vector3(Mathf.Cos(wa), 0f, Mathf.Sin(wa)) * wr;
+                float dPlayer = FrostUtil.FlatDistance(center, feet);
+                if (dPlayer < 1.3f) center += fwd * (1.3f - dPlayer);
+                center = room.ClampInside(center, 0.8f);
+                if (!room.IsFree(center, fr, 0.7f))
+                {
+                    for (int i = 0; i < 40; i++)
+                    {
+                        var c = room.RandomFreePoint(fr, 0.7f, rng, 1);
+                        if (room.IsFree(c, fr, 0.7f) && FrostUtil.FlatDistance(c, feet) > 1.1f) { center = c; break; }
+                    }
                 }
             }
             center.y = room.FloorY;
@@ -74,7 +96,7 @@ namespace FrostAndFound
             var furniture = room.IsBlocked;
             room.IsBlocked = (p, r) => (furniture != null && furniture(p, r))
                 || FrostUtil.FlatDistance(p, sledSpot) < 0.3f + r || FrostUtil.FlatDistance(p, toysSpot) < 0.25f + r;
-            SnowToys.Create(toysSpot, Quaternion.Euler(0f, R(-70f, 70f), 0f) * (center - toysSpot).Flat());
+            res.Props.Add(SnowToys.Create(toysSpot, Quaternion.Euler(0f, R(-70f, 70f), 0f) * (center - toysSpot).Flat()));
 
             // ---------------- kid spots: every free bit of floor is a candidate (not just a ring by the walls), so
             // even in a small room the five of them spread out instead of bunching in whatever corner is left
@@ -165,6 +187,7 @@ namespace FrostAndFound
             if (res.Kids.TryGetValue(CastId.Tony, out var tonyKid) && tonyKid is TonyKid tk && tk.Sled)
             {
                 tk.Sled.Plant(sledSpot, Quaternion.Euler(0f, R(-35f, 35f), 0f) * (center - sledSpot).Flat());
+                res.Props.Add(tk.Sled.gameObject);
                 PhotoSubject.Tag(tk.Sled.gameObject, SubjectKind.Sled);
             }
 

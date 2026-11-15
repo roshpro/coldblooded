@@ -6,71 +6,16 @@ using UnityEngine;
 namespace FrostAndFound
 {
     /// <summary>
-    /// The home screen: one big round Play button floating in front of you, with the scoop &amp; throw gesture
-    /// looping under it. Throw a snowball at the button to open the case (pressing it works too).
+    /// The title: your real room, nothing in it, and one chunky blue Play button floating at arm's reach, gently
+    /// bobbing. Push it with a fingertip (or the tip of a controller): it clicks in, buzzes, pops, and the intro
+    /// begins. (A pointer click works too, for the desktop stand-in.)
     /// </summary>
-    public class TitleScreen : MonoBehaviour, ISnowballTarget
+    public class TitleScreen : MonoBehaviour
     {
-        const float ButtonSize = 0.24f;
-        const float HitRadius = ButtonSize * 0.5f * 1.3f;   // a little forgiving around the rim
-
         public System.Action OnStart;
         Transform m_Content;
-        HButton m_Play;
-        GestureCard m_Gesture;
+        PokeButton m_Play;
         bool m_Dismissing, m_Started;
-        readonly Dictionary<Snowball, Vector3> m_Balls = new Dictionary<Snowball, Vector3>();
-        readonly List<Snowball> m_Scratch = new List<Snowball>();
-
-        // ---- ISnowballTarget (also gives throws the usual light aim assist toward the button)
-        public Vector3 AimPoint => m_Play ? m_Play.transform.position : transform.position;
-        public Vector3 Velocity => Vector3.zero;
-        public bool AssistEligible => !m_Started;
-
-        public void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot) => Begin(point);
-
-        void OnEnable() { SnowballTargets.Register(this); Snowball.Thrown += OnThrown; }
-        void OnDisable() { SnowballTargets.Unregister(this); Snowball.Thrown -= OnThrown; }
-
-        void OnThrown(Snowball ball) { if (!ball.Thrower) m_Balls[ball] = ball.transform.position; }
-
-        void Begin(Vector3? hitPoint)
-        {
-            if (m_Started) return;
-            m_Started = true;
-            if (hitPoint.HasValue)
-            {
-                Fx.SnowPuff(hitPoint.Value, -m_Play.transform.forward, 26, 1f);
-                PlayerRig.Active?.FreeHand.Haptic(0.6f, 0.1f);
-                Debug.Log("[Frost] Title: Play hit by a snowball");
-            }
-            OnStart?.Invoke();
-        }
-
-        /// <summary>Snowballs pass straight through UI colliders (triggers), so check each flight segment against the button's disc.</summary>
-        void CheckBalls()
-        {
-            if (m_Balls.Count == 0 || !m_Play) return;
-            var center = m_Play.transform.position;
-            var n = m_Play.transform.forward;
-            m_Scratch.Clear();
-            m_Scratch.AddRange(m_Balls.Keys);
-            foreach (var ball in m_Scratch)
-            {
-                if (!ball || !ball.IsFlying) { m_Balls.Remove(ball); continue; }
-                var from = m_Balls[ball];
-                var to = ball.transform.position;
-                m_Balls[ball] = to;
-                float d0 = Vector3.Dot(from - center, n), d1 = Vector3.Dot(to - center, n);
-                bool crossed = Mathf.Sign(d0) != Mathf.Sign(d1);
-                if (!crossed && Mathf.Abs(d1) > 0.05f) continue;   // hasn't reached the button's plane
-                var hit = crossed ? Vector3.Lerp(from, to, d0 / (d0 - d1)) : to;
-                if (Vector3.Distance(hit, center) > HitRadius) continue;
-                m_Balls.Clear();
-                ball.HitTarget(this, hit, -n);
-                return;
-            }
-        }
 
         public static TitleScreen Create(System.Action onStart)
         {
@@ -80,7 +25,8 @@ namespace FrostAndFound
             t.OnStart = onStart;
             t.Build();
             var f = go.AddComponent<HFollow>();
-            f.distance = 0.9f; f.drop = 0.12f; f.maxAngle = 45f;
+            f.distance = 0.42f; f.drop = 0.17f; f.maxAngle = 40f;
+            f.SnapNow();
             return t;
         }
 
@@ -89,52 +35,160 @@ namespace FrostAndFound
             m_Content = new GameObject("Content").transform;
             m_Content.SetParent(transform, false);
             m_Content.gameObject.layer = Layers.UI3D;
-            m_Play = HButton.Create(m_Content, "Play", HButton.Variant.Round, new Vector2(ButtonSize, ButtonSize), UIKit.Icon.Play, () => Begin(null));
-            m_Play.transform.localPosition = new Vector3(0, 0, -0.004f);
-            // the game's logo over the button (falls back to plain text if the image is missing)
-            var logo = Resources.Load<Texture2D>("Title/title_logo");
-            if (logo)
-            {
-                logo.wrapMode = TextureWrapMode.Clamp;
-                const float LogoWidth = 0.4f;
-                float h = LogoWidth * logo.height / logo.width;
-                var quad = UIKit.Quad(m_Content, "Logo", ProcMesh.Quad(), Palette.UnlitTextured(logo, Color.white, true, "Title Logo"), -0.004f);
-                quad.localScale = new Vector3(LogoWidth, h, 1f);
-                quad.localPosition = new Vector3(0, ButtonSize * 0.5f + 0.01f + h * 0.5f, -0.004f);
-                var mr = quad.GetComponent<MeshRenderer>();
-                mr.sortingOrder = UIKit.Order.Overlay;
-                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            }
-            else
-            {
-                var title = HUI.Label(m_Content, "Cold Blooded", UIKit.Face.Display, 0.62f, Palette.UiText, new Vector2(0.6f, 0.09f), TextAlignmentOptions.Center, 0f, false);
-                title.transform.localPosition = new Vector3(0, ButtonSize * 0.5f + 0.075f, -0.004f);
-                title.outlineWidth = 0.14f;
-                title.outlineColor = new Color32(18, 28, 58, 190);
-            }
-            // how to start: scoop snow and throw it at the button
-            m_Gesture = GestureCard.Create(m_Content, GestureKind.ScoopThrow, 0.15f);
-            m_Gesture.transform.localPosition = new Vector3(0, -ButtonSize * 0.5f - 0.03f - 0.075f, -0.002f);
-            m_Gesture.Show();
+            m_Play = PokeButton.Create(m_Content, Begin);
             m_Content.gameObject.SetLayerRecursive(Layers.UI3D);
-            m_Content.localScale = Vector3.one * 0.9f;
-            StartCoroutine(Ease.Tween(0.35f, k => m_Content.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, Ease.OutCubic(k)), Ease.Linear, true));
+            m_Content.localScale = Vector3.zero;
+            StartCoroutine(Ease.Tween(0.4f, k => m_Content.localScale = Vector3.one * Ease.OutBack(k), Ease.Linear, true));
+        }
+
+        void Begin()
+        {
+            if (m_Started) return;
+            m_Started = true;
+            OnStart?.Invoke();
         }
 
         void Update()
         {
-            if (!m_Started) CheckBalls();
-            // a slow "breathing" pulse that invites a throw
             if (m_Dismissing || !m_Play) return;
-            m_Play.transform.localScale = Vector3.one * (1f + 0.03f * Mathf.Sin(Time.unscaledTime * (2f * Mathf.PI / 1.6f)));
+            // a gentle bob, and a slow pulse that invites a press
+            float t = Time.unscaledTime;
+            m_Play.transform.localPosition = new Vector3(0f, 0.008f * Mathf.Sin(t * 2f * Mathf.PI / 2.6f), 0f);
+            if (!m_Started) m_Play.Pulse = 0.5f + 0.5f * Mathf.Sin(t * 2f * Mathf.PI / 1.6f);
         }
 
+        /// <summary>Pops and disappears.</summary>
         public IEnumerator Dismiss()
         {
             m_Dismissing = true;
+            yield return new WaitForSecondsRealtime(0.12f);
             var from = m_Content.localScale;
-            yield return Ease.Tween(0.22f, k => m_Content.localScale = from * Mathf.Lerp(1f, 0.9f, k), Ease.InCubic, true);
+            yield return Ease.Tween(0.1f, k => m_Content.localScale = from * Mathf.Lerp(1f, 1.18f, k), Ease.OutCubic, true);
+            AudioDirector.Play2D(Sfx.Plop, 0.8f, 1.2f);
+            Fx.SnowPuff(m_Play ? m_Play.transform.position : transform.position, -transform.forward, 16, 0.5f);
+            yield return Ease.Tween(0.12f, k => m_Content.localScale = from * Mathf.Lerp(1.18f, 0f, k), Ease.InCubic, true);
             Destroy(gameObject);
+        }
+    }
+
+    /// <summary>A round, palm-sized, bright-blue push button with a white play triangle and a soft blue glow. Pressed
+    /// by a fingertip (index tip with hand tracking, the controller's tip otherwise) pushing in from the front, or by
+    /// a pointer click.</summary>
+    public class PokeButton : HControl
+    {
+        const float R = 0.05f;          // palm-sized: 10 cm across
+        const float Travel = 0.016f;    // how far it pushes in
+        const float FireAt = 0.011f;    // pushed this far in: click
+        static readonly Color Blue = new Color32(30, 136, 255, 255), BlueHover = new Color32(70, 160, 255, 255), Rim = new Color32(14, 86, 196, 255), Glow = new Color32(80, 170, 255, 255);
+
+        public System.Action onPress;
+        /// <summary>0..1 idle pulse (glow and a hint of scale), driven by the title screen.</summary>
+        public float Pulse;
+        Transform m_Body;
+        Material m_Face;
+        readonly List<Material> m_Glow = new List<Material>();
+        readonly bool[] m_Armed = new bool[2];
+        float m_Push, m_PushVis;
+        bool m_Fired;
+
+        public static PokeButton Create(Transform parent, System.Action onPress)
+        {
+            var go = new GameObject("Play Button");
+            go.transform.SetParent(parent, false);
+            go.layer = Layers.UI3D;
+            var b = go.AddComponent<PokeButton>();
+            b.Build();
+            b.onPress = onPress;
+            b.onClick = b.Fire;
+            return b;
+        }
+
+        void Build()
+        {
+            // soft glow: a few faint rings behind
+            float[] sizes = { 1.3f, 1.55f, 1.85f };
+            float[] alphas = { 0.32f, 0.16f, 0.07f };
+            for (int i = 0; i < sizes.Length; i++)
+            {
+                float d = R * 2f * sizes[i];
+                var m = Palette.Unlit(Glow.WithAlpha(alphas[i]), true);
+                m_Glow.Add(m);
+                var q = UIKit.Quad(transform, "Glow", UIKit.RoundedRect(d, d, d * 0.5f, 24), m, 0.02f + i * 0.001f);
+                q.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Shadow;
+            }
+            m_Body = new GameObject("Body").transform;
+            m_Body.SetParent(transform, false);
+            m_Body.gameObject.layer = Layers.UI3D;
+            // a chunky puck: dark-blue side, a rim and the bright face
+            ProcMesh.Part("Side", m_Body, ProcMesh.Cylinder(40), Palette.Toon(Rim, false, 0.3f), new Vector3(0f, 0f, 0.011f), new Vector3(R * 2f + 0.006f, 0.02f, R * 2f + 0.006f), new Vector3(90f, 0f, 0f))
+                .GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            UIKit.Quad(m_Body, "Rim", UIKit.RoundedRect(R * 2f + 0.006f, R * 2f + 0.006f, R + 0.003f, 24), Palette.Unlit(Rim), 0.0006f);
+            m_Face = Palette.Unlit(Blue);
+            UIKit.Quad(m_Body, "Face", UIKit.RoundedRect(R * 2f, R * 2f, R, 24), m_Face, 0f);
+            var shine = UIKit.Quad(m_Body, "Shine", UIKit.RoundedRect(R * 0.9f, R * 0.4f, R * 0.2f, 12), Palette.Unlit(Color.white.WithAlpha(0.22f), true), -0.0006f);
+            shine.localPosition = new Vector3(-R * 0.2f, R * 0.55f, -0.0006f);
+            shine.localRotation = Quaternion.Euler(0f, 0f, 18f);
+            var icon = UIKit.IconQuad(m_Body, UIKit.Icon.Play, R * 0.95f, Color.white, -0.0012f);
+            icon.localPosition = new Vector3(R * 0.08f, 0f, -0.0012f);
+            MakeCollider(new Vector2(R * 2f + 0.03f, R * 2f + 0.03f), 0.06f);
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+            if (m_Fired) return;
+            var rig = PlayerRig.Active;
+            m_Push = 0f;
+            if (rig && rig.IsXR)
+            {
+                Poke(rig.Left, 0);
+                Poke(rig.Right, 1);
+            }
+        }
+
+        void Poke(HandRig hand, int i)
+        {
+            if (!hand.IsTracked) { m_Armed[i] = false; return; }
+            Vector3 tip;
+            if (hand.HasJoints) tip = hand.Joints[7];           // index fingertip
+            else if (hand.Tip) tip = hand.Tip.position;        // the controller's tip
+            else { m_Armed[i] = false; return; }
+            var local = transform.InverseTransformPoint(tip);   // front faces -z: pushing in is +z
+            float radial = new Vector2(local.x, local.y).magnitude;
+            if (radial > R * 1.35f || local.z < -0.06f || local.z > 0.06f) { m_Armed[i] = false; return; }
+            if (local.z < -0.004f) m_Armed[i] = true;          // approaching from the front
+            if (!m_Armed[i]) return;
+            m_Push = Mathf.Max(m_Push, Mathf.Clamp(local.z + 0.004f, 0f, Travel));
+            if (local.z > FireAt)
+            {
+                hand.Haptic(0.6f, 0.06f);
+                Click();
+            }
+        }
+
+        void Fire()
+        {
+            if (m_Fired) return;
+            m_Fired = true;
+            m_Push = Travel;
+            onPress?.Invoke();
+        }
+
+        protected override void Animate(float hover, float press)
+        {
+            float target = m_Fired ? Travel * 0.8f : Mathf.Max(m_Push, press * Travel);
+            m_PushVis = Mathf.Lerp(m_PushVis, target, 1f - Mathf.Exp(-30f * Time.unscaledDeltaTime));
+            if (m_Body)
+            {
+                m_Body.localPosition = new Vector3(0f, 0f, m_PushVis);
+                m_Body.localScale = Vector3.one * (1f + 0.025f * Pulse * (m_Fired ? 0f : 1f));
+            }
+            if (m_Face) m_Face.SetColor("_BaseColor", Color.Lerp(Blue, BlueHover, Mathf.Max(hover, m_PushVis / Travel)));
+            for (int i = 0; i < m_Glow.Count; i++)
+            {
+                float a = (i == 0 ? 0.32f : i == 1 ? 0.16f : 0.07f) * (0.75f + 0.5f * Pulse + 0.4f * hover);
+                m_Glow[i].SetColor("_BaseColor", Glow.WithAlpha(a));
+            }
         }
     }
 

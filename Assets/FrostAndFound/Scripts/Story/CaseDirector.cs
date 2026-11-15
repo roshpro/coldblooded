@@ -73,19 +73,10 @@ namespace FrostAndFound
             m_NextNudge = Time.time + FrostTuning.I.idleNudgeSeconds;
         }
 
-        // ------------------------------------------------------------------ intro (0:00–0:10)
-        public IEnumerator RunIntro()
+        /// <summary>The opening sequence is over: the clock starts and the cocoa stain sparkles.</summary>
+        public void BeginInvestigation()
         {
             StartTime = Time.time;
-            var lucy = Kid.Find(CastId.Lucy) as LucyKid;
-            var frosty = Frosty.Instance;
-            var snowfall = FindAnyObjectByType<Snowfall>();
-            snowfall?.Flurry(260);
-            yield return new WaitForSeconds(0.6f);
-            if (frosty) yield return frosty.Reveal();
-            yield return new WaitForSeconds(0.4f);
-            if (lucy) lucy.Face(PlayerRig.Active.Head.position);
-            // the cocoa splash sparkles; the drip trail leads to Dexter
             SetSparkling(ClueId.CocoaStain);
             StepStartedAt = Time.time;
             Progress();

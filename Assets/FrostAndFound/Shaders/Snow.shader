@@ -26,6 +26,7 @@ Shader "FrostAndFound/Snow"
         _Sparkle ("Sparkle", Range(0,1)) = 0.65
         _SparkleScale ("Sparkle Density", Float) = 140
         _TexelSize ("Trail Texel (uv)", Float) = 0.002
+        _Coverage ("Coverage (0 bare floor .. 1 snowed in)", Range(0,1)) = 1
     }
     SubShader
     {
@@ -68,6 +69,7 @@ Shader "FrostAndFound/Snow"
                 half _Sparkle;
                 float _SparkleScale;
                 float _TexelSize;
+                float _Coverage;
                 float4 _MaskMap_ST;
                 float4 _TrailMap_ST;
             CBUFFER_END
@@ -89,7 +91,7 @@ Shader "FrostAndFound/Snow"
             {
                 float4 m = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0);
                 float t = SAMPLE_TEXTURE2D_LOD(_TrailMap, sampler_TrailMap, uv, 0).r;
-                float h = _Thickness * smoothstep(0.0, 0.6, m.r) + m.g * _DriftHeight + m.b * _MoundHeight + m.a * _BigDriftHeight;
+                float h = (_Thickness * smoothstep(0.0, 0.6, m.r) + m.g * _DriftHeight + m.b * _MoundHeight + m.a * _BigDriftHeight) * _Coverage;
                 return h - t * _Thickness * 0.85;
             }
 
@@ -199,6 +201,8 @@ Shader "FrostAndFound/Snow"
                 col += glint * 1.7h * lerp(0.35h, 1.0h, lit) * (1.0h - trail);
 
                 half alpha = smoothstep(0.02h, 0.55h, mask.r);
+                // settling in: patchy at first, then a full blanket
+                alpha *= saturate((_Coverage * 1.5 - VNoise(wxz * 2.3) * 0.5) * 3.0);
                 alpha *= META_DEPTH_GET_OCCLUSION_VALUE_WORLDPOS(input.positionWS, _EnvironmentDepthBias);
                 return half4(col, alpha);
             }

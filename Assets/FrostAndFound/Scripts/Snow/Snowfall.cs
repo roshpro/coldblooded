@@ -138,6 +138,21 @@ namespace FrostAndFound
             em.rateOverTimeMultiplier = Mathf.Max(0f, k) * em.rateOverTimeMultiplier;
         }
 
+        /// <summary>Stop the snow (and clear the air), or start it falling from the top fresh, not mid-air.</summary>
+        public void SetFalling(bool on)
+        {
+            var systems = new System.Collections.Generic.List<ParticleSystem>(GetComponentsInChildren<ParticleSystem>(true));
+            if (m_Near) { systems.Add(m_Near); m_Near.gameObject.SetActive(on); }
+            foreach (var ps in systems)
+            {
+                var main = ps.main;
+                main.prewarm = false;
+                if (on) { ps.Clear(); ps.Play(); }
+                else { ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); }
+            }
+            gameObject.SetActive(on);
+        }
+
         /// <summary>A short heavy flurry (used for the reveal).</summary>
         public void Flurry(int count = 220)
         {

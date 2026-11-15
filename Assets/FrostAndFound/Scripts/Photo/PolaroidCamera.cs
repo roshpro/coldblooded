@@ -140,7 +140,7 @@ namespace FrostAndFound
 
             // viewfinder screen on the back of the camera, set into its bezel, clear of your thumb
             var screen = ProcMesh.Part("Viewfinder", m_Body, ProcMesh.Quad(), Palette.UnlitTextured(m_Viewfinder, Color.white, false, "ViewfinderScreen"),
-                new Vector3(-0.006f * handSide, 0f, -0.0368f), new Vector3(0.034f, 0.034f, 1f), new Vector3(0, 0, 0));
+                new Vector3(-0.006f * handSide, 0f, -0.0358f), new Vector3(0.034f, 0.034f, 1f), new Vector3(0, 0, 0));
             screen.transform.localRotation = Quaternion.Euler(0, 180f, 0) * Quaternion.Euler(0, 180f, 0); // quad faces -Z = toward you
             screen.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
@@ -182,7 +182,8 @@ namespace FrostAndFound
             // the photo slot: a slit across the bottom, so prints hang down out of it facing you
             ProcMesh.Part("Slot", t, ProcMesh.RoundedBox(0.3f, 1), Palette.Toon(Palette.Coal), new Vector3(0, -0.0326f, 0.004f), new Vector3(0.094f, 0.002f, 0.005f));
             // viewfinder bezel on the back (the screen itself is added in Build)
-            ProcMesh.Part("Bezel", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(-0.006f * side, 0f, -0.0345f), new Vector3(0.04f, 0.039f, 0.004f));
+            // a thin square frame (2.5 mm all round, ~2.3 mm corners) mostly sunk into the back: only 0.6 mm proud
+            ProcMesh.Part("Bezel", t, ProcMesh.RoundedBox(0.06f, 2), dark, new Vector3(-0.006f * side, 0f, -0.0331f), new Vector3(0.039f, 0.039f, 0.005f));
             Slot = ProcMesh.Pivot("PhotoSlot", t, new Vector3(0, -0.0327f, 0.004f));
             m_Body.localPosition = new Vector3(0, 0.01f, -0.005f);
             MeshMerger.Merge(m_Body, null, 0f);

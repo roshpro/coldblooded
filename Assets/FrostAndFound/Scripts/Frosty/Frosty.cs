@@ -287,6 +287,16 @@ namespace FrostAndFound
         }
 
 
+        /// <summary>Out of sight until the intro's thud.</summary>
+        public void Hide() { if (m_Visual) m_Visual.gameObject.SetActive(false); }
+
+        /// <summary>THUD: he's just there, toppled in the snow behind you.</summary>
+        public void Drop()
+        {
+            if (m_Visual) m_Visual.gameObject.SetActive(true);
+            Fx.SnowPuff(transform.position + Vector3.up * 0.1f, Vector3.up, 46, 1.1f);
+        }
+
         public IEnumerator Reveal()
         {
             m_Visual.localScale = new Vector3(1f, 0.01f, 1f);

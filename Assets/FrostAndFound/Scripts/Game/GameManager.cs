@@ -35,11 +35,16 @@ namespace FrostAndFound
         MenuScreen m_Pause;
         PolaroidCamera m_Camera;
         CaseDirector m_Director;
+        GameObject m_Scenery;
+        Snowfall m_Snowfall;
+        OpeningSequence m_Intro;
+        float m_MenuHold;
 
         void Awake()
         {
             I = this;
             Fx.Reset();
+            RoomTint.Reset();
             AudioDirector.Ensure();
             DialogueRunner.Ensure();
             HPointer.Ensure();
@@ -90,8 +95,8 @@ namespace FrostAndFound
 
             // the world: snow on the floor, light snowfall, your footprints
             SnowSurface.Create(r);
-            Snowfall.Create(r);
-            Scenery.Create(r, Player, Random.Range(1, int.MaxValue));   // a fresh arrangement every game: snowy redwoods, shrubs, rocks and drifts — more of them in bigger rooms
+            m_Snowfall = Snowfall.Create(r);
+            m_Scenery = Scenery.Create(r, Player, Random.Range(1, int.MaxValue));   // a fresh arrangement every game: snowy redwoods, shrubs, rocks and drifts — more of them in bigger rooms
             gameObject.AddComponent<FootprintTracker>();
             PhotoBackdrop.Create(r);
 
@@ -143,16 +148,31 @@ namespace FrostAndFound
         void EnterTitle()
         {
             State = GameState.Title;
+            // the title is just your room: no snow, no scenery, no colour change, quiet
+            RoomTint.Normal();
+            if (SnowSurface.Instance) SnowSurface.Instance.Coverage = 0f;
+            if (m_Snowfall) m_Snowfall.SetFalling(false);
+            if (m_Scenery) m_Scenery.SetActive(false);
+            var prints = GetComponent<FootprintTracker>();
+            if (prints) prints.enabled = false;
+            AudioDirector.MusicGate = 0f;
+            AudioDirector.Quiet = true;
             m_Title = TitleScreen.Create(StartCaseNow);
         }
 
         void Update()
         {
             if (!Player) return;
-            if (Player.MenuDown && State != GameState.Boot && State != GameState.Title) TogglePause();
+            if (State == GameState.Intro)
+            {
+                // hold the menu button briefly to skip the intro (with hand tracking the menu gesture is a single press)
+                bool hands = Player.CameraHand.IsOpticalHand;
+                m_MenuHold = Player.MenuHeld ? m_MenuHold + Time.unscaledDeltaTime : 0f;
+                if (m_Intro && (m_MenuHold > 0.5f || (hands && Player.MenuDown))) m_Intro.Skip();
+            }
+            else if (Player.MenuDown && State != GameState.Boot && State != GameState.Title) TogglePause();
             if (m_Camera) m_Camera.Enabled = AllowsGameplay && !HPointer.ConsumedThisFrame && !HPointer.IsOverUI;
-            // snowballs work on the title too: you start the case by throwing one at the Play button
-            if (SnowballHand.Instance) SnowballHand.Instance.Enabled = (State == GameState.Investigating || State == GameState.Title) && !IsPaused;
+            if (SnowballHand.Instance) SnowballHand.Instance.Enabled = State == GameState.Investigating && !IsPaused;
         }
 
         public void StartCaseNow() { if (State == GameState.Title) StartCoroutine(BeginCase()); }
@@ -161,22 +181,26 @@ namespace FrostAndFound
         {
             if (State != GameState.Title) yield break;
             State = GameState.Intro;
-            AudioDirector.Play2D(Sfx.UiClick, 1f);
             if (m_Title) yield return m_Title.Dismiss();
-            Layout = LayoutDirector.Build(RoomService.Current, Player);
-            // kids pop in out of little snow puffs
-            foreach (var kv in Layout.Kids) StartCoroutine(PopIn(kv.Value.transform, Random.Range(0f, 0.5f)));
-            yield return m_Director.RunIntro();
-            State = GameState.Investigating;
+            // "The Knock": a door ~2 m in front of you, Frosty's body ~2 m behind you, the kids around him (hidden)
+            var room = RoomService.Current;
+            var feet = Player.FeetPosition;
+            var fwd = Player.FlatForward;
+            float ahead = 2f;
+            var door = feet + fwd * ahead;
+            if (room.EdgeDistance(door.XZ()) < 0.6f)
+                for (ahead = 2f; ahead > 1.2f && room.EdgeDistance((feet + fwd * ahead).XZ()) < 0.6f; ahead -= 0.1f) { }
+            door = room.ClampInside(feet + fwd * ahead, 0.5f);
+            door.y = room.FloorY;
+            Layout = LayoutDirector.Build(room, Player, feet - fwd * 2f);
+            m_Intro = OpeningSequence.Begin(this, Player, Layout, m_Scenery, m_Snowfall, door, () => State = GameState.Investigating);
+            while (!m_Intro.Done) yield return null;
         }
 
-        IEnumerator PopIn(Transform t, float delay)
+        static IEnumerator ColourBack(float seconds)
         {
-            var s = t.localScale;
-            t.localScale = Vector3.zero;
-            yield return new WaitForSeconds(delay);
-            Fx.SnowPuff(t.position + Vector3.up * 0.1f, Vector3.up, 18, 0.9f);
-            yield return Ease.Tween(0.4f, k => t.localScale = s * Ease.OutBack(k), Ease.Linear, false);
+            for (float t = 0f; t < seconds; t += Time.deltaTime) { RoomTint.Noir(1f - t / seconds); yield return null; }
+            RoomTint.Normal();
         }
 
         // ------------------------------------------------------------------ pause
@@ -209,6 +233,7 @@ namespace FrostAndFound
         public void Restart()
         {
             Time.timeScale = 1f;
+            RoomTint.Normal();   // back to the Play button with the room back to normal
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
@@ -243,6 +268,7 @@ namespace FrostAndFound
             yield return new WaitForSeconds(1.0f);
             var lucy = Kid.Find(CastId.Lucy) as LucyKid;
             if (lucy) lucy.Anim.StrikePose(Pose.Cheer, 1.2f);
+            StartCoroutine(ColourBack(1.4f));   // the room's colour comes back at CASE CLOSED
             yield return CaseClosedStamp.Slam();
             if (lucy) DialogueRunner.Say(Lines.Get("lucy_case_closed"), lucy, true);
             foreach (var kid in Kid.All) if (kid && kid.id != CastId.Tony) kid.Anim.StrikePose(Pose.Cheer, 1.5f);

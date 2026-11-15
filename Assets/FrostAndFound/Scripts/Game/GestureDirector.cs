@@ -120,6 +120,14 @@ namespace FrostAndFound
             return false;
         }
 
+        /// <summary>The opening's last beat: Lucy points out the cocoa stain now, and the pinch hint follows.</summary>
+        public void PromptNow()
+        {
+            if (m_Prompted) return;
+            m_Prompted = true;
+            StartCoroutine(PromptPhoto());
+        }
+
         IEnumerator PromptPhoto()
         {
             var lucy = Kid.Find(CastId.Lucy);

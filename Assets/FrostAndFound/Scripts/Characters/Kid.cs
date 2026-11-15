@@ -68,6 +68,30 @@ namespace FrostAndFound
         float m_StunnedUntil = -1f;
         Coroutine m_Throw;
         public bool CanMove { get; set; } = true;
+        /// <summary>Talking from behind something (the intro's door): the voice comes through muffled.</summary>
+        public bool VoiceMuffled { get; set; }
+        /// <summary>Hide or show the kid's body (it still exists, talks and moves).</summary>
+        public void SetHidden(bool hidden)
+        {
+            if (hidden == m_Hidden) return;
+            m_Hidden = hidden;
+            if (hidden)
+            {
+                // remember exactly what was on, so showing again doesn't switch on parts meant to stay off
+                m_HiddenRenderers.Clear(); m_HiddenColliders.Clear();
+                foreach (var r in GetComponentsInChildren<Renderer>(true)) if (r.enabled) { m_HiddenRenderers.Add(r); r.enabled = false; }
+                foreach (var c in GetComponentsInChildren<Collider>(true)) if (c.enabled) { m_HiddenColliders.Add(c); c.enabled = false; }
+            }
+            else
+            {
+                foreach (var r in m_HiddenRenderers) if (r) r.enabled = true;
+                foreach (var c in m_HiddenColliders) if (c) c.enabled = true;
+                m_HiddenRenderers.Clear(); m_HiddenColliders.Clear();
+            }
+        }
+        bool m_Hidden;
+        readonly List<Renderer> m_HiddenRenderers = new List<Renderer>();
+        readonly List<Collider> m_HiddenColliders = new List<Collider>();
         public Vector3 HomePosition { get; set; }
         public Quaternion HomeRotation { get; set; }
 
