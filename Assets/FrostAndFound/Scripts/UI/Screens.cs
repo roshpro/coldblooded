@@ -138,7 +138,7 @@ namespace FrostAndFound
             float y = H * 0.5f - 0.155f;
             foreach (var (label, desc, get, set) in new (string, string, System.Func<bool>, System.Action<bool>)[]
             {
-                ("Lefty mode", "Camera in right hand, throw left", () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v),
+                ("Lefty mode", "Camera in your right hand instead", () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v),
                 ("Subtitles", "Speech bubbles & captions", () => FrostPrefs.Subtitles, v => FrostPrefs.Subtitles = v),
                 ("Tips", "Short control hints", () => FrostPrefs.Tips, v => FrostPrefs.Tips = v),
             })
