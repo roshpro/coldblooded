@@ -145,3 +145,7 @@ crashlytics-build.properties
 
 # macOS
 .DS_Store
+
+# Meta Immersive Debugger dev agent: per-machine IP + access token
+/Assets/Resources/DevAgentSettings.asset
+/Assets/Resources/DevAgentSettings.asset.meta
