@@ -235,7 +235,7 @@ namespace FrostAndFound
                         // somewhere along his side, a short step back from him
                         var p = c + new Vector3(Random.Range(-reach, reach), 0f, Random.Range(-reach, reach));
                         float gap = fr.BodyGap(p);
-                        if (gap < 0.3f || gap > 0.7f || !SpotOk(p, player, 0.9f)) continue;
+                        if (gap < 0.15f || gap > 0.55f || !SpotOk(p, player, 0.9f)) continue;
                         m_LookAt = c + Vector3.up * 0.15f;
                         return Go(a, p, Speed(a));
                     }
@@ -480,6 +480,9 @@ namespace FrostAndFound
     public static class KidNav
     {
         const float Cell = 0.2f, Clearance = 0.2f, WallInset = 0.25f;
+        // his outline is the box round his mesh, wider than the round snowballs he's made of: kids may stand right up
+        // against it
+        const float FrostyGap = -0.05f;
         static RoomInfo s_Room;
         static bool[] s_Free;
         static int s_W, s_H;
@@ -509,7 +512,7 @@ namespace FrostAndFound
                 {
                     var p = CellPos(x, y);
                     // round his actual body as he lies, not a circle as long as he is: in a small room that cut the floor in two
-                    s_Free[y * s_W + x] = room.IsFree(p, Clearance, WallInset) && (!frosty || frosty.BodyGap(p) > 0.12f);
+                    s_Free[y * s_W + x] = room.IsFree(p, Clearance, WallInset) && (!frosty || frosty.BodyGap(p) > FrostyGap);
                 }
         }
 

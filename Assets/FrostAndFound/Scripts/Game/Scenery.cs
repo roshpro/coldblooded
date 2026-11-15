@@ -16,7 +16,9 @@ namespace FrostAndFound
     public static class Scenery
     {
 
-        struct Obstacle { public Vector3 pos; public float radius; }
+        // radius: how much room it takes when placing the scenery; walk: the smaller footprint the kids walk round
+        // once everything's placed (a kid can brush a bush or step onto the edge of a drift)
+        struct Obstacle { public Vector3 pos; public float radius, walk; }
 
         static readonly Color Bark = new Color(0.62f, 0.3f, 0.17f);        // redwood: red-brown, fibrous
         static readonly Color LogBark = new Color(0.43f, 0.28f, 0.2f);
@@ -106,11 +108,15 @@ namespace FrostAndFound
             // ---- the kids walk round everything placed here
             var obstacles = new List<Obstacle>();
             var furniture = room.IsBlocked;
+            bool placing = true;
             room.IsBlocked = (p, r) =>
             {
                 if (furniture != null && furniture(p, r)) return true;
                 for (int i = 0; i < obstacles.Count; i++)
-                    if (FrostUtil.FlatDistance(p, obstacles[i].pos) < obstacles[i].radius + r) return true;
+                {
+                    var o = obstacles[i];
+                    if (FrostUtil.FlatDistance(p, o.pos) < (placing || o.walk <= 0f ? o.radius : o.walk) + r) return true;
+                }
                 return false;
             };
 
@@ -212,7 +218,7 @@ namespace FrostAndFound
                 Shrub(k, spot, size, i);
                 shrubSpots.Add(spot);
                 placed[1]++;
-                obstacles.Add(new Obstacle { pos = spot, radius = r });
+                obstacles.Add(new Obstacle { pos = spot, radius = r, walk = r * 0.55f });
                 k.snow?.AddDrift(spot, r * 1.5f, k.Range(0.22f, 0.38f), 1f, 0f, i + 21);
             }
 
@@ -225,7 +231,7 @@ namespace FrostAndFound
                 Rock(k, spot, size, i);
                 rockSpots.Add(spot);
                 placed[2]++;
-                obstacles.Add(new Obstacle { pos = spot, radius = r });
+                obstacles.Add(new Obstacle { pos = spot, radius = r, walk = r * 0.6f });
                 k.snow?.AddDrift(spot, r * 1.6f, k.Range(0.15f, 0.3f), 1f, 0f, i + 31);
             }
 
@@ -237,7 +243,7 @@ namespace FrostAndFound
                 float yaw = Mathf.Atan2(inward.x, inward.y) * Mathf.Rad2Deg + k.Range(-15f, 15f);   // its length runs along the wall
                 Log(k, spot, yaw, i);
                 placed[3]++;
-                obstacles.Add(new Obstacle { pos = spot, radius = 0.55f });
+                obstacles.Add(new Obstacle { pos = spot, radius = 0.55f, walk = 0.42f });
             }
 
             // ---- big drifts: heaped into the corners and against the walls, and out in the open in big rooms
@@ -252,8 +258,9 @@ namespace FrostAndFound
                 k.snow.AddDrift(spot, radius, h01, squash, Mathf.Atan2(inward.x, inward.y) * Mathf.Rad2Deg, i + 41);   // long side along the wall
                 DriftCollider(k, spot, radius * (1f + squash) * 0.5f, h01);
                 placed[4]++;
-                obstacles.Add(new Obstacle { pos = spot, radius = radius * 0.5f });
+                obstacles.Add(new Obstacle { pos = spot, radius = radius * 0.5f, walk = radius * 0.25f });   // it's only snow
             }
+            placing = false;
 
             MeshMerger.Merge(go.transform, null, 0.15f);
             Debug.Log($"[Frost] Scenery: {treeSpots.Count} redwoods, {placed[1]} shrubs, {placed[2]} rocks, {placed[3]} logs, {placed[4]} drifts for {area:0} m² of open floor");

@@ -215,8 +215,7 @@ namespace FrostAndFound
             var above = frosty ? frosty.transform.position + Vector3.up * 1.55f : headPos + m_Player.FlatForward * 2f;
             m_Logo = TitleLogo.Create(above, headPos);
             yield return m_Logo.StampIn();
-            StartCoroutine(m_Door.Vanish());
-            m_Door = null;
+            DoorAway();
             AudioDirector.MusicGate = 1f;   // the noir score fades in
             yield return new WaitForSeconds(2.4f);
 
@@ -229,15 +228,43 @@ namespace FrostAndFound
 
         IEnumerator LucyComesIn()
         {
-            m_LucyStop = LucyStopClearOf(m_Player.FeetPosition);
+            m_LucyStop = Walkable(LucyStopClearOf(m_Player.FeetPosition));
             m_Lucy.SetHidden(false);
             m_Lucy.VoiceMuffled = false;
             bool arrived = false;
-            m_Lucy.MoveTo(m_LucyStop, 1.0f, () => arrived = true);
-            for (float t = 0f; !arrived && t < 3f; t += Time.deltaTime) yield return null;
+            // round anything by the door (a straight walk just stops dead at the first bush in the way)
+            if (!m_Lucy.WalkTo(m_LucyStop, 1.0f, () => arrived = true)) m_Lucy.MoveTo(m_LucyStop, 1.0f, () => arrived = true);
+            for (float t = 0f; !arrived && t < 3f; t += Time.deltaTime)
+            {
+                // once she's through, the door has done its job: it fades back out of your room
+                if (m_Door && FrostUtil.FlatDistance(m_Lucy.transform.position, m_DoorPos) > 0.75f) DoorAway();
+                yield return null;
+            }
+            DoorAway();
             m_Lucy.Face(m_Player.Head.position, 0.3f);
             yield return new WaitForSeconds(0.3f);
             m_Lucy.Anim.StrikePose(Pose.Cheer, 1.6f);
+        }
+
+        /// <summary>p, or the nearest spot a kid can stand on (a bush or the sofa may be right where she'd stop).</summary>
+        static Vector3 Walkable(Vector3 p)
+        {
+            if (KidNav.Walkable(p)) return p;
+            for (float r = 0.2f; r <= 1.2f; r += 0.2f)
+                for (int i = 0; i < 12; i++)
+                {
+                    float a = i * Mathf.PI / 6f;
+                    var q = p + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r;
+                    if (KidNav.Walkable(q)) return q;
+                }
+            return p;
+        }
+
+        void DoorAway()
+        {
+            if (!m_Door) return;
+            StartCoroutine(m_Door.Vanish());
+            m_Door = null;
         }
 
         IEnumerator Knocks(int count, float volume)
