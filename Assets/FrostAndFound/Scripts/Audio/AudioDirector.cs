@@ -171,6 +171,30 @@ namespace FrostAndFound
             return clip ? s_I.PlayClip(clip, pos, volume * SfxVolume, pitch, true) : null;
         }
 
+        /// <summary>A big positional hit (Frosty's thud): full volume out to `minDistance`, Unity panning instead of
+        /// the headset spatialiser (which muffles it), and ignoring the SFX slider's headroom.</summary>
+        public static AudioSource PlayBoom(Sfx s, Vector3 pos, float volume = 1f, float pitch = 1f, float minDistance = 5f)
+        {
+            if (!s_I) return null;
+            var clip = s_I.Clip(s);
+            if (!clip) return null;
+            var src = s_I.Grab();
+            src.transform.position = pos;
+            src.clip = clip;
+            src.volume = Mathf.Clamp01(volume);
+            src.pitch = pitch;
+            src.loop = false;
+            var lp = src.GetComponent<AudioLowPassFilter>();
+            if (lp) lp.enabled = false;
+            src.spatialBlend = 0.85f;   // mostly from behind you, but some straight in the ears so it lands
+            src.spatialize = false;
+            src.rolloffMode = AudioRolloffMode.Logarithmic;
+            src.minDistance = minDistance;
+            src.maxDistance = 25f;
+            src.Play();
+            return src;
+        }
+
         public static AudioSource Play2D(Sfx s, float volume = 1f, float pitch = 1f)
         {
             if (!s_I) return null;

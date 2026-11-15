@@ -181,8 +181,40 @@ namespace FrostAndFound
             StartCoroutine(React(kid, photo));
         }
 
+        // the kid still talking from the last show: the case doesn't wait for them to finish, so a new show cuts them off
+        Kid m_Talker;
+        Coroutine m_TalkRoutine;
+
+        void CutOffTalker()
+        {
+            if (m_TalkRoutine != null) StopCoroutine(m_TalkRoutine);
+            m_TalkRoutine = null;
+            if (m_Talker)
+            {
+                DialogueRunner.Cut(m_Talker.id);
+                m_Talker.Busy = false;
+            }
+            m_Talker = null;
+        }
+
+        /// <summary>The kid's lines play on their own: the case has already moved on, and showing someone else
+        /// a photo cuts them off.</summary>
+        void Talk(Kid kid, IEnumerator lines)
+        {
+            m_Talker = kid;
+            m_TalkRoutine = StartCoroutine(Talking(kid, lines));
+        }
+
+        IEnumerator Talking(Kid kid, IEnumerator lines)
+        {
+            yield return lines;
+            if (kid) kid.Busy = false;
+            if (m_Talker == kid) { m_Talker = null; m_TalkRoutine = null; }
+        }
+
         IEnumerator React(Kid kid, PhotoData photo)
         {
+            CutOffTalker();
             Reacting = true;
             Shows++;
             kid.Busy = true;
@@ -200,15 +232,21 @@ namespace FrostAndFound
             if (isCurrent && kid.id == step.kid)
             {
                 Progress();
-                yield return RightKid(kid, step);
+                if (step.kid == CastId.Tony) { yield return RightKid(kid, step); yield break; }   // the finale runs its own course
+                var lines = RightKid(kid, step);
+                lines.MoveNext();   // solves the step and lights up the next clue right now; the talking follows
+                Reacting = false;
+                Talk(kid, lines);
+                yield break;
             }
-            else if (clue == ClueId.None)
+            Reacting = false;
+            if (clue == ClueId.None)
             {
-                yield return ReactToPicture(kid, photo);
+                Talk(kid, ReactToPicture(kid, photo));
             }
             else if (Solved.Contains(clue) && OwnerOf(clue) == kid.id)
             {
-                yield return kid.SayAndWait(Cast.Key(kid.id) + "_again");
+                Talk(kid, kid.SayAndWait(Cast.Key(kid.id) + "_again"));
             }
             else
             {
@@ -223,10 +261,8 @@ namespace FrostAndFound
                          : specific ?? generic ?? Lines.Get(Cast.Key(kid.id) + "_snow");
                 var target = Kid.Find(owner);
                 if (target && target != kid) kid.Anim.Point(target.HeadPoint, 2.2f);
-                yield return DialogueRunner.SayAndWait(line, kid);
+                Talk(kid, DialogueRunner.SayAndWait(line, kid));
             }
-            kid.Busy = false;
-            Reacting = false;
         }
 
         // ------------------------------------------------------------------ a photo that isn't evidence
@@ -307,8 +343,16 @@ namespace FrostAndFound
                 yield break;
             }
 
+            // the case moves on at once: the next clue sparkles while they're still making excuses (React runs this
+            // far synchronously, then lets the talking play out on its own)
+            Step++;
+            StepStartedAt = Time.time;
+            SetSparkling(step.next);
+            Progress();
+            StartCoroutine(GuideLine(Step));
+            yield return null;
+
             yield return kid.SayAndWait(step.excuse);
-            // the next clue starts sparkling (with a dun-dun-DUN)
             if (step.pointsAt.HasValue)
             {
                 var next = Kid.Find(step.pointsAt.Value);
@@ -324,11 +368,6 @@ namespace FrostAndFound
                 kid.Anim.Point(Frosty.Instance.Scrape.FocusPoint, 2f);
                 yield return new WaitForSeconds(0.6f);
             }
-            Step++;
-            StepStartedAt = Time.time;
-            SetSparkling(step.next);
-            Progress();
-            StartCoroutine(GuideLine(Step));
         }
 
         /// <summary>Lucy points out the clue to photograph next ("Um, hello? The carrot?"), once the talking's done.
@@ -347,9 +386,9 @@ namespace FrostAndFound
                     yield return null;
                 }
             }
-            // a request for a picture is instant: only wait for Lucy herself to finish (briefly)
+            // let the kid who just pointed you here get their excuse out first (a few seconds at most), then Lucy
             float waited = 0f;
-            while ((DialogueRunner.IsSpeaking(CastId.Lucy) || lucy.Busy) && waited < 4f) { waited += Time.deltaTime; yield return null; }
+            while ((DialogueRunner.AnyoneSpeaking || lucy.Busy) && waited < 5f) { waited += Time.deltaTime; yield return null; }
             if (Step != step || FinaleStarted || CaseClosed) yield break;
             var player = PlayerRig.Active;
             if (player) lucy.Face(player.Head.position, 0.3f);

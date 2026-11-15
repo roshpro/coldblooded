@@ -18,7 +18,7 @@ namespace FrostAndFound
             public readonly List<GameObject> Props = new List<GameObject>();
         }
 
-        /// <param name="frostyAt">Where Frosty's body should lie (the intro puts him behind you); null = mid-room.</param>
+        /// <param name="frostyAt">Where Frosty's body should lie null = mid-room (what the intro uses).</param>
         public static Result Build(RoomInfo room, PlayerRig player, Vector3? frostyAt = null)
         {
             var tune = FrostTuning.I;

@@ -8,7 +8,7 @@ namespace FrostAndFound
     /// "The Knock" (~35 s, paced to give you time to react). A door fades into your room and someone knocks: Lucy,
     /// muffled, wants you out building a snowman. The door opens and she comes in. Cheerful music; snow falls and slowly
     /// piles up over the floor while the trees and rocks rise out of it. The music fades. Silence. A LOUD thud a short
-    /// way behind you: Frosty's body. Once you've turned round, Lucy jabs at him: "It's a cold-blooded MURDER!!"
+    /// way off in the middle of the room: Frosty's body. Once you've seen him, Lucy jabs at him: "It's a cold-blooded MURDER!!"
     /// Sirens blast, red and blue light, the room drains to noir grey, the logo stamps in above the body, the kids pop
     /// in and the case is open. Hold the menu button to skip straight to the investigation.
     /// </summary>
@@ -154,17 +154,22 @@ namespace FrostAndFound
             m_Jingle = null;
             yield return new WaitForSeconds(1.6f);
 
-            // 5. a LOUD thud a short way behind you, wherever there's room for him: Frosty, toppled in the snow
+            // 5. a LOUD thud in the middle of the room: Frosty, toppled in the snow
             if (frosty)
             {
-                PlaceFrostyBehind(frosty);
+                PlaceFrosty(frosty);
                 // right down on the floor where he lands, and loud: full volume out past where you're standing
                 var at = frosty.transform.position + Vector3.up * 0.03f;
-                foreach (var src in new[] { AudioDirector.PlayAt(Sfx.Thud, at, 1f, 1f), AudioDirector.PlayAt(Sfx.Thud, at, 1f, 0.72f), AudioDirector.PlayAt(Sfx.Thud, at, 1f, 0.55f) })
-                    if (src) { src.minDistance = 3.5f; src.maxDistance = 20f; }
-                AudioDirector.Play2D(Sfx.Thud, 0.9f, 0.6f);   // felt in the chest as much as heard
-                m_Player.Left.Haptic(1f, 0.3f);
-                m_Player.Right.Haptic(1f, 0.3f);
+                float full = 1f / Mathf.Max(0.05f, AudioDirector.SfxVolume);   // past the SFX slider: this one is meant to make you jump
+                AudioDirector.PlayBoom(Sfx.Thud, at, 1f, 1f);
+                AudioDirector.PlayBoom(Sfx.Thud, at, 1f, 0.85f);
+                AudioDirector.PlayBoom(Sfx.Thud, at, 1f, 0.72f);
+                AudioDirector.PlayBoom(Sfx.Thud, at, 1f, 0.55f);
+                AudioDirector.Play2D(Sfx.Thud, full, 0.6f);   // felt in the chest as much as heard
+                AudioDirector.Play2D(Sfx.Thud, full * 0.8f, 0.45f);
+                ThudMarks.Burst(frosty.AimPoint, m_Player);   // comic impact lines: something just landed, back there
+                m_Player.Left.Haptic(1f, 0.45f);
+                m_Player.Right.Haptic(1f, 0.45f);
                 frosty.Drop();
                 Fx.SnowPuff(frosty.transform.position + Vector3.up * 0.2f, Vector3.up, 40, 1.4f);
 
@@ -229,41 +234,54 @@ namespace FrostAndFound
 
         /// <summary>Frosty lands a short way behind wherever you're facing right now, on the nearest bit of free floor
         /// big enough for him (if there's none, he stays where the layout put him).</summary>
-        void PlaceFrostyBehind(Frosty frosty)
+        /// <summary>Frosty lands mid-room where the layout put him, unless you or Lucy are standing there by now:
+        /// then the nearest free floor to the middle that's clear of you both.</summary>
+        void PlaceFrosty(Frosty frosty)
         {
             var room = RoomService.Current;
             if (room == null) return;
             var feet = m_Player.FeetPosition;
-            var back = -m_Player.FlatForward;
             float fr = Frosty.FootprintRadius * 0.7f;
-            float[] dists = { 1.3f, 1.6f, 1.1f, 1.9f, 2.3f };
-            float[] angles = { 0f, 20f, -20f, 40f, -40f, 60f, -60f, 80f, -80f };
-            foreach (var d in dists)
-                foreach (var a in angles)
-                {
-                    var c = feet + Quaternion.Euler(0f, a, 0f) * back * d;
-                    c.y = room.FloorY;
-                    if (!room.IsFree(c, fr, 0.6f)) continue;
-                    if (m_Lucy && FrostUtil.FlatDistance(c, m_Lucy.transform.position) < fr + 0.5f) continue;
-                    bool clear = true;
-                    foreach (var p in m_Layout.Props)
-                        if (p && FrostUtil.FlatDistance(c, p.transform.position) < fr + 0.35f) { clear = false; break; }
-                    if (!clear) continue;
-
-                    var delta = (c - frosty.transform.position).Flat();
-                    frosty.transform.SetPositionAndRotation(c, FrostUtil.FlatLookRotation(c, feet) * Quaternion.Euler(0f, Random.Range(-20f, 20f), 0f));
-                    // the (still hidden) kids were laid out around him: they come along
-                    foreach (var kv in m_Layout.Kids)
+            bool Ok(Vector3 c)
+            {
+                if (!room.IsFree(c, fr, 0.6f) || FrostUtil.FlatDistance(c, feet) < fr + 0.75f) return false;
+                if (m_Lucy && FrostUtil.FlatDistance(c, m_Lucy.transform.position) < fr + 0.5f) return false;
+                foreach (var p in m_Layout.Props)
+                    if (p && FrostUtil.FlatDistance(c, p.transform.position) < fr + 0.35f) return false;
+                return true;
+            }
+            var here = frosty.transform.position;
+            var c0 = here;
+            if (!Ok(here))
+            {
+                // rings out from the room's middle, starting on the side away from you
+                var mid = room.Center; mid.y = room.FloorY;
+                var away = (mid - feet).Flat();
+                away = away.sqrMagnitude > 1e-3f ? away.normalized : -m_Player.FlatForward;
+                bool found = false;
+                for (float r = 0.3f; r <= 2.4f && !found; r += 0.3f)
+                    for (int i = 0; i < 12 && !found; i++)
                     {
-                        var k = kv.Value;
-                        if (!k || k == m_Lucy) continue;
-                        var q = room.ClampInside(k.transform.position + delta, 0.3f);
-                        if (!room.IsFree(q, 0.2f, 0.25f) || FrostUtil.FlatDistance(q, feet) < 0.8f || FrostUtil.FlatDistance(q, c) < fr + 0.3f) continue;
-                        k.transform.position = new Vector3(q.x, k.transform.position.y, q.z);
-                        k.HomePosition = k.transform.position;
+                        float a = (i % 2 == 0 ? 1 : -1) * ((i + 1) / 2) * 30f;
+                        var c = mid + Quaternion.Euler(0f, a, 0f) * away * r;
+                        c.y = room.FloorY;
+                        if (Ok(c)) { c0 = c; found = true; }
                     }
-                    return;
-                }
+                if (!found) return;
+            }
+            var delta = (c0 - here).Flat();
+            frosty.transform.SetPositionAndRotation(c0, FrostUtil.FlatLookRotation(c0, feet) * Quaternion.Euler(0f, Random.Range(-20f, 20f), 0f));
+            if (delta.sqrMagnitude < 1e-4f) return;
+            // the (still hidden) kids were laid out around him: they come along
+            foreach (var kv in m_Layout.Kids)
+            {
+                var k = kv.Value;
+                if (!k || k == m_Lucy) continue;
+                var q = room.ClampInside(k.transform.position + delta, 0.3f);
+                if (!room.IsFree(q, 0.2f, 0.25f) || FrostUtil.FlatDistance(q, feet) < 0.8f || FrostUtil.FlatDistance(q, c0) < fr + 0.3f) continue;
+                k.transform.position = new Vector3(q.x, k.transform.position.y, q.z);
+                k.HomePosition = k.transform.position;
+            }
         }
 
         IEnumerator Settle(SnowSurface snow, float seconds)

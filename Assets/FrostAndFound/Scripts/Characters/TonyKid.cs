@@ -63,9 +63,15 @@ namespace FrostAndFound
         public IEnumerator Confronted()
         {
             Busy = true;
-            yield return SayAndWait("tony_excuse");
+            // the chase doesn't wait on the speech: goggles come down a beat into his excuse (or as it ends), and he's
+            // already running as he shouts his defence
+            var excuse = Lines.Get("tony_excuse");
+            if (excuse != null) DialogueRunner.Say(excuse, this, true);
+            yield return null;
+            for (float t = 0f; t < 2.2f && DialogueRunner.IsSpeaking(id); t += Time.deltaTime) yield return null;
             yield return GogglesDown();
-            yield return SayAndWait("tony_defense");
+            var defence = Lines.Get("tony_defense");
+            if (defence != null) DialogueRunner.Say(defence, this, true);
             Busy = false;
             Bolt();
         }

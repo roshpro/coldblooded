@@ -453,7 +453,10 @@ namespace FrostAndFound
             }
             var crunch = Crunch(0.5f, 30, 0.6f, rng);
             for (int i = 0; i < crunch.Length && i < d.Length; i++) d[i] += crunch[i] * 0.35f;
-            Normalize(d, 0.95f); Fade(d); return d;
+            // driven hard into a soft clip: the same peak, but far more weight behind it (much louder to the ear)
+            Normalize(d, 1f);
+            for (int i = 0; i < d.Length; i++) d[i] = (float)System.Math.Tanh(d[i] * 2.6f);
+            Normalize(d, 0.98f); Fade(d); return d;
         }
 
         /// <summary>A door flung open and banging against its stop, with a rattle.</summary>

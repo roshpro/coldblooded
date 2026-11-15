@@ -184,7 +184,7 @@ namespace FrostAndFound
             if (State != GameState.Title) yield break;
             State = GameState.Intro;
             if (m_Title) yield return m_Title.Dismiss();
-            // "The Knock": a door ~2 m in front of you, Frosty's body ~2 m behind you, the kids around him (hidden).
+            // "The Knock": a door ~2 m in front of you, Frosty's body mid-room, the kids around him (hidden).
             // When Space Setup marked a real door, the knocking comes from your actual door instead.
             var room = RoomService.Current;
             var feet = Player.FeetPosition;
@@ -210,9 +210,8 @@ namespace FrostAndFound
                 door = room.ClampInside(feet + fwd * ahead, 0.5f);
                 door.y = room.FloorY;
             }
-            // Frosty lands behind you, but never in quite the same place twice
-            var behind = Quaternion.Euler(0f, Random.Range(-45f, 45f), 0f) * -fwd * Random.Range(1.7f, 2.7f);
-            Layout = LayoutDirector.Build(room, Player, feet + behind);
+            // Frosty lands in the middle of the room (a little off-centre, different every time)
+            Layout = LayoutDirector.Build(room, Player);
             m_Intro = OpeningSequence.Begin(this, Player, Layout, m_Scenery, m_Snowfall, door, () => State = GameState.Investigating, doorFacing);
             while (!m_Intro.Done) yield return null;
         }
@@ -265,7 +264,9 @@ namespace FrostAndFound
             if (State == GameState.Outro || State == GameState.Ended) yield break;
             State = GameState.Outro;
             var tony = Kid.Find(CastId.Tony) as TonyKid;
-            if (tony) yield return tony.SayAndWait("tony_caught");
+            // he protests while the others are already gathering round him
+            var caught = Lines.Get("tony_caught");
+            if (tony && caught != null) DialogueRunner.Say(caught, tony, true);
             // the kids gather around the culprit, on the far side from you, so the crowd frames the scene
             var feet = Player.FeetPosition;
             var center = tony ? tony.transform.position : (Frosty.Instance ? Frosty.Instance.transform.position : RoomService.Current.Center);

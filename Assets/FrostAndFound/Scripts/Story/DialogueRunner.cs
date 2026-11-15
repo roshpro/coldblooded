@@ -14,6 +14,7 @@ namespace FrostAndFound
         static DialogueRunner s_I;
         readonly Dictionary<CastId, float> m_SpeakingUntil = new Dictionary<CastId, float>();
         readonly Dictionary<CastId, SpeechBubble> m_Bubbles = new Dictionary<CastId, SpeechBubble>();
+        readonly Dictionary<CastId, int> m_Takes = new Dictionary<CastId, int>();   // bumped when a line is cut off
         CaptionBar m_Caption;
 
         public static bool AnyoneSpeaking
@@ -58,6 +59,19 @@ namespace FrostAndFound
             yield return s_I.StartCoroutine(s_I.Speak(line, speaker, interrupt));
         }
 
+        /// <summary>Cuts a kid off mid-line: voice, bubble and caption stop now, and anyone waiting on the line moves on.</summary>
+        public static void Cut(CastId id)
+        {
+            if (!s_I || !IsSpeaking(id) && !(s_I.m_Bubbles.TryGetValue(id, out var b0) && b0 && b0.IsShowing)) return;
+            AudioDirector.StopVoice(id);
+            s_I.m_Takes[id] = s_I.Take(id) + 1;
+            s_I.m_SpeakingUntil[id] = 0f;
+            if (s_I.m_Bubbles.TryGetValue(id, out var b) && b) b.Hide();
+            s_I.m_Caption.Withdraw(id);
+        }
+
+        int Take(CastId id) => m_Takes.TryGetValue(id, out int t) ? t : 0;
+
         IEnumerator Speak(Line line, Kid speaker, bool interrupt)
         {
             var id = speaker.id;
@@ -77,8 +91,9 @@ namespace FrostAndFound
                 bubble.Show(line.Text, readLen);
                 m_Caption.Offer(speaker, line.Text, readLen);
             }
+            int myTake = Take(id);
             float end = Time.time + readLen;
-            while (Time.time < end) yield return null;
+            while (Time.time < end && Take(id) == myTake) yield return null;
         }
     }
 
@@ -134,6 +149,9 @@ namespace FrostAndFound
             gameObject.SetActive(true);
         }
 
+        public bool IsShowing => Time.time < m_Until;
+        public void Hide() => m_Until = Time.time;
+
         void LateUpdate()
         {
             if (!m_Kid) { Destroy(gameObject); return; }
@@ -172,6 +190,8 @@ namespace FrostAndFound
             go.SetActive(true);
             return c;
         }
+
+        public void Withdraw(CastId who) { if (m_Speaker && m_Speaker.id == who) m_Until = Time.time; }
 
         public void Offer(Kid speaker, string text, float seconds)
         {
