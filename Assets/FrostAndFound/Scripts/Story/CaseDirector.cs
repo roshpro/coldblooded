@@ -386,9 +386,19 @@ namespace FrostAndFound
                     yield return null;
                 }
             }
-            // let the kid who just pointed you here get their excuse out first (a few seconds at most), then Lucy
-            float waited = 0f;
-            while ((DialogueRunner.AnyoneSpeaking || lucy.Busy) && waited < 5f) { waited += Time.deltaTime; yield return null; }
+            // let the kid who just pointed you here finish everything they have to say (excuse and pointing line), then a
+            // short breath of quiet, then Lucy, so the two never talk over each other. The talker isn't set until the
+            // frame after this starts, so skip a frame before looking.
+            yield return null;
+            float quiet = 0f, waited = 0f;
+            while (quiet < 0.6f && waited < 30f)
+            {
+                if (Step != step || FinaleStarted || CaseClosed) yield break;
+                bool talking = m_Talker != null || DialogueRunner.AnyoneSpeaking || lucy.Busy;
+                quiet = talking ? 0f : quiet + Time.deltaTime;
+                waited += Time.deltaTime;
+                yield return null;
+            }
             if (Step != step || FinaleStarted || CaseClosed) yield break;
             var player = PlayerRig.Active;
             if (player) lucy.Face(player.Head.position, 0.3f);
