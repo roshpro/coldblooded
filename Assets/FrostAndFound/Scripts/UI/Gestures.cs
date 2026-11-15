@@ -5,7 +5,7 @@ namespace FrostAndFound
     public enum GestureKind { Camera, ScoopThrow }
 
     /// <summary>
-    /// A small looping hand-drawn gesture animation on an ice-glass card, played from a sprite sheet in
+    /// A small looping hand-drawn gesture animation (no backing card), played from a sprite sheet in
     /// Resources/Gestures (8 × 6 cells of 256 px; cell 0 is blank, so the loop is cells 1–47).
     /// </summary>
     public class GestureCard : MonoBehaviour
@@ -38,11 +38,10 @@ namespace FrostAndFound
             g.Kind = kind;
             g.m_Content = new GameObject("Content").transform;
             g.m_Content.SetParent(go.transform, false);
-            var glass = HUI.Panel(g.m_Content, "Panel", new Vector2(size, size), size * 0.22f, false);
-            glass.Root.localPosition = Vector3.zero;
+            // just the hand-drawn lines floating in space, no backing card
             g.m_Mat = Palette.UnlitTextured(Sheet(kind), Color.white, true, "Gesture " + kind);
             var anim = UIKit.Quad(g.m_Content, "Animation", ProcMesh.Quad(), g.m_Mat, -0.002f);
-            anim.localScale = new Vector3(size * 0.92f, size * 0.92f, 1f);
+            anim.localScale = new Vector3(size, size, 1f);
             var mr = anim.GetComponent<MeshRenderer>();
             mr.sortingOrder = UIKit.Order.Overlay;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
