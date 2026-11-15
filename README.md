@@ -1,122 +1,121 @@
-# Frost & Found
+# Cold Blooded
 
-> A murder mystery where the victim is a snowman, the suspects are knee-high, and your only tools are a Polaroid camera and a snowball.
+> A murder mystery in your own living room. The victim is a snowman, the suspects are five kids, and your only tools are a Polaroid camera and a snowball.
 
-Mixed-reality game for **Meta Quest 3** (Immerse the Bay). Built with **Unity 6000.6.9f1 · URP · Meta XR All-in-One SDK v209** (Core, Interaction, MR Utility Kit, Audio, Haptics, Platform, Voice) on the OpenXR provider Meta recommends for Unity 6.
+Mixed-reality game for **Meta Quest 3 / 3S**, made for **Immerse the Bay**. Built with **Unity 6000.6.9f1 · URP · Meta XR All-in-One SDK v209** (Core, Interaction, MR Utility Kit, Audio, Haptics, Platform) on the OpenXR provider, plus **Unity OpenXR Meta 2.7** for the Depth API.
 
-Everything in the design doc is playable now with mockup art and synthesized placeholder audio. Final Blender models and ElevenLabs voices drop in without code changes (see [Swapping in final assets](#swapping-in-final-assets)).
+Your real room fills with snow, snowy redwoods and a toppled snowman. You photograph clues, show the photos to the right kid, follow the chain of excuses to the culprit, and catch him on film. All five kids are fully voiced (ElevenLabs).
+
+---
+
+## The game in one minute
+
+1. **The Knock.** On the title screen your room is untouched: just poke the floating **Play** button. A door appears (on your *real* door if Space Setup marked one) and someone knocks. Lucy wants you out building a snowman. Snow starts falling and piles up across your floor, and the trees rise out of it. Then the music stops: *THUD*, behind you. Turn round. Frosty is lying in the snow. Lucy bursts in, sirens wash the room red and blue, and your real room drains to **film-noir grey** until the case is closed. Hold the menu button to skip the intro.
+2. **Investigate.** Each clue on (or near) Frosty leads to a kid: a cocoa splash → Dexter, carrot bits → Sherman, purple glitter → Serena, a red scrape → Lucy, a dented sled → Tony. **Photograph** the clue, then **show** the photo to that kid. They lean in, squint, make an excuse, and point you to the next clue, which starts to glint. Show the wrong kid and you get a joke and a nudge.
+3. **The finale.** Tony refuses to be photographed. He bolts, zig-zags, dodges your viewfinder and ducks behind your real sofa or table. Bonk him with a snowball, and while he's dazed, take the **GUILTY** photo.
+4. **CASE CLOSED.** The colour floods back into your room, the northern lights blaze overhead, and your photos are taped into a scrapbook detective journal with your stats.
+
+Throw snowballs at the kids for fun, but hit the same kid four times and it's a **SNOWBALL FIGHT**: an alarm, an announcer, and everyone pelting you (and each other).
 
 ---
 
 ## Run it
 
-### In the Editor (no headset needed)
-1. Open the project in Unity **6000.6.9f1**. Open `Assets/FrostAndFound/Scenes/FrostAndFound.unity`.
-2. Press **Play**. With no headset connected, the game runs in a **desktop simulation** inside a furnished stand-in living room.
-3. Or use **Frost & Found ▸ Play With Autopilot** to watch the perfect run play itself (13 actions, about 1:35). It's handy for smoke-testing and capturing demo footage.
-4. To try a tight venue, set **Simulated Room Size** on the `Frost & Found` GameManager (3 × 3 m works).
-5. To hear the placeholder audio outside Unity, use **Frost & Found ▸ Export Placeholder Audio (WAV)**. It writes to `AudioPreview/`.
+### On a Quest 3 / 3S
+1. Run **Space Setup** first (Settings ▸ Physical Space ▸ Space Setup) and mark your walls, **doors** and **furniture**. The game uses all of it. Allow the *spatial data* permission when asked.
+2. **File ▸ Build Profiles ▸ Android**, then **Build And Run** with the headset plugged in (developer mode on). The project is already configured: OpenXR + Meta XR features, IL2CPP, ARM64, Vulkan, single-pass instanced stereo, foveation, passthrough, hand tracking, and the AR Session and AR Occlusion features for the Depth API.
+3. Play in a clear space of **at least 3 × 3 m**. The layout is generated fresh every round and scales to your room.
 
-| Desktop control | Action |
+| On the headset | Hand tracking | Controllers |
+|---|---|---|
+| Start | Poke the **Play** button with a fingertip | Poke it with the controller tip |
+| Raise the Polaroid (camera hand) | Bring thumb and index together (about 6–9 cm) | Hold **grip** |
+| Take a photo | Pinch | **Index trigger** |
+| Get the print | It hangs from the slot at the bottom of the camera; the next shot, or putting the camera away, drops it in the snow | Same |
+| Show a photo | **Face** the kid and **push** the photo toward them (slowly is fine) | Same |
+| Drop the photo in your hand | Open your hand flat | **A / X** |
+| Pick a photo up | Reach down to it (it glows softly) and grab | Reach and squeeze **grip** |
+| Make a snowball | Free hand open near the snow, then close it | **Grip** near the snow |
+| Throw | Swing and open your hand | Swing and release **grip** |
+| Pause, or skip the intro | Menu gesture | Menu button (hold it to skip the intro) |
+
+Lefty mode in the pause menu swaps which hand holds the camera.
+
+### In the Editor (no headset needed)
+1. Open `Assets/FrostAndFound/Scenes/FrostAndFound.unity` in Unity **6000.6.9f1** and press **Play**. With no headset connected, the game runs in a **desktop simulation** inside a furnished stand-in living room. It has a door, a sofa, a coffee table, a shelf and a lamp, so the door and furniture features work there too.
+2. **Frost & Found ▸ Export Placeholder Audio (WAV)** writes the synthesized sounds and music to `AudioPreview/`.
+
+| Desktop | Action |
 |---|---|
 | Click the Game view | Capture the mouse (Esc releases it) |
-| Mouse / WASD / C (or Ctrl) | Look / walk / crouch |
+| Mouse / WASD or arrows / C or Ctrl | Look / walk / crouch |
+| Space or Enter | Press Play on the title |
 | Left click | Polaroid shutter (also presses buttons you aim at) |
-| Hold **F** | Hold your photo out to the kid in front of you |
-| **Q** | Reach down and scoop a snowball |
+| Hold **F** | Push your photo toward the kid in front of you |
+| **G** | Drop your photo / pick up the nearest one |
+| **Q** | Scoop a snowball |
 | Hold and release right click | Wind up and throw |
-| Tab / P or Esc | Swap handedness / pause |
+| Tab / P | Swap handedness / pause |
 
-### On a Quest 3
-1. Run **Space Setup** on the headset first (Settings ▸ Physical Space ▸ Space Setup). The game reads your floor, walls and furniture from it. Allow the *spatial data* permission when asked.
-2. **File ▸ Build Profiles ▸ Android**, then **Build And Run** with the headset plugged in (developer mode on). The project is already configured: OpenXR + Meta XR feature group, IL2CPP, ARM64, Vulkan, min API 32, target API 34, single-pass instanced stereo, foveation, passthrough, hand tracking.
-3. Play in a clear space of **at least 3 × 3 m**. The layout scales to your room.
+---
 
-| Quest control | Action |
+## Mixed reality: how it uses your room
+
+| Feature | Where it lives |
 |---|---|
-| Camera hand (right; left in **Lefty mode**): **trigger** or **index pinch** | Take a photo. The photo pops out and lands in your other hand |
-| Free hand: hold it **out toward a kid** (within ~1.5 m) | Show your newest photo |
-| Free hand: reach to the snow **open**, then **close** (grip / fist) | Pack a snowball (your photo tucks away) |
-| Swing and **open** your hand | Throw (real release velocity, light aim assist) |
-| Point + trigger/pinch, or **poke** with a fingertip | Press UI buttons |
-| Menu button | Pause menu (lefty mode, subtitles, tips, restart) |
-
-Controllers and hand tracking both work, and can be mixed per hand. The doc recommends controllers for the most reliable throws.
+| Room from Space Setup: floor, walls, ceiling, **doors and furniture** (tables, couches, beds, storage, screens). Snowballs splat on your real walls and furniture | `Platform/MetaRoomProvider.cs`, `Room/RoomInfo.cs` |
+| **Real-world occlusion** (Meta Depth API): a real person or piece of furniture in front of a kid, the snow or a snowball hides it. Your held camera and photos and the aurora are exempt, and so are the UI and the Polaroid's lens | `Shaders/FrostOcclusion.hlsl`, `Core/DepthOcclusion.cs` |
+| **The room tells the story** with passthrough colour grading: noir for the whole case, a flash when you take a photo, icy blue in a snowball fight (red pulses with the alarm), colour back at CASE CLOSED | `Game/PassthroughMood.cs` (runtime LUTs), `RoomTint` in `Game/OpeningSequence.cs` |
+| The opening's door stands on your real door when there is one | `Game/OpeningSequence.cs`, `GameManager.BeginCase` |
+| Snow settles on your real tables, cabinets, bed and TV | `Snow/FurnitureSnow.cs` |
+| Kids use your furniture: Tony hides behind your sofa or table in the chase, Dexter puts his cocoa down on a table, and everyone wanders over to look at things | `Characters/TonyKid.cs`, `Characters/Suspects.cs`, `Characters/KidBrain.cs` |
+| Northern lights fade in with the snow and stay up all game; a night veil darkens your real ceiling beneath them | `Game/NorthernLights.cs` |
+| The Polaroid can't see passthrough, so photos show a snowy backdrop only the lens can see | `PhotoBackdrop` in `Game/GameManager.cs` |
 
 ---
 
-## What's in the build (mapped to the design doc)
+## How it's built
 
-| Design doc | Where it lives |
+| Area | Where it lives |
 |---|---|
-| §3 The clue chain: photograph → show the right kid → excuse → next clue glints | `Scripts/Story/CaseDirector.cs` (5-step state machine), `Clue.cs` (faint glint) |
-| Step 1's two extra cues: drip trail to Dexter (sparkles after the stain photo), Dexter whistling innocently, matching browns | `Frosty/Frosty.cs` (`DripTrail`), `Characters/Suspects.cs` (`DexterKid`) |
-| §4 The five suspects, colour-coded to their clue, ~1 m tall with big heads | `Characters/KidBuilder.cs` (mockups), `Kid.cs`, `Suspects.cs`, `TonyKid.cs` |
-| §5.1 Polaroid in your camera hand, live viewfinder, flash + ka-CHUNK, photo pops out developed with a 0.3 s white fade and lands in your other hand. Clue counts if in frame and within ~1.5 m. Red hand-drawn circle, no text. No film limit | `Photo/PolaroidCamera.cs` (`ClueDetector`), `Photo/Photo.cs` |
-| §5.2 Hold your photo out to a kid; they lean in, squint and react. Always your newest photo. Wrong kid → joke line + a nudge toward the right one | `Game/ShowPhotoDetector.cs`, `CaseDirector.React` |
-| §5.3 Scoop and throw: reach down, close your hand, crunch; the photo tucks away; real throw; light aim assist; for-fun reactions (marshmallow, "My HAT!", Lucy's notebook) | `Snow/SnowballHand.cs`, `Snowball.cs`, `Suspects.cs` |
-| Handedness toggle | Title, pause menu (`FrostPrefs.LeftHanded`) |
-| §6 Finale: "Circumstantial!", goggles down, he bolts, dodges whenever he's in your viewfinder (photos blur), zig-zags the far side, taunts; Lucy's hint + glance at the snow; BONK + birdies + ~4 s daze; GUILTY photo; outro, kids gather, CASE CLOSED, Case File | `Characters/TonyKid.cs`, `CaseDirector`, `GameManager.Outro`, `UI/Screens.cs` (`ResultsScreen`) |
-| §7 Frosty at the centre in a chalk outline; kids around the edges; Tony farthest from you; scaled to detected bounds | `Game/LayoutDirector.cs`, `Frosty/Frosty.cs` (`ChalkOutline`) |
-| §7 Snow on the detected floor, light snowfall, your own footprints | `Snow/SnowSurface.cs` (displaced snow, drifts at walls, masked off furniture), `Snowfall.cs`, `FootprintTracker` |
-| §7 Sound: noir score, dun-dun-DUN, crunchy footsteps, voiced lines with subtitles | `Audio/Synth.cs`, `Audio/AudioDirector.cs`, `Story/DialogueRunner.cs` |
-| Safety nets: Lucy's idle nudge after ~15 s; Tony trips over his own sled if not hit in time | `CaseDirector.Nudge`, `TonyKid.Trip` |
-| §9 Passthrough: the virtual camera can't see the real room, so the Polaroid sees a snowy backdrop | `PhotoBackdrop` in `Game/GameManager.cs` |
-| §9 Room from Space Setup; walls and furniture get invisible colliders (snowballs splat on your real walls) | `Platform/MetaRoomProvider.cs` (MRUK) |
+| The clue chain (photograph → show the right kid → excuse → next clue glints), wrong-kid lines, Lucy's hints | `Scripts/Story/CaseDirector.cs`, `Lines.cs`, `DialogueRunner.cs` |
+| The opening sequence ("The Knock") | `Scripts/Game/OpeningSequence.cs` |
+| Polaroid: viewfinder, flash, the print slot, clue detection, developing photos | `Scripts/Photo/PolaroidCamera.cs`, `Photo.cs` |
+| Showing photos (face the kid, push it forward; the kid your clue points to is favoured; one kid at a time) | `Scripts/Game/ShowPhotoDetector.cs` |
+| Snowballs, scooping, aim assist, wall splats | `Scripts/Snow/` |
+| The kids: rigged Meshy models with IK, faces, poses, stun; personalities and an AI that picks what to do next; A* walking round furniture with personal space | `Scripts/Characters/` (`Kid.cs`, `KidBrain.cs`, `KidHumanoid.cs`, `Suspects.cs`, `TonyKid.cs`) |
+| A new layout every round: Frosty behind you, the kids, sled and toys placed fresh; trees always along the walls | `Scripts/Game/LayoutDirector.cs`, `Scenery.cs` |
+| Snowball fights (four hits on one kid starts one) | `Scripts/Game/SnowballFight.cs` |
+| Case-closed journal | `ResultsScreen` in `Scripts/UI/Screens.cs` |
+| Audio: synthesized SFX and music, the Satie soundscape when installed, and 3D voices that follow each kid's head | `Scripts/Audio/` |
+| UI (Horizon-style menus, gesture hint cards, world-space text); your hands draw over the UI | `Scripts/UI/` |
 
-**Extras we filled in:** each kid strikes a pose when photographed (Sherman's peace signs, Tony's "Get my good side"). There are wrong-kid lines for every clue × kid pair, "we've been over this" lines for re-shown evidence, and Sherman drops his books when hit. Lucy also says "Don't contaminate the crime scene!" if you snowball Frosty. Other fills: a Horizon-style title, pause and results UI with tips, kids leave footprints, Tony's sled leaves runner tracks, and snow splats stay on walls.
+### Voices
+All lines live in `Scripts/Story/Lines.cs`. Clips are `Assets/FrostAndFound/Resources/Voice/<id>.mp3` and play instead of the placeholder babble; subtitles time themselves to the clip. `voice_lines_todo.csv` lists anything still unrecorded: only the announcer's "SNOWBALL FIGHT!" at the moment.
 
----
+### Sound effects and music
+Drop a file into `Resources/SFX/` named after the sound (e.g. `Knock.wav`, `Thud.wav`, `Jingle.wav`) to replace the synthesized one; the noir score goes in `Resources/Music/NoirScore`. Anything missing stays synthesized.
 
-## Swapping in final assets
-
-Everything plugs into **`Assets/FrostAndFound/Resources/FrostAssets.asset`** (select it in the Project window).
-
-### Characters (Blender → FBX)
-1. Export each kid facing **+Z**, origin at the feet, about **1 m tall** (Sherman ~0.9, Lucy ~1.06). Apply transforms.
-2. Make a prefab from the FBX and add it to **Character Models**: choose the kid, drag the prefab in, and optionally add an Animator Controller.
-3. Name joints so the game can find them. All names are optional; missing ones fall back to the procedural rig: `Head`, `Hand_L`, `Hand_R`, `Eye_L`, `Eye_R`, `Mouth`.
-4. Animator parameters the game sets (add the ones you need): `Speed` (float), `Talk` (bool), `Dazed` (bool), and triggers `Point`, `Pose`, `Hit`, `Dodge`. Mixamo clips map well: idle / run / dodge / dizzy / pose.
-5. Clue props stay attached by name: Sherman's `Carrot` (step 2 clue) and Tony's sled (`Sled Model` slot). Keep a child named `Carrot` on Sherman's model, or tell us where it should go.
-
-**Frosty:** put the model in **Frosty Model** with children named `Base`, `Middle` and `Head`. The cocoa splash, glitter and scrape attach to those, so check they sit on the visible surface.
-**Polaroid camera / sled:** use the **Polaroid Model** and **Sled Model** slots. Lens points +Z; the photo ejects from the front-bottom.
-
-### Voices (ElevenLabs or recorded)
-1. Every line is in **`Assets/FrostAndFound/VoiceScript.csv`** (id, speaker, line): 74 lines. Regenerate it with **Frost & Found ▸ Export Voice Script (CSV)**.
-2. Save each clip as **`Assets/FrostAndFound/Resources/Voice/<id>.wav`** (or .mp3/.ogg), e.g. `dexter_excuse.wav`. It plays instead of the placeholder babble, and subtitles time themselves to its length.
-3. Voice direction from the doc: Dexter is a tiny salesman (every line is a pitch); Sherman, 7, is super nerdy; Serena is dramatic and bratty; Lucy, 11, is bossy; Tony thinks he's in an energy-drink commercial.
-
-### Music and SFX
-Drop files into `Resources/SFX/` named after the sound: `Footstep`, `ScoopCrunch`, `Shutter`, `Whirr`, `Whoosh`, `Splat`, `Bonk`, `Tweet`, `Sting` (dun-dun-DUN), `Twinkle`, `Marker`, `StampSlam`, `UiClick`, `UiHover`, `Plop`, `Scribble`, `BookThud`, `Whistle`, `Fanfare`, `RoomTone`, `Boing`, `Gasp`. The score goes in `Resources/Music/NoirScore` (or the **Music** slot). Anything missing stays synthesized.
+### Tuning
+`Resources/FrostTuning.asset` holds the numbers worth playtesting: clue range, show range and arm extension, scoop height and grip thresholds, throw multipliers and aim assist, Tony's speeds and daze time, passthrough dim, and volumes.
 
 ---
-
-## Tuning
-**`Resources/FrostTuning.asset`** holds every number worth playtesting: clue range (1.5 m) and frame forgiveness, show range and arm extension, scoop height and grip thresholds, throw multipliers, aim-assist cone / strength / max angle (kept light, per the doc), Tony's speeds, daze time and trip timer, Lucy's idle nudge time, and the music/SFX/voice volumes.
 
 ## Project layout
 ```
 Assets/FrostAndFound/
-  Scenes/FrostAndFound.unity       the game (Meta XR rig + MRUK, inactive until a headset is active)
-  Scripts/Core                     palette (art bible), procedural meshes, FX, tuning
-  Scripts/Input                    PlayerRig abstraction, desktop simulation
-  Scripts/Platform                 Meta XR SDK rig (OVRCameraRig/OVRInput/OVRHand) + MRUK room
+  Scenes/FrostAndFound.unity    the game (Meta XR rig + MRUK)
+  Scripts/Core                  palette, procedural meshes, FX, tuning, depth occlusion
+  Scripts/Input                 PlayerRig abstraction, desktop simulation
+  Scripts/Platform              Meta XR rig (hands, controllers, passthrough) + MRUK room
   Scripts/Room Snow Photo Story Characters Frosty Audio UI Game
-  Shaders/                         toon (+ outline), snow, sky, photo, particles: all single-pass-instanced ready
-  Editor/FrostProjectSetup.cs      Frost & Found ▸ Setup ▸ Run Full Setup (idempotent)
-  Resources/                       FrostAssets, FrostTuning, Voice/, SFX/, Music/
-  Fonts/                           Roboto, Roboto Mono (Apache 2.0), Inter (OFL)
+  Shaders/                      toon, snow, sky, photo, particles: single-pass instanced, Depth API occlusion
+  Editor/                       Frost & Found ▸ Setup, voice script export, audio export
+  Resources/                    FrostAssets, FrostTuning, Voice/, SFX/, Music/, Title/
 ```
-The doc's team split maps to these folders: **(1)** Photo/ · **(2)** Story/ + Characters/ · **(3)** Characters/TonyKid + Snow/ · **(4)** Snow/ Room/ Audio/.
-
-## Verified so far
-- Full case playable start → finish in the Editor simulation. The autopilot closes it in about 1:35 (the doc's perfect run: 6 photos, 5 shows, 1 snowball), in both a 4.4 × 4 m and a 3 × 3 m room, with zero console errors. **Play again** reloads cleanly.
-- Android/Quest APK builds (IL2CPP, ARM64, Vulkan): `Builds/FrostAndFound.apk`.
-- Render cost per frame in the Editor, both cameras and the desktop room included: about 580 draw calls and 280k triangles. On Quest there's no simulated room and the viewfinder renders every third frame.
+Code, folders and the package id (`com.immersethebay.frostandfound`) still use the original working title, *Frost & Found*.
 
 ## Known limitations
-- Not yet run on a physical headset: the XR path is complete and configured but untested on device. Test hand-tracked throws early; controllers are the doc's recommended fallback.
-- Virtual objects don't hide behind real furniture (no depth occlusion). The layout keeps kids clear of furniture instead. Meta's Depth API could add occlusion later.
-- Photos use the snowy-backdrop fix from the doc. Compositing the real room through the Passthrough Camera API is an optional extra.
-- If you recompile scripts *during* Play mode in the Editor, Meta MRUK can log "Global context has already been created" on the next play. It's harmless: stop Play before editing code, or restart the Editor.
+- Depth occlusion has soft edges, like the Quest's depth sensor itself; held items and anything within about 45 cm of your eyes are never occluded.
+- Without doors or furniture in Space Setup, the opening uses a free-standing door and the furniture features stay off.
+- If you recompile scripts *during* Play mode in the Editor, MRUK can log "Global context has already been created" on the next play. It's harmless: stop Play before editing code.
