@@ -11,6 +11,7 @@ namespace FrostAndFound
     /// of the slot and waits there, blank, until your other hand pulls it free; it develops in your hand over ~2 s.
     /// No film limit; a missed shot is just a photo of snow.
     /// </summary>
+    [DefaultExecutionOrder(150)] // places itself after the mittens have taken their grip this frame
     public class PolaroidCamera : MonoBehaviour
     {
         public static PolaroidCamera Instance { get; private set; }
@@ -32,6 +33,8 @@ namespace FrostAndFound
         const float EjectSeconds = 0.9f;
         const float DevelopSeconds = 2f;
         const float GrabReach = 0.085f;     // how close your free hand has to get to the print
+        /// <summary>The camera body's size (full size).</summary>
+        public const float BodyScale = 1f;
 
         RenderTexture m_Viewfinder;
         Transform m_Body;
@@ -44,7 +47,7 @@ namespace FrostAndFound
         float m_Raise, m_PoseTime, m_LastPose = -10f, m_FreeOpenTime = -10f;
         bool m_QueuedShot, m_Busy, m_Hidden, m_InReach;
         PolaroidPhoto m_Waiting;
-        Vector3 m_SmoothPos; Quaternion m_SmoothRot = Quaternion.identity; bool m_HasSmooth;
+        float m_SlotOut;
 
         public static PolaroidCamera Create()
         {
@@ -72,7 +75,7 @@ namespace FrostAndFound
             // the lens camera
             var lensGo = new GameObject("Lens Camera");
             lensGo.transform.SetParent(transform, false);
-            lensGo.transform.localPosition = new Vector3(0, 0.005f, 0.06f);
+            lensGo.transform.localPosition = new Vector3(0, 0.005f, 0.06f) * BodyScale;
             Lens = lensGo.AddComponent<Camera>();
             Lens.fieldOfView = tune.photoFov;
             Lens.nearClipPlane = 0.04f;
@@ -119,8 +122,10 @@ namespace FrostAndFound
             m_FlashMat.SetColor("_BaseColor", Palette.SkyHorizon);
             var bulb = ProcMesh.Part("Flash", t, ProcMesh.RoundedBox(0.3f, 2), m_FlashMat, new Vector3(0.036f, 0.046f, 0.03f), new Vector3(0.036f, 0.018f, 0.012f), new Vector3(-12, 0, 0));
             m_FlashBulb = bulb.GetComponent<Renderer>();
-            ProcMesh.Part("Shutter", t, ProcMesh.Cylinder(12), Palette.Toon(Palette.EvidenceRed, true, 0.4f), new Vector3(0.045f, 0.03f, 0.04f), new Vector3(0.016f, 0.008f, 0.016f), new Vector3(70, 0, 0));
-            ProcMesh.Part("Eyepiece", t, ProcMesh.RoundedBox(0.25f, 2), dark, new Vector3(-0.035f, 0.052f, -0.035f), new Vector3(0.026f, 0.018f, 0.02f));
+            // the shutter sits on top at the holding hand's end, right under the mitten's tip (left end for the left hand)
+            float side = FrostPrefs.CameraHand == HandSide.Left ? -1f : 1f;
+            ProcMesh.Part("Shutter", t, ProcMesh.Cylinder(12), Palette.Toon(Palette.EvidenceRed, true, 0.4f), new Vector3(0.046f * side, 0.0645f, -0.004f), new Vector3(0.018f, 0.008f, 0.018f), new Vector3(-12f, 0, 0));
+            ProcMesh.Part("Eyepiece", t, ProcMesh.RoundedBox(0.25f, 2), dark, new Vector3(-0.035f * side, 0.052f, -0.035f), new Vector3(0.026f, 0.018f, 0.02f));
             Color[] rainbow = { Palette.Rainbow1, Palette.Rainbow2, Palette.Rainbow3, Palette.Rainbow4, Palette.Rainbow5 };
             for (int i = 0; i < rainbow.Length; i++)
                 ProcMesh.Part("Stripe", t, ProcMesh.RoundedBox(0.1f, 1), Palette.Toon(rainbow[i], false, 0.2f),
@@ -147,7 +152,11 @@ namespace FrostAndFound
             if (!rig.IsXR) wantsUp = true;   // desktop stand-in: always in hand
             else
             {
-                bool pose = Enabled && hand.IsTracked && hand.PhotoPose >= RaiseAt;
+                // a light pinch with the other fingers relaxed (not a fist), the hand up off the snow and empty
+                var snow = SnowSurface.Instance;
+                bool low = snow && hand.Palm && hand.Palm.position.y - snow.SurfaceHeightAt(hand.Palm.position) < FrostTuning.I.scoopHeight + 0.12f;
+                bool busy = SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand);
+                bool pose = Enabled && hand.IsTracked && hand.PhotoPose >= RaiseAt && hand.Grip < 0.55f && !busy && (!low || m_Raise > 0.5f);
                 m_PoseTime = pose ? m_PoseTime + dt : 0f;
                 if (pose && m_PoseTime >= 0.06f) m_LastPose = Time.time;
                 wantsUp = Time.time - m_LastPose < LowerDelay;
@@ -160,21 +169,9 @@ namespace FrostAndFound
             {
                 bool show = scale > 0.01f;
                 if (m_Body.gameObject.activeSelf != show) m_Body.gameObject.SetActive(show);
-                m_Body.localScale = Vector3.one * Mathf.Max(scale, 0.001f);
+                m_Body.localScale = Vector3.one * Mathf.Max(scale * BodyScale, 0.001f);
             }
 
-            // ---- sit in the hand
-            if (hand.Anchor)
-            {
-                Vector3 pos; Quaternion rot;
-                HoldPose(rig, hand, out pos, out rot);
-                if (!m_HasSmooth || m_Raise < 0.05f) { m_SmoothPos = pos; m_SmoothRot = rot; m_HasSmooth = true; }
-                // tracked fingers jitter a little; a light damp keeps the viewfinder steady without lag you can feel
-                float k = hand.HasJoints ? 1f - Mathf.Exp(-28f * dt) : 1f;
-                m_SmoothPos = Vector3.Lerp(m_SmoothPos, pos, k);
-                m_SmoothRot = Quaternion.Slerp(m_SmoothRot, rot, k);
-                transform.SetPositionAndRotation(m_SmoothPos, m_SmoothRot);
-            }
 
             // the viewfinder renders at a third of the frame rate in XR (~24–30 fps) to save the Quest's draw calls;
             // every frame while shooting, and not at all while the camera is down
@@ -192,8 +189,23 @@ namespace FrostAndFound
             if (m_QueuedShot && m_Raise >= 0.95f) { m_QueuedShot = false; if (!m_Waiting) TakePhoto(); }
         }
 
-        /// <summary>Where the camera sits: held by its top corner between thumb and index (hand tracking),
-        /// or on the controller's grip, lens pointing where your hand points.</summary>
+        void LateUpdate()
+        {
+            var rig = PlayerRig.Active;
+            if (!rig) return;
+            var hand = rig.CameraHand;
+            if (!hand.Anchor) return;
+            // sit in the mitten's grip: hanging under the hand, index on the shutter
+            if (hand.HasCameraGrip) transform.SetPositionAndRotation(hand.CameraGrip.position, hand.CameraGrip.rotation);
+            else
+            {
+                HoldPose(rig, hand, out var pos, out var rot);
+                transform.SetPositionAndRotation(pos, rot);
+            }
+            if (m_Waiting) PlaceInSlot(m_Waiting.transform, m_SlotOut);
+        }
+
+        /// <summary>Fallback when no mitten grip is available (no hand this frame).</summary>
         void HoldPose(PlayerRig rig, HandRig hand, out Vector3 pos, out Quaternion rot)
         {
             if (!rig.IsXR)
@@ -280,19 +292,20 @@ namespace FrostAndFound
             m_Waiting = photo;
             m_Busy = false;
             var p = photo.transform;
-            p.localScale = Vector3.one;
+            p.localScale = Vector3.one * BodyScale;   // sized to the slot; it grows to full size as you pull it out
             AudioDirector.PlayAt(Sfx.Whirr, transform.position, 0.6f, 1f);
             for (float t = 0; t < 1f; t += Time.deltaTime / EjectSeconds)
             {
-                PlaceInSlot(p, Ease.OutCubic(t));
+                m_SlotOut = Ease.OutCubic(t);
+                PlaceInSlot(p, m_SlotOut);
                 yield return null;
             }
+            m_SlotOut = 1f;
             float waitStart = Time.time;
             bool tipped = false;
             m_InReach = false;
             while (photo)
             {
-                PlaceInSlot(p, 1f);
                 var rig = PlayerRig.Active;
                 bool closing = CaseDirector.I != null && CaseDirector.I.CaseClosed;
                 if (closing || (rig && !rig.IsXR && Time.time - waitStart > 0.7f)) break;   // finale / desktop: handed over
@@ -320,7 +333,7 @@ namespace FrostAndFound
         bool TryGrab(PlayerRig rig)
         {
             var hand = rig.FreeHand;
-            if (!hand.IsTracked || !Slot || (SnowballHand.Instance && SnowballHand.Instance.IsHolding)) return false;
+            if (!hand.IsTracked || !Slot || (SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand))) return false;
             bool closed = hand.Grip > 0.6f || hand.Trigger > 0.6f;
             if (!closed) m_FreeOpenTime = Time.time;
             var grabAt = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
@@ -344,15 +357,20 @@ namespace FrostAndFound
                 for (float t = 0; t < 1f; t += Time.deltaTime / 0.16f)
                 {
                     var hand = rig.FreeHand;
-                    if (!hand.Palm || !hand.Anchor) break;
-                    var to = hand.Palm.position + hand.Anchor.up * 0.035f;
-                    var toRot = Quaternion.LookRotation(-(rig.Head.position - to).normalized, rig.Head.up);
+                    if (!hand.Anchor) break;
+                    PhotoHolder.HeldPose(rig, hand, null, out var to, out var toRot);
                     var k = Ease.OutCubic(t);
                     p.SetPositionAndRotation(Vector3.Lerp(from, to, k), Quaternion.Slerp(fromRot, toRot, k));
+                    p.localScale = Vector3.one * Mathf.Lerp(BodyScale, 1f, k);
                     yield return null;
                 }
                 holder.MarkArrived();
                 rig.FreeHand.Haptic(0.3f, 0.05f);
+                if (!PhotoHolder.DropTipShown && rig.IsXR)
+                {
+                    PhotoHolder.DropTipShown = true;
+                    HToast.Show(rig.FreeHand.IsOpticalHand ? "Open your hand flat to drop a photo. Pinch it to pick it back up" : "Press A/X to drop a photo. Grab it to pick it back up", UIKit.Icon.Camera, 4.5f);
+                }
             }
             bool fast = CaseDirector.I != null && CaseDirector.I.CaseClosed;
             yield return photo.Develop(fast ? 0.6f : DevelopSeconds);

@@ -3,70 +3,94 @@ using UnityEngine;
 namespace FrostAndFound
 {
     /// <summary>
-    /// The free hand's snow logic. Reach toward the floor with an open hand, close it in the snow, and a snowball
-    /// packs into your palm with a crunch (your current photo tucks away). Open your hand mid-swing to throw —
-    /// the ball leaves with your hand's real release velocity, plus a light aim nudge.
+    /// Snow in either hand. Reach toward the floor with an open hand, close it in the snow, and a snowball packs into
+    /// that mitten with a crunch. Open your hand mid-swing to throw: the ball leaves with your hand's real release
+    /// velocity, plus a light aim nudge. The camera hand only scoops while the camera is down; a scoop is a fist
+    /// down by the snow, while the camera wants a light pinch with the hand held up, so the two never get confused.
     /// </summary>
-    [DefaultExecutionOrder(200)] // after the mittens have placed this frame's hold point
+    [DefaultExecutionOrder(200)] // after the mittens have placed this frame's hold points
     public class SnowballHand : MonoBehaviour
     {
         public static SnowballHand Instance { get; private set; }
         public static event System.Action Formed;
 
-        Snowball m_Ball;
-        float m_LastOpenTime = -10f;
-        float m_FormTime;
-        float m_ReleaseCooldown;
-        HandRig m_Hand;
+        class HandState
+        {
+            public HandSide Side;
+            public HandRig Hand;
+            public Snowball Ball;
+            public float LastOpen = -10f, FormTime, Cooldown;
+        }
+        readonly HandState m_L = new HandState { Side = HandSide.Left }, m_R = new HandState { Side = HandSide.Right };
 
-        public bool IsHolding => m_Ball != null;
+        public bool IsHolding => m_L.Ball || m_R.Ball;
+        public bool IsHoldingIn(HandRig hand) => hand != null && ((m_L.Hand == hand && m_L.Ball) || (m_R.Hand == hand && m_R.Ball));
         public bool Enabled { get; set; } = true;
         public int ThrowCount { get; private set; }
 
         void OnEnable() => Instance = this;
         void OnDisable() { if (Instance == this) Instance = null; }
 
-        // the ball sits inside the curled mitten (its hold point), not at the bare palm bone
-        void LateUpdate()
-        {
-            if (m_Ball && m_Hand != null && m_Hand.Hold) m_Ball.Hold(m_Hand.Hold);
-        }
-
         void Update()
         {
             var rig = PlayerRig.Active;
             var snow = SnowSurface.Instance;
             if (!rig || !snow) return;
-            var hand = rig.FreeHand;
-            if (m_Hand != hand && m_Ball) { DropBall(); }
-            m_Hand = hand;
-            if (!hand.IsTracked || !hand.Palm) return;
+            Tick(m_L, rig.Left, rig, snow);
+            Tick(m_R, rig.Right, rig, snow);
+        }
+
+        // the ball sits cupped in the mitten (its hold point), not at the bare palm bone
+        void LateUpdate()
+        {
+            foreach (var st in new[] { m_L, m_R })
+                if (st.Ball && st.Hand != null && st.Hand.Hold) st.Ball.Hold(st.Hand.Hold);
+        }
+
+        void Tick(HandState st, HandRig hand, PlayerRig rig, SnowSurface snow)
+        {
+            st.Hand = hand;
+            if (!hand.IsTracked || !hand.Palm) { if (st.Ball) DropBall(st); return; }
             var tune = FrostTuning.I;
-            if (m_ReleaseCooldown > 0f) m_ReleaseCooldown -= Time.deltaTime;
+            if (st.Cooldown > 0f) st.Cooldown -= Time.deltaTime;
+            if (hand.Grip < tune.gripOpen) st.LastOpen = Time.time;
 
-            if (hand.Grip < tune.gripOpen) m_LastOpenTime = Time.time;
-
-            if (m_Ball == null)
+            if (st.Ball == null)
             {
-                if (!Enabled || m_ReleaseCooldown > 0f) return;
+                if (!Enabled || st.Cooldown > 0f) return;
+                if (hand == rig.CameraHand)
+                {
+                    if (!rig.IsXR) return;   // the desktop stand-in scoops with the free hand only
+                    var cam = PolaroidCamera.Instance;
+                    if (cam && (cam.IsRaised || cam.PrintWaiting)) return;   // that hand is busy with the camera
+                }
                 var palm = hand.Palm.position;
                 float above = palm.y - snow.SurfaceHeightAt(palm);
-                bool inSnowZone = above < tune.scoopHeight && above > -0.12f && snow.HasSnowAt(palm);
+                bool inSnowZone = above < tune.scoopHeight && above > -0.15f && SnowNear(snow, palm);
                 bool closing = hand.Grip > tune.gripClosed;
-                bool wasOpenRecently = Time.time - m_LastOpenTime < 1.0f;
-                if (inSnowZone && closing && wasOpenRecently) FormBall(hand, snow, palm);
+                bool wasOpenRecently = Time.time - st.LastOpen < 1.8f;
+                if (inSnowZone && closing && wasOpenRecently) FormBall(st, hand, rig, snow, palm);
             }
             else
             {
                 // a little grow-in so the ball visibly packs
-                float k = Mathf.Clamp01((Time.time - m_FormTime) / 0.16f);
-                m_Ball.transform.localScale = Vector3.one * tune.snowballRadius * 2f * Ease.OutBack(k);
-                m_Ball.Hold(hand.Palm);
-                if (hand.Grip < tune.gripOpen && Time.time - m_FormTime > 0.2f) Release(hand);
+                float k = Mathf.Clamp01((Time.time - st.FormTime) / 0.16f);
+                st.Ball.transform.localScale = Vector3.one * tune.snowballRadius * 2f * Ease.OutBack(k);
+                st.Ball.Hold(hand.Hold ? hand.Hold : hand.Palm);
+                if (hand.Grip < tune.gripOpen && Time.time - st.FormTime > 0.2f) Release(st, hand, rig);
             }
         }
 
-        void FormBall(HandRig hand, SnowSurface snow, Vector3 palm)
+        /// <summary>Snow under the palm or just beside it (forgiving near drifts and furniture edges).</summary>
+        static bool SnowNear(SnowSurface snow, Vector3 p)
+        {
+            if (snow.HasSnowAt(p)) return true;
+            const float r = 0.07f;
+            return snow.HasSnowAt(p + new Vector3(r, 0, 0)) || snow.HasSnowAt(p - new Vector3(r, 0, 0)) ||
+                   snow.HasSnowAt(p + new Vector3(0, 0, r)) || snow.HasSnowAt(p - new Vector3(0, 0, r));
+        }
+
+        void FormBall(HandState st, HandRig hand, PlayerRig rig, SnowSurface snow, Vector3 palm)
         {
             var tune = FrostTuning.I;
             var ground = new Vector3(palm.x, snow.SurfaceHeightAt(palm), palm.z);
@@ -74,20 +98,20 @@ namespace FrostAndFound
             Fx.SnowPuff(ground + Vector3.up * 0.02f, Vector3.up, 16, 0.8f);
             AudioDirector.PlayAt(Sfx.ScoopCrunch, ground, 0.9f, Random.Range(0.93f, 1.07f));
             hand.Haptic(0.5f, 0.08f);
-            m_Ball = Snowball.Create(hand.Palm.position, tune.snowballRadius);
-            m_Ball.transform.localScale = Vector3.zero;
-            m_FormTime = Time.time;
-            PhotoHolder.Instance?.TuckAway();
-            if (PlayerRig.Active is DesktopPlayerRig d) d.NotifyHolding();
+            st.Ball = Snowball.Create(hand.Palm.position, tune.snowballRadius);
+            st.Ball.transform.localScale = Vector3.zero;
+            st.FormTime = Time.time;
+            if (hand == rig.FreeHand) PhotoHolder.Instance?.TuckAway();
+            if (rig is DesktopPlayerRig d) d.NotifyHolding();
             Formed?.Invoke();
         }
 
-        void Release(HandRig hand)
+        void Release(HandState st, HandRig hand, PlayerRig rig)
         {
             var tune = FrostTuning.I;
-            var ball = m_Ball;
-            m_Ball = null;
-            m_ReleaseCooldown = 0.35f;
+            var ball = st.Ball;
+            st.Ball = null;
+            st.Cooldown = 0.35f;
             var v = hand.ReleaseVelocity();
             float speed = v.magnitude;
             ball.transform.localScale = Vector3.one * tune.snowballRadius * 2f;
@@ -104,14 +128,14 @@ namespace FrostAndFound
                 ThrowCount++;
                 hand.Haptic(0.3f, 0.05f);
             }
-            PhotoHolder.Instance?.Restore(0.45f);
+            if (hand == rig.FreeHand) PhotoHolder.Instance?.Restore(0.45f);
         }
 
-        void DropBall()
+        void DropBall(HandState st)
         {
-            if (!m_Ball) return;
-            m_Ball.Launch(Vector3.zero, Vector3.zero);
-            m_Ball = null;
+            if (!st.Ball) return;
+            st.Ball.Launch(Vector3.zero, Vector3.zero);
+            st.Ball = null;
         }
     }
 }

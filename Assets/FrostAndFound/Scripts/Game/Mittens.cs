@@ -10,7 +10,10 @@ namespace FrostAndFound
     /// controllers (or the desktop rig) a posed hand wraps the controller: trigger curls the index, grip curls the
     /// rest. Each mitten publishes a hold point inside the curled palm for snowballs. Hidden from the Polaroid.
     /// </summary>
-    [DefaultExecutionOrder(100)] // after the rig has sampled this frame's joints
+    /// <summary>What a mitten is doing: following your hand, or snapped into a grip around something it holds.</summary>
+    public enum MittenGrip { Free, Ball, Camera, Photo }
+
+    [DefaultExecutionOrder(100)] // after the rig has sampled this frame's joints; before the camera/photo/snowball place themselves
     public class Mittens : MonoBehaviour
     {
         WoolMitten m_L, m_R;
@@ -31,9 +34,19 @@ namespace FrostAndFound
         {
             var rig = PlayerRig.Active;
             if (!rig) return;
+            // the desktop stand-in's hands aren't controllers: there the camera, photo and snowball keep their own
+            // screen placements and the mittens just curl into the grip
+            m_L.Pose(rig.Left, GripFor(rig, rig.Left), rig.IsXR);
+            m_R.Pose(rig.Right, GripFor(rig, rig.Right), rig.IsXR);
+        }
+
+        static MittenGrip GripFor(PlayerRig rig, HandRig hand)
+        {
+            if (SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand)) return MittenGrip.Ball;
             var cam = PolaroidCamera.Instance;
-            m_L.Pose(rig.Left, cam && cam.IsRaised && rig.CameraHand == rig.Left);
-            m_R.Pose(rig.Right, cam && cam.IsRaised && rig.CameraHand == rig.Right);
+            if (cam && cam.IsRaised && rig.CameraHand == hand) return MittenGrip.Camera;
+            if (rig.FreeHand == hand && PhotoHolder.Instance && PhotoHolder.Instance.Visible) return MittenGrip.Photo;
+            return MittenGrip.Free;
         }
 
         void OnDestroy()
@@ -47,7 +60,7 @@ namespace FrostAndFound
     class WoolMitten
     {
         // shape
-        const float ThumbRadius = 0.012f, FingerRadius = 0.0105f, PalmThickness = 0.034f, GloveBulk = 1.35f, CuffLength = 0.07f;
+        const float ThumbRadius = 0.012f, FingerRadius = 0.0105f, PalmThickness = 0.034f, GloveBulk = 1.35f, CuffLength = 0.058f;
         // yarn
         static readonly Color GloveColor = new Color(0.72f, 0.07f, 0.09f);
         static readonly Color CuffColor = new Color(0.95f, 0.92f, 0.84f);
@@ -56,7 +69,24 @@ namespace FrostAndFound
         static readonly Vector3 ControllerOffsetPos = new Vector3(0.03f, -0.015f, -0.095f);
         static readonly Vector3 ControllerOffsetEuler = new Vector3(30f, 0f, -90f);
         const float RestCurl = 0.15f, MinHoldCurl = 0.35f;
-        const float HoldDepth = 0.032f;   // how far below the palm surface a held snowball's centre sits
+        // held things, in the hand's own frame (right hand: wrist at the origin, fingers +Z, palm facing -Y, thumb -X;
+        // the left hand mirrors x). A snowball cups in the palm; the camera's side presses into the palm with the
+        // thumb along its top and the fingers curling round its front edge, lens pointing where your fingers point.
+        static readonly Vector3 BallCenter = new Vector3(0.004f, -0.054f, 0.058f);
+        // the camera grip, in camera space for the LEFT hand (x mirrors for the right): the mitten stands at the camera's
+        // left end, fingers up and palm against the end; the mitt curls over the top-left edge with its tip on the shutter
+        // and the thumb tucks under the bottom, so the screen faces you, clear of the hand
+        static readonly Vector3 CamPalm = new Vector3(-0.092f, 0.005f, -0.012f);
+        static readonly Vector3 CamWrist = new Vector3(-0.094f, -0.052f, -0.014f);
+        static readonly Vector3[] CamJoints =
+        {
+            new Vector3(-0.080f, -0.022f, -0.036f), new Vector3(-0.070f, -0.046f, -0.032f), new Vector3(-0.056f, -0.055f, -0.020f), new Vector3(-0.042f, -0.057f, -0.006f),   // thumb, under the bottom
+            new Vector3(-0.092f, 0.046f, -0.030f), new Vector3(-0.090f, 0.084f, -0.028f), new Vector3(-0.070f, 0.094f, -0.022f), new Vector3(-0.050f, 0.090f, -0.014f),     // index, tip on the shutter
+            new Vector3(-0.094f, 0.048f, -0.010f), new Vector3(-0.092f, 0.088f, -0.008f), new Vector3(-0.071f, 0.097f, -0.004f), new Vector3(-0.050f, 0.092f, 0.004f),      // middle
+            new Vector3(-0.093f, 0.046f, 0.010f), new Vector3(-0.091f, 0.084f, 0.012f), new Vector3(-0.072f, 0.094f, 0.014f), new Vector3(-0.053f, 0.089f, 0.020f),        // ring
+            new Vector3(-0.091f, 0.042f, 0.028f), new Vector3(-0.089f, 0.072f, 0.030f), new Vector3(-0.074f, 0.084f, 0.031f), new Vector3(-0.058f, 0.081f, 0.034f),        // little
+        };
+        Vector3 CamMirror(Vector3 v) => new Vector3(m_Side == HandSide.Left ? v.x : -v.x, v.y, v.z);
 
         // procedural controller hand in a right-handed frame: wrist at origin, fingers along +Z, palm facing -Y,
         // thumb on -X. Knuckles arch slightly (middle highest).
@@ -85,11 +115,11 @@ namespace FrostAndFound
         //   0-6 cuff (stripe, lip back to the wrist) | 7-12 palm | 13-19 mitt over the four fingers | 20-22 domed tip
         // Thumb: the body quads in rings PatchR0..PatchR1 × sides PatchK0..PatchK1 are left out; the thumb tube's
         //   first ring IS that opening's edge loop, so the thumb grows out of the palm with no seam.
-        const int S = 24;
+        const int S = 32;   // sides per ring: smooth enough that the silhouette doesn't facet
         const int CuffRings = 7, PalmRings = 6, MittRings = 7, DomeRings = 3;
         const int BodyRings = CuffRings + PalmRings + MittRings + DomeRings;
         const int PatchR0 = CuffRings, PatchR1 = CuffRings + 3;
-        const int PatchK0 = S / 2 - 3, PatchK1 = S / 2 + 3;
+        const int PatchK0 = S / 2 - 4, PatchK1 = S / 2 + 4;   // a quarter of the way round: a full thumb root
         const int Loop = 2 * ((PatchR1 - PatchR0) + (PatchK1 - PatchK0));
         const int ThumbRings = 8;
         const float BodyStitches = 22f, ThumbStitches = 10f;
@@ -97,7 +127,9 @@ namespace FrostAndFound
         const int ThumbStart = BodyCapEnd + 1;
         const int ThumbCap = ThumbStart + ThumbRings * (Loop + 1);
         const int VertexCount = ThumbCap + 1;
-        const float ThumbSideDeg = -25f;   // the thumb opening's centre (0 = toward the index side, 90 = back of hand)
+        // the thumb opening's centre, measured from the index side toward the ring frame's "up" (which points out of the
+        // palm): a little toward the palm, where a thumb really grows from
+        const float ThumbSideDeg = 25f;
 
         static int BV(int r, int k) => r * (S + 1) + k;
         static int TV(int r, int m) => ThumbStart + r * (Loop + 1) + m;
@@ -182,12 +214,120 @@ namespace FrostAndFound
 
         public void Dispose() { if (m_Mesh) Object.Destroy(m_Mesh); }
 
-        public void Pose(HandRig hand, bool holdingCamera)
+        // this frame's hand frame
+        Vector3 m_FrameWrist; Quaternion m_FrameRot = Quaternion.identity; float m_Mirror = 1f;
+        Vector3 L2W(Vector3 local) => m_FrameWrist + m_FrameRot * new Vector3(local.x * m_Mirror, local.y, local.z);
+        Vector3 L2WDir(Vector3 local) => m_FrameRot * new Vector3(local.x * m_Mirror, local.y, local.z);
+
+        public void Pose(HandRig hand, MittenGrip grip, bool publishMounts)
         {
-            bool visible = hand.IsTracked && hand.Anchor && (hand.HasJoints ? FromJoints(hand) : FromController(hand, holdingCamera));
+            bool visible = hand.IsTracked && hand.Anchor && Frame(hand);
+            if (visible)
+            {
+                switch (grip)
+                {
+                    case MittenGrip.Free: visible = hand.HasJoints ? FromJoints(hand) : FromController(hand); break;
+                    case MittenGrip.Ball: PoseInFrame(0.5f, 0.56f, 0.55f); break;      // fingers wrapped round the ball
+                    case MittenGrip.Camera:
+                    {
+                        CameraPose(hand, publishMounts, out var pc, out var qc);
+                        // pinching presses the mitt's tip down onto the shutter
+                        float press = Mathf.Clamp01((hand.Trigger - 0.2f) / 0.6f);
+                        for (int i = 0; i < 20; i++)
+                        {
+                            var j = CamJoints[i];
+                            if (i >= 4 && (i & 3) >= 2) j.y -= press * 0.008f * ((i & 3) - 1) * 0.5f;
+                            _joints[i] = pc + qc * CamMirror(j);
+                        }
+                        _wrist = pc + qc * CamMirror(CamWrist);
+                        m_CamPos = pc; m_CamRot = qc;
+                        break;
+                    }
+                    case MittenGrip.Photo: PoseInFrame(0.4f, 0.82f, 0.66f); break;     // thumb and finger pinch the border
+                }
+            }
             if (m_Root.gameObject.activeSelf != visible) m_Root.gameObject.SetActive(visible);
-            hand.Hold = visible ? HoldPoint : null;
-            if (visible) Apply();
+            hand.Hold = visible && publishMounts ? HoldPoint : null;
+            hand.HasCameraGrip = visible && publishMounts && grip == MittenGrip.Camera;
+            hand.HasPhotoGrip = visible && publishMounts && grip == MittenGrip.Photo;
+            if (!visible) return;
+            Apply();
+            HoldPoint.SetPositionAndRotation(L2W(BallCenter), m_FrameRot);
+            if (hand.HasCameraGrip) hand.CameraGrip = new UnityEngine.Pose(m_CamPos, m_CamRot);   // the camera's root
+            if (hand.HasPhotoGrip) hand.PhotoGrip = (_joints[3] + _joints[7]) * 0.5f;
+        }
+
+        /// <summary>The hand's frame: from the tracked joints, or the posed controller hand.</summary>
+        bool Frame(HandRig hand)
+        {
+            m_Mirror = m_Side == HandSide.Left ? -1f : 1f;
+            if (hand.HasJoints)
+            {
+                var j = hand.Joints;
+                Vector3 fwd = j[8] - hand.Wrist, across = j[4] - j[16];
+                var palm = Vector3.Cross(fwd, across) * (m_Side == HandSide.Right ? 1f : -1f);   // points out of the palm
+                if (fwd.sqrMagnitude < 1e-8f || palm.sqrMagnitude < 1e-10f) return false;
+                m_FrameWrist = hand.Wrist;
+                m_FrameRot = Quaternion.LookRotation(fwd, -palm);
+                return true;
+            }
+            var e = ControllerOffsetEuler;
+            var q = Quaternion.Euler(e.x, e.y * m_Mirror, e.z * m_Mirror);
+            var p = ControllerOffsetPos;
+            p.x *= m_Mirror;
+            m_FrameWrist = hand.Anchor.TransformPoint(p);
+            m_FrameRot = hand.Anchor.rotation * q;
+            return true;
+        }
+
+        Vector3 m_CamPos; Quaternion m_CamRot = Quaternion.identity;
+
+        /// <summary>Where the held camera goes: upright (no roll), aimed between where your hand points and where you look,
+        /// with the grip's palm on your real palm. The desktop stand-in keeps the camera at its screen spot.</summary>
+        void CameraPose(HandRig hand, bool xr, out Vector3 pos, out Quaternion rot)
+        {
+            if (!xr)
+            {
+                pos = hand.Anchor.position;
+                rot = hand.Anchor.rotation;
+                return;
+            }
+            var head = PlayerRig.Active ? PlayerRig.Active.Head : null;
+            var handFwd = hand.HasJoints ? (hand.Joints[8] - hand.Wrist) : hand.Anchor.forward;
+            var aim = head ? Vector3.Slerp(handFwd.normalized, head.forward, 0.6f) : handFwd.normalized;
+            if (Mathf.Abs(Vector3.Dot(aim, Vector3.up)) > 0.95f) aim = head ? head.forward : Vector3.forward;
+            rot = Quaternion.LookRotation(aim, Vector3.up);
+            var palm = hand.Palm ? hand.Palm.position : hand.Anchor.position;
+            pos = palm - rot * CamMirror(CamPalm);
+        }
+
+        /// <summary>Snap the mitten into a grip: fingers curled by index/grip, thumb folded by thumb (0..1).</summary>
+        void PoseInFrame(float index, float grip, float thumb)
+        {
+            _wrist = m_FrameWrist;
+            for (int f = 0; f < 5; f++)
+            {
+                Vector3 pos = KnuckleRest[f];
+                Vector3 dir;
+                Quaternion bend;
+                if (f == 0)
+                {
+                    dir = ThumbRestDir;
+                    bend = Quaternion.AngleAxis(thumb * ThumbCurlDeg, Vector3.Cross(dir, ThumbFoldTarget).normalized);
+                }
+                else
+                {
+                    dir = Vector3.forward;
+                    bend = Quaternion.AngleAxis((f == 1 ? index : grip) * FingerCurlDeg, Vector3.right);
+                }
+                _joints[f * 4] = L2W(pos);
+                for (int s = 0; s < 3; s++)
+                {
+                    dir = bend * dir;
+                    pos += dir * SegLen[f][s];
+                    _joints[f * 4 + s + 1] = L2W(pos);
+                }
+            }
         }
 
         bool FromJoints(HandRig hand)
@@ -197,11 +337,10 @@ namespace FrostAndFound
             return true;
         }
 
-        bool FromController(HandRig hand, bool holdingCamera)
+        bool FromController(HandRig hand)
         {
             float trigger = Mathf.Clamp01(hand.Trigger), grip = Mathf.Clamp01(hand.Grip);
             bool thumbDown = grip > 0.6f;
-            if (holdingCamera) { grip = Mathf.Max(grip, 0.8f); trigger = Mathf.Max(trigger, 0.3f); thumbDown = true; }
             float mirror = m_Side == HandSide.Left ? -1f : 1f;
             var e = ControllerOffsetEuler;
             var q = Quaternion.Euler(e.x, e.y * mirror, e.z * mirror);
@@ -277,9 +416,9 @@ namespace FrostAndFound
                 _bx[r] = kx;
                 _bu[r] = 1f;
                 if (r == CuffRings - 1) { _bw[r] = wristHalfW; _bh[r] = wristHalfH; _bcol[r] = glove; continue; }
-                float flare = Mathf.Lerp(1.1f, 1.28f, Mathf.Clamp01(-at / CuffLength));
+                float flare = Mathf.Lerp(1.04f, 1.15f, Mathf.Clamp01(-at / CuffLength));   // a snug ribbed cuff, gently flared
                 _bw[r] = wristHalfW * flare;
-                _bh[r] = wristHalfH * flare * 1.2f;
+                _bh[r] = wristHalfH * flare * 1.08f;
                 _bcol[r] = r == 2 || r == 3 ? stripe : cuff;
             }
 
@@ -378,15 +517,16 @@ namespace FrostAndFound
                 for (int k = 0; k <= S; k++)
                 {
                     float cs = _cosK[k], sn = _sinK[k];
-                    float yh = sn < 0f ? _bh[r] * _bu[r] : _bh[r];
+                    float yh = sn > 0f ? _bh[r] * _bu[r] : _bh[r];   // "up" here points out of the palm: flatten that side
                     int i = BV(r, k);
                     _wp[i] = _bc[r] + right * (cs * _bw[r]) + up * (sn * yh);
                     _uvs[i] = new Vector2(k / (float)S * BodyStitches, v);
                     _colors[i] = _bcol[r];
                 }
             }
-            Color inside = GloveColor * 0.3f; inside.a = 0f;
-            _wp[BodyCapStart] = _bc[0] - _bt[0] * 0.004f;
+            // the cuff's opening: recessed and dark, so it reads as the inside of the mitten, not a pointed cap
+            Color inside = CuffColor * 0.28f; inside.a = 0f;
+            _wp[BodyCapStart] = _bc[0] + _bt[0] * 0.018f;
             _normals[BodyCapStart] = -_bt[0];
             _uvs[BodyCapStart] = new Vector2(BodyStitches * 0.5f, 0f);
             _colors[BodyCapStart] = inside;
@@ -422,9 +562,6 @@ namespace FrostAndFound
             m_Mesh.SetColors(_colors);
             m_Mesh.RecalculateBounds();
 
-            int pr = CuffRings + 4; // ~3/4 along the palm
-            Vector3 hold = _bc[pr] - back * (_bh[pr] * _bu[pr] + HoldDepth);
-            HoldPoint.SetPositionAndRotation(hold, Quaternion.LookRotation(f, back));
         }
 
         /// The thumb: ring 0 is the opening's edge loop (same positions and normals as the body),

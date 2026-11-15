@@ -76,7 +76,12 @@ namespace FrostAndFound
         float m_LastPoseTime = -10f, m_LastHitLine = -10f, m_NextBark, m_NextWander;
         /// <summary>Idle kids stroll to a free spot near home now and then (only where there's room).</summary>
         protected virtual bool WandersWhenIdle => true;
-        public float wanderRadius = 1.1f, wanderSpeed = 0.55f;
+        public float wanderRadius = 1.6f, wanderSpeed = 0.65f;
+        float m_NextFidget, m_AttendUntil, m_NextSeparate;
+        Vector3 m_MoveTarget;
+        /// <summary>Where this kid is walking to (or standing, if not walking).</summary>
+        public Vector3 Destination => m_Move != null ? m_MoveTarget : transform.position;
+        Vector3 m_Attend;
         /// <summary>Raised when this kid lets go of a snowball (for a future snowball fight).</summary>
         public static event System.Action<Kid, Snowball> ThrewSnowball;
         protected FootprintStamper m_Prints;
@@ -123,8 +128,11 @@ namespace FrostAndFound
             if (Anim.Animator && Anim.Animator.avatar && Anim.Animator.avatar.isHuman)
             {
                 // a real head bone: its axes and scale aren't the mockup's, so place and size in world terms
-                headCol.transform.position = Rig.Head.position + Vector3.up * 0.08f * Rig.Scale;
-                sc.radius = 0.15f * Rig.Scale / Mathf.Max(1e-3f, headCol.transform.lossyScale.x);
+                headCol.transform.position = Rig.Head.position + Vector3.up * 0.08f * Rig.Height / 1.05f;
+                sc.radius = 0.15f * Rig.Height / 1.05f / KidBuilder.WorldScale(headCol.transform);
+                cap.center = new Vector3(0, Rig.Height * 0.36f, 0);
+                cap.height = Rig.Height * 0.72f;
+                cap.radius = 0.15f * Rig.Height;
             }
             m_Prints = gameObject.AddComponent<FootprintStamper>();
             m_Prints.kid = this;
@@ -132,7 +140,8 @@ namespace FrostAndFound
             HomeRotation = transform.rotation;
             m_LastPos = transform.position;
             m_NextBark = Time.time + Random.Range(18f, 40f);
-            m_NextWander = Time.time + Random.Range(4f, 9f);
+            m_NextWander = Time.time + Random.Range(2f, 6f);
+            m_NextFidget = Time.time + Random.Range(1.5f, 5f);
         }
 
         protected virtual void OnEnable() { if (!All.Contains(this)) All.Add(this); SnowballTargets.Register(this); }
@@ -154,21 +163,52 @@ namespace FrostAndFound
             var player = PlayerRig.Active;
             if (player && m_Move == null && CanMove && !Busy)
             {
+                // whatever has our attention (the friend we walked over to, Frosty) for a while, else you if you're near
                 float d = FrostUtil.FlatDistance(transform.position, player.Head.position);
-                if (d < 2.6f)
+                bool attending = Time.time < m_AttendUntil && d > 1.2f;
+                if (attending || d < 2.6f)
                 {
-                    var face = FrostUtil.FlatLookRotation(transform.position, player.Head.position);
+                    var face = FrostUtil.FlatLookRotation(transform.position, attending ? m_Attend : player.Head.position);
                     transform.rotation = Ease.Damp(transform.rotation, face, 2.5f, Time.deltaTime);
                 }
+                if (Anim && attending) Anim.LookOverride = m_Attend;
+                else if (Anim) Anim.LookOverride = null;
             }
             // wander: every so often stroll to a free spot near home, if there's space for it
             var gm = GameManager.I;
-            if (WandersWhenIdle && player && m_Move == null && CanMove && !Busy && Time.time > m_NextWander && gm
-                && gm.State == GameState.Investigating && !gm.IsPaused && !DialogueRunner.IsSpeaking(id) && !(Anim && Anim.IsThrowing))
+            bool calm = gm && !gm.IsPaused && !DialogueRunner.IsSpeaking(id) && !(Anim && Anim.IsThrowing)
+                        && (gm.State == GameState.Investigating || gm.State == GameState.Title);
+            if (WandersWhenIdle && player && m_Move == null && CanMove && !Busy && calm && gm.State == GameState.Investigating && Time.time > m_NextWander)
             {
-                m_NextWander = Time.time + Random.Range(6f, 12f);
-                if (FrostUtil.FlatDistance(transform.position, player.Head.position) > 1.6f && TryWanderSpot(player, out var spot))
-                    MoveTo(spot, wanderSpeed);
+                m_NextWander = Time.time + Random.Range(3.5f, 8f);
+                if (FrostUtil.FlatDistance(transform.position, player.Head.position) > 0.9f && TryWanderSpot(player, out var spot, out var attend))
+                    MoveTo(spot, wanderSpeed, () =>
+                    {
+                        if (attend == Vector3.zero) return;
+                        m_Attend = attend;
+                        m_AttendUntil = Time.time + Random.Range(3f, 6f);
+                    });
+            }
+            // personal space: if two of us have ended up shoulder to shoulder, one steps away
+            if (player && m_Move == null && CanMove && !Busy && calm && Time.time > m_NextSeparate)
+            {
+                m_NextSeparate = Time.time + 0.5f;
+                Kid near = null; float nd = 0.6f;
+                foreach (var k in All) if (k && k != this) { float d = FrostUtil.FlatDistance(transform.position, k.transform.position); if (d < nd) { nd = d; near = k; } }
+                var room2 = RoomService.Current;
+                if (near && !near.IsMoving && (int)id < (int)near.id && room2 != null)
+                {
+                    var away = (transform.position - near.transform.position).Flat();
+                    away = away.sqrMagnitude > 1e-4f ? away.normalized : transform.right;
+                    var p = transform.position + away * 0.6f;
+                    if (room2.EdgeDistance(new Vector2(p.x, p.z)) > 0.25f && (room2.IsBlocked == null || !room2.IsBlocked(p, 0.2f))) MoveTo(p, wanderSpeed);
+                }
+            }
+            // little human things while standing about: look round, rub cold hands, scratch, stretch, wave...
+            if (Anim && Anim.IsHumanoid && player && m_Move == null && !Busy && calm && Time.time > m_NextFidget)
+            {
+                m_NextFidget = Time.time + Random.Range(3f, 7f);
+                Anim.Fidget(FidgetLook(player));
             }
             // ambient barks when the player wanders close and nothing else is happening
             if (player && Time.time > m_NextBark && !Busy && !DialogueRunner.AnyoneSpeaking && GameManager.I && GameManager.I.State == GameState.Investigating)
@@ -188,6 +228,7 @@ namespace FrostAndFound
         public void MoveTo(Vector3 target, float speed, System.Action done = null)
         {
             if (m_Move != null) StopCoroutine(m_Move);
+            m_MoveTarget = target;
             m_Move = StartCoroutine(MoveRoutine(target, speed, done));
         }
 
@@ -219,30 +260,86 @@ namespace FrostAndFound
             done?.Invoke();
         }
 
-        bool TryWanderSpot(PlayerRig player, out Vector3 spot)
+        /// <summary>Somewhere to stroll: a free spot in our part of the room, over to stand with a friend, or round to
+        /// have a look at Frosty. Only where there's room: inside the walls, off the furniture, clear of you, Frosty and
+        /// the others, and with a clear straight walk there.</summary>
+        bool TryWanderSpot(PlayerRig player, out Vector3 spot, out Vector3 attend)
         {
-            spot = default;
+            spot = default; attend = Vector3.zero;
             var room = RoomService.Current;
             if (room == null) return false;
-            for (int i = 0; i < 10; i++)
+            var frosty = Frosty.Instance ? Frosty.Instance.transform.position : new Vector3(1e4f, 0f, 1e4f);
+            float kind = Random.value;
+            float bestGap = -1f;
+            for (int i = 0; i < 16; i++)
             {
-                var c = Random.insideUnitCircle * wanderRadius;
-                var p = new Vector3(HomePosition.x + c.x, room.FloorY, HomePosition.z + c.y);
-                if (FrostUtil.FlatDistance(p, transform.position) < 0.45f) continue;
-                if (room.EdgeDistance(new Vector2(p.x, p.z)) < 0.35f) continue;
+                Vector3 p, look = Vector3.zero;
+                if (kind < 0.12f && All.Count > 1)
+                {
+                    var other = All[Random.Range(0, All.Count)];
+                    if (!other || other == this) continue;
+                    var away = (transform.position - other.transform.position).Flat();
+                    if (away.sqrMagnitude < 1e-4f) away = Vector3.forward;
+                    p = other.transform.position + Quaternion.Euler(0, Random.Range(-70f, 70f), 0) * away.normalized * 1.1f;
+                    look = other.HeadPoint;
+                }
+                else if (kind < 0.32f && Frosty.Instance)
+                {
+                    float a = Random.Range(0f, Mathf.PI * 2f);
+                    p = frosty + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(1.1f, 1.35f);
+                    look = frosty + Vector3.up * 0.1f;
+                }
+                else
+                {
+                    var c = Random.insideUnitCircle * wanderRadius;
+                    p = new Vector3(HomePosition.x + c.x, 0f, HomePosition.z + c.y);
+                }
+                p.y = room.FloorY;
+                if (FrostUtil.FlatDistance(p, HomePosition) > wanderRadius + 0.6f) continue;   // stay in our part of the room
+                if (FrostUtil.FlatDistance(p, transform.position) < 0.4f) continue;
+                if (room.EdgeDistance(new Vector2(p.x, p.z)) < 0.3f) continue;
                 if (room.IsBlocked != null && room.IsBlocked(p, 0.22f)) continue;
-                if (FrostUtil.FlatDistance(p, player.Head.position) < 1.1f) continue;
-                bool crowded = false;
-                foreach (var k in All) if (k && k != this && FrostUtil.FlatDistance(p, k.transform.position) < 0.75f) { crowded = true; break; }
-                if (crowded) continue;
-                bool clear = true;   // the straight walk there must miss the furniture too
-                if (room.IsBlocked != null)
-                    for (float s = 0.25f; s < 1f && clear; s += 0.25f) clear = !room.IsBlocked(Vector3.Lerp(transform.position, p, s), 0.2f);
-                if (!clear) continue;
-                spot = p;
-                return true;
+                if (FrostUtil.FlatDistance(p, player.Head.position) < 0.8f) continue;
+                if (FrostUtil.FlatDistance(p, frosty) < 0.95f) continue;
+                float gap = 10f;   // from where the others stand and where they're walking to
+                foreach (var k in All) if (k && k != this) gap = Mathf.Min(gap, Mathf.Min(FrostUtil.FlatDistance(p, k.transform.position), FrostUtil.FlatDistance(p, k.Destination)));
+                if (gap < (look != Vector3.zero ? 1.0f : 0.95f)) continue;   // keep our distance from the others
+                if (!WanderSpotOk(p) || !PathClear(room, transform.position, p, frosty, player)) continue;
+                // of the spots that work, take the roomiest (friends and Frosty visits take the first that fits)
+                if (look != Vector3.zero) { spot = p; attend = look; return true; }
+                if (gap > bestGap) { bestGap = gap; spot = p; attend = Vector3.zero; }
             }
-            return false;
+            return bestGap > 0f;
+        }
+
+        bool PathClear(RoomInfo room, Vector3 from, Vector3 to, Vector3 frosty, PlayerRig player)
+        {
+            float len = FrostUtil.FlatDistance(from, to);
+            for (float d = 0.2f; d < len; d += 0.2f)
+            {
+                var q = Vector3.Lerp(from, to, d / len);
+                if (room.IsBlocked != null && room.IsBlocked(q, 0.2f)) return false;
+                if (FrostUtil.FlatDistance(q, frosty) < 0.75f || FrostUtil.FlatDistance(q, player.Head.position) < 0.45f) return false;
+                foreach (var k in All) if (k && k != this && FrostUtil.FlatDistance(q, k.transform.position) < 0.5f) return false;
+            }
+            return true;
+        }
+
+        protected virtual bool WanderSpotOk(Vector3 p) => true;
+
+        /// <summary>Something to glance at: a friend, Frosty, you, or somewhere in the room.</summary>
+        Vector3 FidgetLook(PlayerRig player)
+        {
+            float r = Random.value;
+            if (r < 0.4f && All.Count > 1)
+            {
+                var other = All[Random.Range(0, All.Count)];
+                if (other && other != this) return other.HeadPoint;
+            }
+            if (r < 0.6f && Frosty.Instance) return Frosty.Instance.transform.position + Vector3.up * 0.1f;
+            if (r < 0.8f) return player.Head.position;
+            var a = Random.Range(-100f, 100f);
+            return HeadPoint + Quaternion.Euler(0, a, 0) * transform.forward * 2f + Vector3.up * Random.Range(-0.4f, 0.3f);
         }
 
         // ------------------------------------------------------------------ snowball fights (rigged kids)

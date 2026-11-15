@@ -22,9 +22,9 @@ MonoBehaviour:
   armExtendedDistance: 0.46
   showConeDegrees: 38
   showDwellSeconds: 0.3
-  scoopHeight: 0.16
-  gripClosed: 0.72
-  gripOpen: 0.35
+  scoopHeight: 0.24
+  gripClosed: 0.6
+  gripOpen: 0.42
   snowballRadius: 0.04
   throwMultiplierHands: 1.2
   throwMultiplierControllers: 1.05

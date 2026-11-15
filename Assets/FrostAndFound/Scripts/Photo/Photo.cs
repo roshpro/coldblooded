@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace FrostAndFound
 {
@@ -128,6 +129,45 @@ namespace FrostAndFound
 
         public void SetFlash(float f) => m_ImageMat.SetFloat("_Flash", f);
 
+        // ---- dropped in the snow
+        Rigidbody m_Rb;
+        float m_DroppedAt;
+        public bool IsDropped => m_Rb;
+
+        /// <summary>Let go: it flutters down into the snow and lies there until someone picks it up.</summary>
+        public void Drop(Vector3 velocity)
+        {
+            transform.SetParent(null, true);
+            gameObject.layer = 0;   // Default: lands on the snow and furniture (the picture itself stays hidden from the lens)
+            var col = gameObject.AddComponent<BoxCollider>();
+            col.size = new Vector3(Width, Height, 0.004f);
+            m_Rb = gameObject.AddComponent<Rigidbody>();
+            m_Rb.mass = 0.02f;
+            m_Rb.linearDamping = 3f;
+            m_Rb.angularDamping = 1.5f;
+            m_Rb.interpolation = RigidbodyInterpolation.Interpolate;
+            m_Rb.linearVelocity = Vector3.ClampMagnitude(velocity, 2f);
+            m_Rb.angularVelocity = Random.insideUnitSphere * 3f;
+            m_DroppedAt = Time.time;
+        }
+
+        public void PickUp()
+        {
+            if (m_Rb) Destroy(m_Rb);
+            var col = GetComponent<BoxCollider>();
+            if (col) Destroy(col);
+            m_Rb = null;
+            gameObject.layer = Layers.PlayerHands;
+        }
+
+        /// <summary>Stop simulating once it has settled (or when something else wants to move it, e.g. the case file).</summary>
+        public void Freeze() { if (m_Rb) m_Rb.isKinematic = true; }
+
+        void FixedUpdate()
+        {
+            if (m_Rb && !m_Rb.isKinematic && Time.time - m_DroppedAt > 1.5f && m_Rb.IsSleeping()) m_Rb.isKinematic = true;
+        }
+
         void OnDestroy()
         {
             if (m_ImageMat) Destroy(m_ImageMat);
@@ -139,11 +179,16 @@ namespace FrostAndFound
     /// The free hand's photo slot. You always show your newest photo (the chain is linear, so there's no
     /// inventory). Scooping snow tucks it away; throwing brings it back.
     /// </summary>
+    [DefaultExecutionOrder(150)] // after the mittens have taken their pinch this frame
     public class PhotoHolder : MonoBehaviour
     {
         public static PhotoHolder Instance { get; private set; }
         public readonly List<PolaroidPhoto> Album = new List<PolaroidPhoto>();
         public PolaroidPhoto Current { get; private set; }
+        /// <summary>Photos you've let go of, lying in the snow (still part of the album).</summary>
+        public readonly List<PolaroidPhoto> Dropped = new List<PolaroidPhoto>();
+        public static bool DropTipShown;
+        float m_FlatSince = -1f, m_OpenTime = -10f;
         public bool IsTucked { get; private set; }
         public bool Visible => Current && !IsTucked && m_Arrived;
         /// <summary>Set by ShowPhotoDetector while the player holds the photo out to a kid.</summary>
@@ -162,7 +207,8 @@ namespace FrostAndFound
             Current = photo;
             m_Arrived = arrived;
             if (!Album.Contains(photo)) Album.Add(photo);
-            if (SnowballHand.Instance && SnowballHand.Instance.IsHolding) IsTucked = true;
+            var rigNow = PlayerRig.Active;
+            if (SnowballHand.Instance && rigNow && SnowballHand.Instance.IsHoldingIn(rigNow.FreeHand)) IsTucked = true;
             photo.gameObject.SetActive(!IsTucked || !arrived);
         }
 
@@ -186,7 +232,7 @@ namespace FrostAndFound
         IEnumerator RestoreRoutine(float delay)
         {
             yield return new WaitForSeconds(delay);
-            if (SnowballHand.Instance && SnowballHand.Instance.IsHolding) yield break;
+            if (SnowballHand.Instance && PlayerRig.Active && SnowballHand.Instance.IsHoldingIn(PlayerRig.Active.FreeHand)) yield break;
             IsTucked = false;
             if (Current)
             {
@@ -196,32 +242,113 @@ namespace FrostAndFound
             m_Restore = null;
         }
 
+        void Update()
+        {
+            var rig = PlayerRig.Active;
+            if (!rig) return;
+            if (CaseDirector.I != null && CaseDirector.I.CaseClosed) { foreach (var p in Dropped) if (p) p.Freeze(); return; }
+            var hand = rig.FreeHand;
+            if (!hand.IsTracked) return;
+            // let go: open your hand flat for a moment (hand tracking), press A/X (controllers), or G (desktop)
+            if (Visible)
+            {
+                bool drop;
+                if (hand.IsOpticalHand)
+                {
+                    bool flat = hand.Grip < 0.12f && hand.Trigger < 0.1f;
+                    if (!flat) m_FlatSince = -1f;
+                    else if (m_FlatSince < 0f) m_FlatSince = Time.time;
+                    drop = m_FlatSince > 0f && Time.time - m_FlatSince > 0.35f;
+                }
+                else if (rig.IsXR) drop = hand.PrimaryDown;
+                else drop = Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
+                if (drop) { DropCurrent(hand); return; }
+            }
+            // pick one back up: pinch or grab it where it lies (desktop: G picks up the nearest)
+            if (Dropped.Count == 0 || (SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand))) return;
+            if (!rig.IsXR)
+            {
+                if (Keyboard.current == null || !Keyboard.current.gKey.wasPressedThisFrame) return;
+                PolaroidPhoto near = null; float best = 2.5f;
+                foreach (var p in Dropped) if (p) { float d = FrostUtil.FlatDistance(p.transform.position, rig.Head.position); if (d < best) { best = d; near = p; } }
+                if (near) PickUp(near, hand);
+                return;
+            }
+            bool closed = hand.Grip > 0.6f || hand.Trigger > 0.6f;
+            if (!closed) { m_OpenTime = Time.time; return; }
+            if (Time.time - m_OpenTime > 0.8f) return;
+            var at = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
+            foreach (var p in Dropped)
+                if (p && Vector3.Distance(p.transform.position, at) < 0.11f) { PickUp(p, hand); return; }
+        }
+
+        void DropCurrent(HandRig hand)
+        {
+            var p = Current;
+            Current = null;
+            m_Arrived = false;
+            m_FlatSince = -1f;
+            FaceTarget = null;
+            p.Drop(hand.ReleaseVelocity() * 0.5f);
+            Dropped.Add(p);
+            AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.2f, 1.9f);
+            hand.Haptic(0.15f, 0.03f);
+        }
+
+        void PickUp(PolaroidPhoto p, HandRig hand)
+        {
+            Dropped.Remove(p);
+            p.PickUp();
+            if (Current && Current != p) Current.gameObject.SetActive(false);
+            Current = p;
+            m_Arrived = true;
+            IsTucked = false;
+            p.gameObject.SetActive(true);
+            AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.3f, 1.7f);
+            hand.Haptic(0.25f, 0.04f);
+        }
+
         void LateUpdate()
         {
             var rig = PlayerRig.Active;
             if (!rig || !Current || !m_Arrived || IsTucked) return;
             var hand = rig.FreeHand;
-            if (!hand.Palm) return;
-            var head = rig.Head;
-            // held like a card between thumb and fingers, picture toward your eyes
-            var pos = hand.Palm.position + hand.Anchor.up * 0.035f + hand.Anchor.forward * 0.02f;
-            var toHead = (head.position - pos).normalized;
-            var faceSelf = Quaternion.LookRotation(-toHead, head.up);
+            if (!hand.Anchor) return;
             m_Flip = Ease.Damp(m_Flip, FaceTarget ? 1f : 0f, 10f, Time.deltaTime);
-            var rot = faceSelf;
-            if (FaceTarget)
-            {
-                var toKid = (FaceTarget.position - pos).normalized;
-                var faceKid = Quaternion.LookRotation(-toKid, Vector3.up);
-                rot = Quaternion.Slerp(faceSelf, faceKid, m_Flip);
-            }
+            HeldPose(rig, hand, FaceTarget, out var pos, out var rot, m_Flip);
             Current.transform.SetPositionAndRotation(pos, rot);
+        }
+
+        /// <summary>A photo pinched by its bottom border between the mitten's thumb and finger, picture toward your
+        /// eyes (or turned toward the kid you're showing it to).</summary>
+        public static void HeldPose(PlayerRig rig, HandRig hand, Transform faceTarget, out Vector3 pos, out Quaternion rot, float flip = 0f)
+        {
+            var head = rig.Head;
+            if (!hand.HasPhotoGrip && !hand.HasJoints && hand.Palm)
+            {
+                // no mitten grip (desktop stand-in): held up like a card above the hand
+                pos = hand.Palm.position + hand.Anchor.up * 0.035f + hand.Anchor.forward * 0.02f;
+                rot = Quaternion.LookRotation(-(head.position - pos).normalized, head.up);
+                if (faceTarget && flip > 0f) rot = Quaternion.Slerp(rot, Quaternion.LookRotation(-(faceTarget.position - pos).normalized, Vector3.up), flip);
+                return;
+            }
+            var pinch = hand.HasPhotoGrip ? hand.PhotoGrip : hand.PinchPoint;
+            var toHead = (head.position - pinch).normalized;
+            rot = Quaternion.LookRotation(-toHead, head.up);
+            if (faceTarget && flip > 0f)
+            {
+                var toKid = (faceTarget.position - pinch).normalized;
+                rot = Quaternion.Slerp(rot, Quaternion.LookRotation(-toKid, Vector3.up), flip);
+            }
+            // the pinch sits on the white border below the picture; the paper stands just in front of the mitten
+            pos = pinch + rot * new Vector3(0f, PolaroidPhoto.Height * 0.5f - 0.011f, -0.006f);
         }
 
         public void ClearAll()
         {
             foreach (var p in Album) if (p) Destroy(p.gameObject);
             Album.Clear();
+            Dropped.Clear();
             Current = null;
         }
     }

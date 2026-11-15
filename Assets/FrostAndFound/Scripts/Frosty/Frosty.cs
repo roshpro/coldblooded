@@ -19,7 +19,7 @@ namespace FrostAndFound
         Transform m_Visual;
         float m_LastHitLine;
 
-        public Vector3 AimPoint => transform.position + Vector3.up * 0.5f;
+        public Vector3 AimPoint => transform.position + Vector3.up * (FrostAssets.Instance && FrostAssets.Instance.frostyModel ? 0.12f : 0.5f);
         public Vector3 Velocity => Vector3.zero;
         public bool AssistEligible => false;
 
@@ -67,13 +67,62 @@ namespace FrostAndFound
             var coal = Palette.Toon(Palette.Coal, true, 0.5f);
 
             Transform baseBall, midBall, headBall;
+            (Vector3, float)[] outline = null;
+            Transform stainRoot = null, glitterRoot = null, scrapeRoot = null;
             if (custom)
             {
-                var m = Instantiate(custom, m_Visual, false);
+                // the team's snowman: fallen and flattened, lying in the snow. In body space he lies along z with his
+                // head and hat at -z, the coal-buttoned middle in the centre and the plain base at +z.
+                const float scale = 1.3f;
+                var body = new GameObject("Body").transform;
+                body.SetParent(m_Visual, false);
+                body.localRotation = Quaternion.Euler(0f, 90f, 0f);   // lying across your view, so you see all of him
+                body.localScale = Vector3.one * scale;
+                float snowY = SnowSurface.Instance ? SnowSurface.Instance.SurfaceHeightAt(transform.position) - transform.position.y : 0.05f;
+                body.localPosition = new Vector3(0f, Mathf.Max(0f, snowY) + (0.073f - 0.015f) * scale, 0f);   // resting on the snow
+                var m = Instantiate(custom, body, false);
+                m.name = "Model";
                 m.SetLayerRecursive(Layers.Kid);
-                baseBall = Find(m.transform, "Base") ?? m.transform;
-                midBall = Find(m.transform, "Middle") ?? m.transform;
-                headBall = Find(m.transform, "Head") ?? m.transform;
+                var tex = FrostAssets.Instance.frostyTexture;
+                var renderers = m.GetComponentsInChildren<MeshRenderer>();
+                foreach (var r in renderers)
+                {
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                    r.receiveShadows = true;
+                }
+                // his own shape for snowball splats and for blocking photos
+                var mf = m.GetComponentInChildren<MeshFilter>();
+                var col = mf.gameObject.AddComponent<MeshCollider>();
+                col.sharedMesh = mf.sharedMesh;
+                Physics.SyncTransforms();
+                // the clues are painted into his own texture on his real surface, so they look part of him: cocoa across
+                // the middle, glitter on the face, the scrape on the side of the base that faces you
+                float side = Mathf.Sign(body.InverseTransformDirection(transform.forward).x);
+                if (side == 0f) side = 1f;
+                var stainHit = SurfaceHit(body, col, new Vector3(0.04f, 0f, -0.03f), Vector3.down);
+                var glitterHit = SurfaceHit(body, col, new Vector3(0f, 0f, -0.36f), Vector3.down);
+                var scrapeHit = SurfaceHit(body, col, new Vector3(side * 0.6f, 0.03f, 0.27f), new Vector3(-side, 0f, 0f));
+                var canvas = SnowmanPaint.Canvas(tex);
+                var px = canvas.GetPixels32();
+                var toWorld = mf.transform.localToWorldMatrix;
+                float ps = SnowmanPaint.Scale = scale / 1.1f;
+                SnowmanPaint.Paint(px, canvas.width, canvas.height, mf.sharedMesh, toWorld, stainHit.point, stainHit.normal, body.forward, 0.3f * ps, SnowmanPaint.Cocoa);
+                SnowmanPaint.Paint(px, canvas.width, canvas.height, mf.sharedMesh, toWorld, glitterHit.point, glitterHit.normal, -body.forward, 0.12f * ps, SnowmanPaint.Glitter);
+                SnowmanPaint.Paint(px, canvas.width, canvas.height, mf.sharedMesh, toWorld, scrapeHit.point, scrapeHit.normal, Vector3.up, 0.16f * ps, SnowmanPaint.Scrape);
+                canvas.SetPixels32(px);
+                canvas.Apply(true, true);
+                m_Painted = canvas;
+                foreach (var r in renderers) r.sharedMaterial = Palette.SoftTextured(canvas, "Frosty");
+                stainRoot = ClueAnchor("Cocoa Splash", body, stainHit);
+                glitterRoot = ClueAnchor("Glitter", body, glitterHit);
+                scrapeRoot = ClueAnchor("Red Scrape", body, scrapeHit);
+                midBall = stainRoot; headBall = glitterRoot; baseBall = scrapeRoot;
+                outline = new[]
+                {
+                    (body.TransformPoint(new Vector3(0f, 0f, 0.27f)), BaseR * 0.95f * scale),
+                    (body.TransformPoint(new Vector3(0f, 0f, -0.03f)), MidR * 1.05f * scale),
+                    (body.TransformPoint(new Vector3(0f, 0f, -0.36f)), HeadR * 1.05f * scale),
+                };
             }
             else
             {
@@ -119,7 +168,9 @@ namespace FrostAndFound
             }
 
             // ---- clue 1: a huge brown cocoa splash on Frosty (middle ball, facing you)
-            var stainRoot = ProcMesh.Pivot("Cocoa Splash", midBall, new Vector3(0.05f, 0.08f, 0.47f));
+            if (!custom)
+            {
+            stainRoot = ProcMesh.Pivot("Cocoa Splash", midBall, new Vector3(0.05f, 0.08f, 0.47f));
             stainRoot.localRotation = Quaternion.LookRotation(stainRoot.localPosition.normalized);
             var cocoa = Palette.Toon(Palette.Cocoa, false, 0.25f);
             var cocoaLight = Palette.Toon(Palette.CocoaLight, false, 0.25f);
@@ -141,37 +192,70 @@ namespace FrostAndFound
             }
             for (int i = 0; i < 4; i++)
                 ProcMesh.Part("Drip", stainRoot, ProcMesh.Capsule(0.25f, 1f), cocoa, new Vector3(-0.16f + i * 0.1f, -0.22f - (i % 2) * 0.06f, -0.005f), new Vector3(0.045f, 0.2f + (i % 3) * 0.07f, 0.035f));
+            }
             Stain = AddClue(stainRoot, ClueId.CocoaStain, 0.12f, true);
 
             // ---- clue 3: purple glitter on Frosty's face
-            var glitterRoot = ProcMesh.Pivot("Glitter", headBall, new Vector3(0.0f, -0.08f, 0.42f));
+            if (!custom)
+            {
+            glitterRoot = ProcMesh.Pivot("Glitter", headBall, new Vector3(0.0f, -0.08f, 0.42f));
             glitterRoot.localRotation = Quaternion.LookRotation(glitterRoot.localPosition.normalized);
             var glitter = new Material(Palette.Toon(Palette.Glitter, false, 0.5f)) { name = "FaceGlitter" };
             glitter.SetFloat("_Sparkle", 1f); glitter.SetFloat("_SparkleScale", 220f); glitter.SetColor("_SparkleColor", Palette.GlintWhite);
             ProcMesh.Part("Glitter Patch", glitterRoot, ProcMesh.Sphere(12, 8), glitter, new Vector3(-0.2f, 0.05f, 0), new Vector3(0.36f, 0.26f, 0.08f));
             ProcMesh.Part("Glitter Patch", glitterRoot, ProcMesh.Sphere(12, 8), glitter, new Vector3(0.24f, 0.08f, 0), new Vector3(0.3f, 0.22f, 0.08f));
             ProcMesh.Part("Glitter Blush", glitterRoot, ProcMesh.Sphere(10, 6), Palette.Toon(Palette.PinkBag, false, 0.4f), new Vector3(0.0f, -0.12f, 0.01f), new Vector3(0.2f, 0.06f, 0.06f));
+            }
             Glitter = AddClue(glitterRoot, ClueId.PurpleGlitter, 0.09f, true);
             Glitter.glintTint = Palette.Glitter;
 
             // ---- clue 4: a red scrape low on Frosty's base (crouch to see it)
-            var scrapeRoot = ProcMesh.Pivot("Red Scrape", baseBall, new Vector3(-0.08f, -0.2f, 0.45f));
+            if (!custom)
+            {
+            scrapeRoot = ProcMesh.Pivot("Red Scrape", baseBall, new Vector3(-0.08f, -0.2f, 0.45f));
             scrapeRoot.localRotation = Quaternion.LookRotation(scrapeRoot.localPosition.normalized);
             var paint = Palette.Toon(Palette.SledRed, false, 0.3f);
             for (int i = 0; i < 4; i++)
                 ProcMesh.Part("Scrape", scrapeRoot, ProcMesh.Capsule(0.25f, 1f), paint, new Vector3(-0.04f + i * 0.04f, i * 0.035f - 0.05f, 0), new Vector3(0.035f, 0.42f - i * 0.06f, 0.03f), new Vector3(0, 0, 65 + i * 4));
             ProcMesh.Part("Gouge", scrapeRoot, ProcMesh.Capsule(0.25f, 1f), Palette.Toon(Palette.SnowShadow, false, 0f), new Vector3(0.02f, 0.06f, -0.005f), new Vector3(0.05f, 0.4f, 0.03f), new Vector3(0, 0, 68));
+            }
             Scrape = AddClue(scrapeRoot, ClueId.RedScrape, 0.1f, true);
             Scrape.glintTint = Palette.GlintWhite;
 
-            // colliders (a compound of spheres) so snowballs splat on him and photos can be blocked by him
-            AddSphereCollider(baseBall.position, BaseR);
-            AddSphereCollider(midBall.position, MidR);
-            AddSphereCollider(headBall.position, HeadR);
-
-            ChalkOutline.Create(transform, new[] { (baseBall.position, BaseR), (midBall.position, MidR), (headBall.position, HeadR) });
+            if (!custom)
+            {
+                // colliders (a compound of spheres) so snowballs splat on him and photos can be blocked by him
+                AddSphereCollider(baseBall.position, BaseR);
+                AddSphereCollider(midBall.position, MidR);
+                AddSphereCollider(headBall.position, HeadR);
+            }
+            // (no chalk outline: it read as clutter around the new snowman)
             if (!custom) MeshMerger.Merge(m_Visual);
         }
+
+        struct Spot { public Vector3 point, normal; }
+
+        /// <summary>Where a ray (in body space) meets the custom model's surface.</summary>
+        static Spot SurfaceHit(Transform body, Collider col, Vector3 local, Vector3 dirLocal)
+        {
+            var origin = body.TransformPoint(dirLocal.y < -0.5f ? new Vector3(local.x, 1f, local.z) : local);
+            var dir = body.TransformDirection(dirLocal).normalized;
+            if (col.Raycast(new Ray(origin, dir), out var hit, 3f)) return new Spot { point = hit.point, normal = hit.normal };
+            return new Spot { point = body.TransformPoint(new Vector3(local.x, 0.07f, local.z)), normal = -dir };
+        }
+
+        /// <summary>An invisible marker on the surface for the photo detection (the clue itself is painted on).</summary>
+        static Transform ClueAnchor(string name, Transform body, Spot spot)
+        {
+            var t = new GameObject(name).transform;
+            t.SetParent(body, true);
+            var up = Vector3.ProjectOnPlane(Vector3.up, spot.normal);
+            t.SetPositionAndRotation(spot.point + spot.normal * 0.002f, Quaternion.LookRotation(spot.normal, up.sqrMagnitude > 1e-6f ? up : body.forward));
+            return t;
+        }
+
+        Texture2D m_Painted;
+        void OnDestroy() { if (m_Painted) Destroy(m_Painted); }
 
         static Transform Find(Transform root, string name)
         {

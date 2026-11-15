@@ -40,6 +40,8 @@ namespace FrostAndFound
         [Tooltip("Optional model per character. Leave empty to use the procedural mockup.")]
         public CharacterModelSlot[] characterModels = new CharacterModelSlot[0];
         public GameObject frostyModel;
+        [Tooltip("Colour texture for the custom snowman (embedded in its FBX; extracted by Setup).")]
+        public Texture2D frostyTexture;
         public GameObject polaroidModel;
         public GameObject sledModel;
 

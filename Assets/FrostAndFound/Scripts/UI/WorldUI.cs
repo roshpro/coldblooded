@@ -36,3 +36,36 @@ namespace FrostAndFound
         }
     }
 }
+
+namespace FrostAndFound
+{
+    /// <summary>
+    /// Draws the world-space UI (layer UI3D) after everything else, with a fresh depth buffer: a URP overlay camera
+    /// stacked on the view camera. Messages, notices and menus are then always legible, never hidden behind the snow,
+    /// the kids or anything else in the room.
+    /// </summary>
+    public static class UIOverlayCamera
+    {
+        public static Camera Attach(Camera view)
+        {
+            if (!view) return null;
+            var baseData = UnityEngine.Rendering.Universal.CameraExtensions.GetUniversalAdditionalCameraData(view);
+            if (baseData == null || baseData.renderType != UnityEngine.Rendering.Universal.CameraRenderType.Base) return null;
+            foreach (var c in baseData.cameraStack) if (c && c.name == "UI Overlay Camera") return c;   // already attached
+            var go = new GameObject("UI Overlay Camera");
+            go.transform.SetParent(view.transform, false);
+            var cam = go.AddComponent<Camera>();
+            cam.CopyFrom(view);
+            cam.cullingMask = Layers.Mask(Layers.UI3D);
+            cam.clearFlags = CameraClearFlags.Depth;
+            var data = UnityEngine.Rendering.Universal.CameraExtensions.GetUniversalAdditionalCameraData(cam);
+            data.renderType = UnityEngine.Rendering.Universal.CameraRenderType.Overlay;
+            data.renderShadows = false;
+            data.renderPostProcessing = false;
+            baseData.cameraStack.Add(cam);
+            view.cullingMask &= ~Layers.Mask(Layers.UI3D);
+            Debug.Log("[Frost] UI drawn on top (overlay camera).");
+            return cam;
+        }
+    }
+}

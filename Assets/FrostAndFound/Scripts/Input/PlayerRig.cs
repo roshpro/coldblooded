@@ -111,8 +111,14 @@ namespace FrostAndFound
         public bool HasJoints;
         /// <summary>Between thumb and index tips (hand tracking), or just in front of the fingers otherwise.</summary>
         public Vector3 PinchPoint => HasJoints ? (Joints[3] + Joints[7]) * 0.5f : (Tip ? Tip.position : (Anchor ? Anchor.position : Vector3.zero));
-        /// <summary>Set by the mittens each frame: where a held snowball sits, inside the curled mitten.</summary>
+        /// <summary>Set by the mittens each frame: where a held snowball sits, cupped in the mitten's palm.</summary>
         public Transform Hold;
+        /// <summary>Set by the mittens: where the camera body sits when this mitten holds it (valid while HasCameraGrip).</summary>
+        public UnityEngine.Pose CameraGrip;
+        public bool HasCameraGrip;
+        /// <summary>Set by the mittens: between the mitten's thumb and finger when it pinches a photo (valid while HasPhotoGrip).</summary>
+        public Vector3 PhotoGrip;
+        public bool HasPhotoGrip;
 
         public readonly VelocityTracker Tracker = new VelocityTracker();
         /// <summary>Desktop simulation can dictate the release velocity of a scripted throw.</summary>

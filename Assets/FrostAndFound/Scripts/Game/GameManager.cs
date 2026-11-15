@@ -86,6 +86,7 @@ namespace FrostAndFound
             if (m_Loading) Destroy(m_Loading.gameObject);
             var r = RoomService.Current;
             Player.FloorY = r.FloorY;
+            UIOverlayCamera.Attach(Player.ViewCamera);   // messages and menus always draw on top
 #if FROST_META && (FROST_META_OPENXR || FROST_OCULUS_XR)
             if (Player.IsXR) EnableDepthOcclusion();   // needs a Depth API provider (Meta OpenXR or Oculus XR plug-in)
 #endif

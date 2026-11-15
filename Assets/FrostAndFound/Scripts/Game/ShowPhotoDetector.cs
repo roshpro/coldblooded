@@ -25,7 +25,7 @@ namespace FrostAndFound
 
             Kid target = null;
             var hand = rig.FreeHand;
-            bool canShow = holder.Visible && holder.Current.IsDeveloped && hand.IsTracked && hand.Palm && !(SnowballHand.Instance && SnowballHand.Instance.IsHolding)
+            bool canShow = holder.Visible && holder.Current.IsDeveloped && hand.IsTracked && hand.Palm && !(SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand))
                            && GameManager.I && GameManager.I.AllowsGameplay;
             if (canShow)
             {

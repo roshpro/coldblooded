@@ -49,7 +49,7 @@ MonoBehaviour:
     texture: {fileID: 2800000, guid: 226b9fa08b623734686b848eb67bf5b8, type: 3}
   - character: 3
     prefab: {fileID: 919132149155446097, guid: c543744facba005479932497ff9c92ca, type: 3}
-    animator: {fileID: 9100000, guid: a061d148278e34833b40bf22bc6f172e, type: 2}
+    animator: {fileID: 9100000, guid: 465b78c2940d84fd4accb61fafab58e5, type: 2}
     scale: 1
     texture: {fileID: 2800000, guid: 0aa7337caa4f69145b86153bc5bf7f4a, type: 3}
   - character: 4
@@ -57,7 +57,8 @@ MonoBehaviour:
     animator: {fileID: 9100000, guid: 465b78c2940d84fd4accb61fafab58e5, type: 2}
     scale: 1
     texture: {fileID: 2800000, guid: 6c6075b8eac2e6f47b392edf2759e6a0, type: 3}
-  frostyModel: {fileID: 0}
+  frostyModel: {fileID: 919132149155446097, guid: ed4afbfdd9bd342cab41262ff95ff291, type: 3}
+  frostyTexture: {fileID: 2800000, guid: b47b89165ffec4ab282523061aba0a23, type: 3}
   polaroidModel: {fileID: 0}
   sledModel: {fileID: 0}
   music: {fileID: 0}

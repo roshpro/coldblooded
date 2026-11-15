@@ -194,9 +194,10 @@ namespace FrostAndFound
             var m = new Material(FrostAssets.ToonShader(false)) { name = name };
             if (tex) m.SetTexture("_BaseMap", tex);
             m.SetColor("_BaseColor", Color.white);
-            m.SetColor("_ShadeColor", new Color(0.7f, 0.74f, 0.88f));   // a cool, light shade (multiplied by the texture)
+            m.SetColor("_ShadeColor", new Color(0.8f, 0.83f, 0.93f));   // a cool, light shade (multiplied by the texture)
             m.SetColor("_RimColor", new Color(0.92f, 0.96f, 1f));
-            m.SetFloat("_RimStrength", 0.14f);
+            m.SetFloat("_RimStrength", 0.08f);
+            m.SetFloat("_ShadowStrength", 0.4f);
             m.SetFloat("_RimPower", 3f);
             m.SetFloat("_BandThreshold", 0.42f);
             m.SetFloat("_BandSoftness", 0.34f);

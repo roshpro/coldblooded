@@ -47,6 +47,8 @@ namespace FrostAndFound
 
         protected override Pose PoseFor() => Pose.Flex;
         protected override bool WandersWhenIdle => State == TonyState.Idle;
+        // he keeps away from his own sled so it doesn't give him away
+        protected override bool WanderSpotOk(Vector3 p) => !Sled || FrostUtil.FlatDistance(p, Sled.transform.position) > 1.4f;
 
         public override void OnPhotographed(PhotoData photo)
         {
@@ -303,9 +305,26 @@ namespace FrostAndFound
         }
     }
 
-    /// <summary>Tony's red sled with a big fresh dent. He drags it everywhere on a rope; it leaves runner tracks.</summary>
+    /// <summary>Tony's red sled with a big fresh dent. It stands planted upright in the snow somewhere in the room, so
+    /// it isn't obviously his until the clues lead there; when it moves it leaves runner tracks.</summary>
     public class Sled : MonoBehaviour
     {
+        bool m_Planted;
+        const float Size = 0.75f;   // a kid's sled, not a toboggan
+
+        /// <summary>Stand it up on its tail in the snow at pos, deck and dent facing into the room.</summary>
+        public void Plant(Vector3 pos, Vector3 faceDir)
+        {
+            m_Planted = true;
+            if (m_Rope) m_Rope.enabled = false;
+            faceDir = faceDir.Flat().sqrMagnitude > 1e-4f ? faceDir.Flat().normalized : Vector3.forward;
+            float snowY = SnowSurface.Instance ? SnowSurface.Instance.SurfaceHeightAt(pos) : pos.y;
+            // nose up, tail sunk into the snow, leaning back a little as if it was jammed in
+            transform.rotation = Quaternion.AngleAxis(-12f, Vector3.Cross(Vector3.up, faceDir)) * Quaternion.LookRotation(Vector3.up, faceDir);
+            transform.localScale = Vector3.one * Size;
+            transform.position = new Vector3(pos.x, snowY + (0.43f - 0.12f) * Size, pos.z);
+            m_Last = transform.position;
+        }
         TonyKid m_Tony;
         LineRenderer m_Rope;
         Transform m_RopeEnd;
@@ -378,13 +397,14 @@ namespace FrostAndFound
 
         public void HideBehind(Vector3 threat, float seconds)
         {
+            if (m_Planted) return;   // it stays stuck in the snow
             m_HideUntil = Time.time + seconds;
             m_HideFrom = threat;
         }
 
         void LateUpdate()
         {
-            if (!m_Tony) return;
+            if (!m_Tony || m_Planted) return;
             var tony = m_Tony.transform;
             var hand = m_Tony.Rig.HandL ? m_Tony.Rig.HandL.position : tony.position + Vector3.up * 0.4f;
             bool chasing = m_Tony.State != TonyKid.TonyState.Idle;

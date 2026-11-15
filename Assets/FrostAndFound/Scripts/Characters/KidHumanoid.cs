@@ -40,6 +40,51 @@ namespace FrostAndFound
 
         public bool IsHumanoid => m_Humanoid;
         public bool IsThrowing { get; private set; }
+        /// <summary>Only calm idles (a gentle sway, looking round) and no talking hands: for kids whose sleeves twist.</summary>
+        public bool CalmArms;
+        /// <summary>Look here instead of at LookTarget (a friend we walked over to, Frosty...).</summary>
+        public Vector3? LookOverride { get; set; }
+
+        // idle fidgets: the small things people do while standing about
+        enum Gesture { None, LookAround, RubHands, BlowHands, ScratchHead, Stretch, HandsOnHips, ShiftWeight, Wave }
+        Gesture m_Gesture;
+        float m_GestureW, m_TalkW;
+        Vector3 m_GestureLook;
+        bool m_GestureLooks;
+
+        /// <summary>Do one small human thing (glance at lookAt, rub hands, stretch...), if nothing else is going on.</summary>
+        public void Fidget(Vector3 lookAt)
+        {
+            if (!m_Humanoid || m_Gesture != Gesture.None || IsThrowing || m_Pose != Pose.None || m_PointWeight > 0.01f || m_Sit > 0.01f) return;
+            var g = (Gesture)Random.Range(1, 9);
+            if (g == Gesture.Wave && Random.value < 0.6f) g = Gesture.LookAround;   // waves are rarer
+            if (CalmArms) g = Random.value < 0.55f ? Gesture.ShiftWeight : Gesture.LookAround;
+            StartCoroutine(GestureRoutine(g, lookAt));
+        }
+
+        IEnumerator GestureRoutine(Gesture g, Vector3 lookAt)
+        {
+            m_Gesture = g;
+            m_GestureLook = lookAt;
+            m_GestureLooks = g == Gesture.LookAround || g == Gesture.Wave || Random.value < 0.4f;
+            float hold = g switch
+            {
+                Gesture.LookAround => Random.Range(1.8f, 3f),
+                Gesture.HandsOnHips => Random.Range(2f, 3.5f),
+                Gesture.ShiftWeight => Random.Range(2f, 3.2f),
+                Gesture.Stretch => 1.1f,
+                Gesture.Wave => 1.4f,
+                _ => Random.Range(1.2f, 2f),
+            };
+            yield return Ease.Tween(0.35f, k => m_GestureW = k, Ease.InOutCubic, false);
+            float end = Time.time + hold;
+            while (Time.time < end && m_Pose == Pose.None && !IsThrowing && m_PointWeight < 0.01f) yield return null;
+            float from = m_GestureW;
+            yield return Ease.Tween(0.4f, k => m_GestureW = from * (1f - k), Ease.InOutCubic, false);
+            m_GestureW = 0f;
+            m_Gesture = Gesture.None;
+            m_GestureLooks = false;
+        }
 
         bool HasParam(string n) => m_Params != null && m_Params.Contains(n);
 
@@ -58,7 +103,9 @@ namespace FrostAndFound
             m_Height = Rig.Height > 0.3f ? Rig.Height : 1.05f;   // what the model was fitted to (bones aren't posed yet at Start)
             if (m_UpperArmR && m_LowerArmR && Rig.HandR)
                 m_ArmLen = Vector3.Distance(m_UpperArmR.position, m_LowerArmR.position) + Vector3.Distance(m_LowerArmR.position, Rig.HandR.position);
-            // the walk and run cycles' natural ground speed on this body, so pace can match it
+            // the walk and run cycles' natural ground speed on this body, so pace can match it (longer legs, longer strides)
+            m_WalkSpeed = 0.75f * m_Height / 1.05f;
+            m_RunSpeed = 2f * m_Height / 1.05f;
             float hs = Animator.humanScale * Animator.transform.lossyScale.y;
             foreach (var clip in Animator.runtimeAnimatorController.animationClips)
             {
@@ -110,9 +157,10 @@ namespace FrostAndFound
             Vector3 root = transform.position, fwd = transform.forward, right = transform.right, up = Vector3.up;
 
             // ---- look at you (head, a touch of chest), fading out when you're behind them or they're mid-throw
-            if (LookTarget)
+            if (LookTarget || LookOverride.HasValue)
             {
-                var want = LookTarget.position;
+                var want = LookOverride ?? LookTarget.position;
+                if (m_GestureLooks && m_GestureW > 0.001f) want = Vector3.Lerp(want, m_GestureLook, m_GestureW);
                 m_LookPos = m_HasLook ? Vector3.Lerp(m_LookPos, want, 1f - Mathf.Exp(-6f * dt)) : want;
                 m_HasLook = true;
                 var toT = (want - root).Flat();
@@ -133,8 +181,11 @@ namespace FrostAndFound
             float lower = bodyH * (0.4f * m_Duck + 0.42f * m_Scoop + 0.3f * m_DiveWeight + 0.6f * m_Sit);
             float pitch = 26f * m_Duck + 34f * m_Scoop + 16f * m_Lean - 14f * m_HitKick - 8f * m_Sit;
             if (m_Pose == Pose.Flex) pitch -= 6f * m_PoseWeight;
+            if (m_Gesture == Gesture.Stretch) pitch -= 7f * m_GestureW;
             float roll = -42f * m_DiveSide * m_DiveWeight;
-            a.bodyPosition = a.bodyPosition + Vector3.down * lower + right * (m_DiveSide * m_DiveWeight * 0.2f * H) - fwd * (0.05f * H * m_Sit);
+            float sway = m_Gesture == Gesture.ShiftWeight ? Mathf.Sin(t * 1.7f) * 0.03f * H * m_GestureW : 0f;
+            roll += m_Gesture == Gesture.ShiftWeight ? Mathf.Sin(t * 1.7f) * 3f * m_GestureW : 0f;
+            a.bodyPosition = a.bodyPosition + Vector3.down * lower + right * (m_DiveSide * m_DiveWeight * 0.2f * H + sway) - fwd * (0.05f * H * m_Sit);
             a.bodyRotation = Quaternion.AngleAxis(pitch, right) * Quaternion.AngleAxis(roll, fwd) * a.bodyRotation;
             float plant = Mathf.Clamp01(Mathf.Max(Mathf.Max(m_Duck, m_Scoop), Mathf.Max(m_DiveWeight, m_Sit)));
             if (plant > 0.001f)
@@ -160,6 +211,43 @@ namespace FrostAndFound
                 if (weight <= 0.001f) return;
                 g = w <= 0.001f ? goal : Vector3.Lerp(g, goal, weight);
                 w = Mathf.Max(w, weight);
+            }
+            // idle fidgets (lowest priority: anything the story asks for wins)
+            if (m_Gesture != Gesture.None && m_GestureW > 0.001f)
+            {
+                float w = m_GestureW * 0.9f, rub = Mathf.Sin(t * 14f) * 0.015f * H;
+                switch (m_Gesture)
+                {
+                    case Gesture.RubHands:
+                        Layer(ref gl, ref wl, chest + fwd * 0.16f * H - right * 0.02f * H + right * rub - up * 0.05f * H, w);
+                        Layer(ref gr, ref wr, chest + fwd * 0.16f * H + right * 0.02f * H - right * rub - up * 0.05f * H, w);
+                        break;
+                    case Gesture.BlowHands:
+                        Layer(ref gl, ref wl, head + fwd * 0.12f * H - up * 0.06f * H - right * 0.025f * H, w);
+                        Layer(ref gr, ref wr, head + fwd * 0.12f * H - up * 0.06f * H + right * 0.025f * H, w);
+                        break;
+                    case Gesture.ScratchHead:
+                        Layer(ref gr, ref wr, head + right * 0.09f * H + up * (0.06f + Mathf.Sin(t * 12f) * 0.012f) * H, w);
+                        break;
+                    case Gesture.Stretch:
+                        Layer(ref gl, ref wl, shL + up * 0.5f * H - right * 0.05f * H, w);
+                        Layer(ref gr, ref wr, shR + up * 0.5f * H + right * 0.05f * H, w);
+                        break;
+                    case Gesture.HandsOnHips:
+                        Layer(ref gl, ref wl, root + up * 0.5f * H - right * 0.17f * H, w);
+                        Layer(ref gr, ref wr, root + up * 0.5f * H + right * 0.17f * H, w);
+                        break;
+                    case Gesture.Wave:
+                        Layer(ref gr, ref wr, shR + up * 0.42f * H + right * (0.12f + Mathf.Sin(t * 9f) * 0.05f) * H + fwd * 0.05f * H, w);
+                        break;
+                }
+            }
+            // talking: small explaining hands
+            m_TalkW = Mathf.MoveTowards(m_TalkW, Talking && !CalmArms && m_Pose == Pose.None && !IsThrowing ? 1f : 0f, dt * 2.5f);
+            if (m_TalkW > 0.001f)
+            {
+                Layer(ref gr, ref wr, chest + fwd * 0.2f * H + right * 0.08f * H + up * (Mathf.Sin(t * 3.1f) * 0.04f - 0.03f) * H, m_TalkW * 0.45f);
+                Layer(ref gl, ref wl, chest + fwd * 0.17f * H - right * 0.1f * H + up * (Mathf.Sin(t * 2.3f + 1f) * 0.03f - 0.06f) * H, m_TalkW * 0.25f);
             }
             // sitting dazed: hands down in the snow beside you
             Layer(ref gl, ref wl, root - right * 0.2f * H + fwd * 0.02f * H + up * 0.06f * H, m_Sit);

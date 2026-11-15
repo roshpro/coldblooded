@@ -77,14 +77,15 @@ namespace FrostAndFound
             var smr = model.GetComponentInChildren<SkinnedMeshRenderer>();
             if (smr)
             {
-                // our kids stand ~1.05 m tall (Visual carries each character's scale on top)
-                float h = smr.bounds.size.y / Mathf.Max(1e-4f, rig.Visual.lossyScale.y);
-                float want = 1.05f * (slot != null && slot.scale > 0f ? slot.scale : 1f);
+                // our kids stand ~1.37 m tall (Visual carries each character's scale on top)
+                float h = MeshHeight(smr) / Mathf.Max(1e-4f, rig.Visual.lossyScale.y);
+                float want = 1.37f * (slot != null && slot.scale > 0f ? slot.scale : 1f);
                 if (h > 0.05f) model.localScale *= want / h;
                 rig.Height = want * rig.Visual.lossyScale.y;
                 smr.sharedMaterial = Palette.SoftTextured(slot != null ? slot.texture : null, "Kid_" + model.root.name);
+                // casts onto the snow, but no self-shadowing: a big hat brim would otherwise put the whole body in grey shade
                 smr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
-                smr.receiveShadows = true;
+                smr.receiveShadows = false;
                 smr.updateWhenOffscreen = true;
             }
             Transform B(HumanBodyBones b) => anim.GetBoneTransform(b);
@@ -103,6 +104,111 @@ namespace FrostAndFound
             bubble.SetParent(rig.Head, false);
             bubble.position = rig.Head.position + Vector3.up * 0.3f * rig.Visual.lossyScale.y;
             rig.BubbleAnchor = bubble;
+            HumanoidProps(rig, slot != null ? slot.character : CastId.Lucy, rig.Visual.parent, smr);
+        }
+
+        // ================================================================== rigged kids: the story's props
+        /// <summary>The Meshy models don't carry the story's props, so they're built here and held by the real bones:
+        /// Sherman's bitten carrot (clue 2), orange stains and books, Dexter's leaking thermos, Serena's handbag.</summary>
+        static void HumanoidProps(KidRig rig, CastId id, Transform kid, SkinnedMeshRenderer smr)
+        {
+            float s = rig.Scale;
+            switch (id)
+            {
+                case CastId.Sherman:
+                {
+                    var carrot = PropMount.Create("Carrot", rig.HandR, kid, new Vector3(0.01f, -0.045f, 0.05f), new Vector3(70f, 0f, 0f), s);
+                    P("Carrot", carrot, ProcMesh.Cylinder(10, 0.25f), M(Palette.Carrot, true, 0.35f), new Vector3(0, 0.06f, 0), new Vector3(0.05f, 0.15f, 0.05f));
+                    P("Bite", carrot, ProcMesh.Disc(10), M(Palette.Books3, false), new Vector3(0, -0.015f, 0), new Vector3(0.052f, 0.004f, 0.052f));
+                    for (int i = 0; i < 3; i++)
+                        P("Bite Mark", carrot, LowBall, M(Palette.Apron, false), new Vector3(Mathf.Cos(i * 2.1f) * 0.022f, -0.012f, Mathf.Sin(i * 2.1f) * 0.022f), Vector3.one * 0.014f);
+                    P("Leaf", carrot, ProcMesh.Cone(6), M(Palette.CarrotLeaf, true), new Vector3(0.008f, -0.04f, 0), new Vector3(0.02f, 0.06f, 0.02f), new Vector3(180, 0, 10));
+                    P("Leaf", carrot, ProcMesh.Cone(6), M(Palette.CarrotLeaf, true), new Vector3(-0.008f, -0.04f, 0), new Vector3(0.02f, 0.06f, 0.02f), new Vector3(180, 0, -14));
+                    var books = PropMount.Create("Books", rig.HandL, kid, new Vector3(-0.02f, -0.03f, 0.07f), new Vector3(0f, 20f, 0f), s);
+                    Color[] cols = { Palette.Books1, Palette.Books2, Palette.Books3 };
+                    for (int i = 0; i < 3; i++)
+                    {
+                        P("Book", books, ProcMesh.RoundedBox(0.08f, 1), M(cols[i], true), new Vector3(0.005f * i, i * 0.042f, 0), new Vector3(0.12f, 0.04f, 0.16f), new Vector3(0, i * 7f - 6f, 0));
+                        P("Pages", books, ProcMesh.RoundedBox(0.05f, 1), M(Palette.Paper, false), new Vector3(0.005f * i + 0.008f, i * 0.042f, 0), new Vector3(0.112f, 0.03f, 0.152f), new Vector3(0, i * 7f - 6f, 0));
+                    }
+                    // orange carrot stains on the front of the snowsuit (they glint with the carrot in step 2)
+                    if (rig.Spine && smr)
+                    {
+                        var stains = new GameObject("Stains").transform;
+                        stains.SetParent(rig.Spine, false);
+                        stains.SetPositionAndRotation(BodyFront(smr, kid, rig.Spine.position, s) + kid.forward * 0.004f * s, kid.rotation);
+                        stains.localScale = Vector3.one * (s / WorldScale(rig.Spine));
+                        var stain = M(Palette.Carrot, false, 0.1f);
+                        P("Stain", stains, ProcMesh.Sphere(10, 8), stain, new Vector3(0.05f, 0.0f, 0f), new Vector3(0.07f, 0.05f, 0.015f), new Vector3(0, 0, 20));
+                        P("Stain", stains, ProcMesh.Sphere(10, 8), stain, new Vector3(-0.06f, -0.05f, 0f), new Vector3(0.045f, 0.035f, 0.012f));
+                        P("Stain", stains, ProcMesh.Sphere(10, 8), stain, new Vector3(0.0f, 0.06f, 0f), new Vector3(0.03f, 0.025f, 0.01f));
+                    }
+                    break;
+                }
+                case CastId.Dexter:
+                {
+                    // a steaming mug of his cocoa (twenty-five cents)
+                    // held by its handle: the handle sits in his fist, the mug just in front of his hand
+                    var mug = PropMount.Create("Mug", rig.HandR, kid, new Vector3(0.0f, -0.085f, 0.045f), new Vector3(0f, 90f, 0f), s);
+                    var ceramic = M(Palette.Paper, true, 0.3f);
+                    P("Mug", mug, ProcMesh.Cylinder(18), ceramic, new Vector3(0, 0.04f, 0), new Vector3(0.078f, 0.085f, 0.078f));
+                    P("Stripe", mug, ProcMesh.Cylinder(18), M(Palette.SledRed, false, 0.3f), new Vector3(0, 0.055f, 0), new Vector3(0.0795f, 0.014f, 0.0795f));
+                    P("Cocoa", mug, ProcMesh.Disc(16), M(Palette.Cocoa, false, 0.2f), new Vector3(0, 0.078f, 0), new Vector3(0.068f, 0.002f, 0.068f));
+                    P("Handle", mug, ProcMesh.Torus(0.42f, 0.13f, 14, 6), ceramic, new Vector3(0.045f, 0.04f, 0), new Vector3(0.055f, 0.055f, 0.055f), new Vector3(90, 0, 0));
+                    ThermosSteam.Attach(ProcMesh.Pivot("Steam", mug, new Vector3(0, 0.09f, 0)));
+                    break;
+                }
+                case CastId.Serena:
+                {
+                    var bag = PropMount.Create("Handbag", rig.HandL, kid, new Vector3(0.0f, -0.1f, 0.01f), Vector3.zero, s);
+                    P("Bag", bag, ProcMesh.RoundedBox(0.3f, 3), M(Palette.PinkBag, true, 0.4f), Vector3.zero, new Vector3(0.15f, 0.11f, 0.06f));
+                    P("Strap", bag, ProcMesh.Torus(0.4f, 0.05f, 16, 6), M(Palette.PinkBag * 0.8f + Palette.Paper * 0.2f, true), new Vector3(0, 0.07f, 0), new Vector3(0.12f, 0.12f, 0.12f), new Vector3(90, 0, 0));
+                    P("Clasp", bag, LowBall, M(Palette.Gold, false, 0.6f), new Vector3(0, 0.03f, 0.032f), Vector3.one * 0.018f);
+                    break;
+                }
+            }
+            foreach (var r in kid.GetComponentsInChildren<Renderer>(true)) if (!(r is SkinnedMeshRenderer)) r.gameObject.layer = Layers.Kid;
+        }
+
+        /// <summary>The body's real standing height from its mesh (the renderer's own bounds are padded on these models).</summary>
+        static float MeshHeight(SkinnedMeshRenderer smr)
+        {
+            var mesh = smr.sharedMesh;
+            if (!mesh) return smr.bounds.size.y;
+            var b = mesh.bounds;
+            var m = smr.transform.localToWorldMatrix;
+            float lo = float.MaxValue, hi = float.MinValue;
+            for (int i = 0; i < 8; i++)
+            {
+                var c = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                float y = m.MultiplyPoint3x4(c).y;
+                lo = Mathf.Min(lo, y); hi = Mathf.Max(hi, y);
+            }
+            return hi - lo;
+        }
+
+        /// <summary>How big one local unit of t is in the world. Not lossyScale, which goes badly wrong through the
+        /// Meshy rigs' rotated, 100×-scaled bone chains.</summary>
+        public static float WorldScale(Transform t) =>
+            Mathf.Max(1e-5f, (t.TransformVector(Vector3.right).magnitude + t.TransformVector(Vector3.up).magnitude + t.TransformVector(Vector3.forward).magnitude) / 3f);
+
+        /// <summary>Where the body's surface is in front of a point (from the mesh's rest pose), so things stuck on clothes sit on them.</summary>
+        static Vector3 BodyFront(SkinnedMeshRenderer smr, Transform kid, Vector3 at, float s)
+        {
+            var mesh = smr.sharedMesh;
+            float best = 0.06f * s;
+            if (mesh && mesh.isReadable)
+            {
+                var m = smr.transform.localToWorldMatrix;
+                foreach (var v in mesh.vertices)
+                {
+                    var d = m.MultiplyPoint3x4(v) - at;
+                    if (Mathf.Abs(d.y) > 0.06f * s || Mathf.Abs(Vector3.Dot(d, kid.right)) > 0.06f * s) continue;
+                    float f = Vector3.Dot(d, kid.forward);
+                    if (f > best && f < 0.3f * s) best = f;
+                }
+            }
+            return at + kid.forward * best;
         }
 
         static void BindCustom(KidRig rig, Transform model)
@@ -395,6 +501,46 @@ namespace FrostAndFound
                       new[] { new GradientAlphaKey(0, 0), new GradientAlphaKey(0.5f, 0.2f), new GradientAlphaKey(0, 1) });
             col.color = g;
             ps.Play();
+        }
+    }
+
+    /// <summary>Holds a prop against a bone: seated in the kid's frame once the body has its first animated pose,
+    /// then it simply rides the bone (so it moves with the hand or chest).</summary>
+    public class PropMount : MonoBehaviour
+    {
+        Transform m_Bone, m_Kid;
+        Vector3 m_Offset;
+        Quaternion m_Rot;
+        float m_Scale;
+        int m_Frames;
+
+        public static Transform Create(string name, Transform bone, Transform kid, Vector3 offset, Vector3 euler, float scale)
+        {
+            var go = new GameObject(name);
+            go.layer = Layers.Kid;
+            go.transform.SetParent(bone, false);
+            var pm = go.AddComponent<PropMount>();
+            pm.m_Bone = bone; pm.m_Kid = kid; pm.m_Offset = offset; pm.m_Rot = Quaternion.Euler(euler); pm.m_Scale = scale;
+            pm.Seat();
+            return go.transform;
+        }
+
+        /// <summary>Sized relative to the kid's own current scale (kids pop in from nothing when they appear), so the
+        /// ratio to the bone stays right whatever moment this runs.</summary>
+        bool Seat()
+        {
+            if (!m_Bone || !m_Kid) return false;
+            float kidScale = KidBuilder.WorldScale(m_Kid);
+            if (kidScale < 0.5f) return false;
+            transform.SetPositionAndRotation(m_Bone.position + m_Kid.rotation * (m_Offset * m_Scale * kidScale), m_Kid.rotation * m_Rot);
+            transform.localScale = Vector3.one * (m_Scale * kidScale / KidBuilder.WorldScale(m_Bone));
+            return true;
+        }
+
+        void LateUpdate()
+        {
+            if (++m_Frames < 2) return;
+            if (Seat()) enabled = false;
         }
     }
 }

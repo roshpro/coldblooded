@@ -46,9 +46,9 @@ namespace FrostAndFound
 
         [Header("Snow & snowballs")]
         [Tooltip("Hand must be this close to the snow surface to scoop.")]
-        public float scoopHeight = 0.16f;
-        [Range(0f, 1f)] public float gripClosed = 0.72f;
-        [Range(0f, 1f)] public float gripOpen = 0.35f;
+        public float scoopHeight = 0.24f;
+        [Range(0f, 1f)] public float gripClosed = 0.6f;
+        [Range(0f, 1f)] public float gripOpen = 0.42f;
         public float snowballRadius = 0.04f;
         [Tooltip("Hand-tracked throws under-read speed; this compensates a little.")]
         public float throwMultiplierHands = 1.2f;

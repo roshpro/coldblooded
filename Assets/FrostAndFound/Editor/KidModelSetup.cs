@@ -24,7 +24,7 @@ namespace FrostAndFound.EditorTools
         static readonly (CastId id, string folder, bool girl)[] Kids =
         {
             (CastId.Dexter, "Dexter", false), (CastId.Sherman, "Sherman", false), (CastId.Serena, "Serena", true),
-            (CastId.Lucy, "Lucy", true), (CastId.Tony, "Tony", false),
+            (CastId.Lucy, "Lucy", false), (CastId.Tony, "Tony", false),   // Lucy uses the boys' set: the girls' idle twisted her sleeves
         };
 
         [MenuItem("Frost & Found/Setup/Kid Models")]
@@ -67,6 +67,42 @@ namespace FrostAndFound.EditorTools
             AssetDatabase.SaveAssets();
             log.AppendLine($"hub: {slots.Count} kid models");
             return log.ToString();
+        }
+
+        /// <summary>The team's snowman (a fallen, flattened snowman lying in the snow): import 1:1, pull its texture out
+        /// of the FBX, and register it as Frosty's model.</summary>
+        [MenuItem("Frost & Found/Setup/Snowman Model")]
+        public static string Snowman()
+        {
+            const string dir = "Assets/FrostAndFound/Art/Snowman/";
+            string fbx = dir + "Snowman.fbx";
+            var mi = AssetImporter.GetAtPath(fbx) as ModelImporter;
+            if (!mi) return "ERROR: " + fbx + " missing";
+            mi.globalScale = 1f;
+            mi.importAnimation = false;
+            mi.animationType = ModelImporterAnimationType.None;
+            mi.isReadable = true;           // the MeshCollider needs it on device
+            mi.SaveAndReimport();
+            var tex = AssetDatabase.LoadAllAssetsAtPath(dir + "Textures").Length == 0 ? null : (Texture2D)null;
+            if (!AssetDatabase.IsValidFolder(dir + "Textures")) AssetDatabase.CreateFolder("Assets/FrostAndFound/Art/Snowman", "Textures");
+            mi.ExtractTextures(dir + "Textures");
+            AssetDatabase.Refresh();
+            foreach (var guid in AssetDatabase.FindAssets("t:Texture2D", new[] { dir + "Textures" }))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                SetupTexture(path);
+                break;
+            }
+            var hub = Resources.Load<FrostAssets>("FrostAssets");
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(fbx);
+            hub.frostyModel = model;
+            hub.frostyTexture = tex;
+            EditorUtility.SetDirty(hub);
+            AssetDatabase.SaveAssets();
+            var mf = model ? model.GetComponentInChildren<MeshFilter>() : null;
+            var b = mf && mf.sharedMesh ? mf.sharedMesh.bounds : default;
+            return $"snowman: model {(model ? "ok" : "MISSING")}, texture {(tex ? tex.name + " " + tex.width + "px" : "MISSING")}, mesh bounds centre {b.center:F3} size {b.size:F3}, node rot {(mf ? mf.transform.localEulerAngles.ToString("F0") : "-")} scale {(mf ? mf.transform.lossyScale.ToString("F3") : "-")}";
         }
 
         static AnimationClip Clip(string fbx) =>
@@ -122,6 +158,7 @@ namespace FrostAndFound.EditorTools
                 mi.SaveAndReimport();
                 existing = AssetDatabase.LoadAllAssetsAtPath(fbx).OfType<Avatar>().FirstOrDefault();
             }
+            if (!mi.isReadable) { mi.isReadable = true; mi.SaveAndReimport(); }   // props find the clothes' surface from the mesh
             bool ok = existing && existing.isHuman && existing.isValid;
             log.AppendLine($"{fbx.Substring(Root.Length)}: humanoid {(ok ? "ok" : "FAILED")}{(good ? " (kept the team's avatar)" : " (rebuilt)")}");
             return ok ? existing : null;

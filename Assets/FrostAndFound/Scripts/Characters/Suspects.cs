@@ -152,6 +152,12 @@ namespace FrostAndFound
         Transform m_GlanceTarget;
         protected override Pose PoseFor() => Pose.BlockLens;
 
+        protected override void Build()
+        {
+            base.Build();
+            if (Anim) Anim.CalmArms = true;   // a gentle sway: her coat sleeves twist with the arm gestures
+        }
+
         protected override void HitGag()
         {
             StartCoroutine(Scribble());
@@ -160,7 +166,7 @@ namespace FrostAndFound
         IEnumerator Scribble()
         {
             Busy = true;
-            Anim.StrikePose(Pose.ArmsCrossed, 1.2f);
+            Anim.StrikePose(Pose.Shrug, 1.0f);   // a shrug, not folded arms
             AudioDirector.PlayAt(Sfx.Scribble, Rig.HandL ? Rig.HandL.position : HeadPoint, 0.7f, 1f);
             yield return new WaitForSeconds(1.5f);
             Busy = false;
