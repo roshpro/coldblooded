@@ -118,3 +118,6 @@ Code, folders and the package id (`com.immersethebay.frostandfound`) still use t
 - Depth occlusion has soft edges, like the Quest's depth sensor itself; held items and anything within about 45 cm of your eyes are never occluded.
 - Without doors or furniture in Space Setup, the opening uses a free-standing door and the furniture features stay off.
 - If you recompile scripts *during* Play mode in the Editor, MRUK can log "Global context has already been created" on the next play. It's harmless: stop Play before editing code.
+
+## License
+The code is released under the [MIT License](LICENSE). Some assets in the repo keep their own terms: the fonts (see `Assets/FrostAndFound/Fonts/LICENSES.md`), the ElevenLabs voice clips and the Meshy character models (each under that service's terms). The Meta XR SDK, MRUK and Unity packages aren't stored here and stay under their own licenses.
