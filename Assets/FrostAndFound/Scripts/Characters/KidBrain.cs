@@ -37,7 +37,7 @@ namespace FrostAndFound
     /// </summary>
     public class KidBrain
     {
-        enum Act { None, Idle, Roam, Chat, Frosty, Player, Explore, Dash, Retreat, Furniture }
+        enum Act { None, Idle, Roam, Chat, Frosty, Player, Explore, Dash, Retreat, Furniture, Disperse }
         enum Phase { Deciding, Walking, Lingering }
 
         readonly Kid m_Kid;
@@ -49,6 +49,7 @@ namespace FrostAndFound
         Kid m_Friend;
         Vector3 m_LookAt;
         readonly Queue<Vector3> m_Visited = new Queue<Vector3>();
+        float m_CrowdedSince = -1f, m_DisperseAfter;
 
         public KidBrain(Kid kid)
         {
@@ -78,6 +79,25 @@ namespace FrostAndFound
                     var p = me + Quaternion.Euler(0f, (i - 2) * 30f, 0f) * away * 0.6f;
                     if (KidNav.Walkable(p) && Go(Act.Retreat, p, 0.75f)) return;
                 }
+            }
+
+            // standing in a heap, wedged in a corner with someone, or right in the middle of your shot: after a
+            // moment (each kid's own, so they don't all scatter at once) slip off somewhere with more room
+            if (m_Phase != Phase.Walking && m_Act != Act.Retreat)
+            {
+                bool inShot = InShot(player, me);
+                if (inShot || Bunched(me))
+                {
+                    if (m_CrowdedSince < 0f) { m_CrowdedSince = Time.time; m_DisperseAfter = inShot ? Random.Range(0.3f, 0.9f) : Random.Range(0.5f, 2.2f); }
+                    else if (Time.time - m_CrowdedSince > m_DisperseAfter)
+                    {
+                        m_CrowdedSince = -1f;
+                        if (Disperse(player, inShot)) return;
+                        m_CrowdedSince = Time.time;   // nowhere better right now: try again in a bit
+                        m_DisperseAfter = Random.Range(1.5f, 3f);
+                    }
+                }
+                else m_CrowdedSince = -1f;
             }
 
             switch (m_Phase)
@@ -118,7 +138,7 @@ namespace FrostAndFound
                 [Act.Chat] = Time.time > m_NextChat ? 1.1f * m_P.social : 0f,
                 [Act.Frosty] = Frosty.Instance ? 0.8f * m_P.frosty : 0f,
                 [Act.Player] = Time.time > m_NextPlayerVisit ? 0.9f * m_P.player : 0f,
-                [Act.Explore] = 0.6f * m_P.explore,
+                [Act.Explore] = 0.6f * m_P.explore * (SmallRoom ? 0.45f : 1f),   // in a small room the walls are where they pile up
                 // your real sofa, table and cabinets (only when Space Setup marked some)
                 [Act.Furniture] = RoomService.Current != null && RoomService.Current.Furniture.Count > 0 ? 0.55f * m_P.explore + 0.15f : 0f,
             };
@@ -173,7 +193,7 @@ namespace FrostAndFound
                         var p = new Vector3(Random.Range(b.xMin, b.xMax), room.FloorY, Random.Range(b.yMin, b.yMax));
                         float d = FrostUtil.FlatDistance(p, me);
                         if (d < minWalk || d > range || !SpotOk(p, player, 0.95f)) continue;
-                        float s = Mathf.Min(Crowd(p), 2.5f) + Novelty(p) * 0.8f + Random.Range(0f, 1.2f);
+                        float s = Mathf.Min(Crowd(p), 2.5f) + Novelty(p) * 0.8f + Mathf.Min(room.EdgeDistance(p.XZ()), 0.9f) * 0.8f + Random.Range(0f, 1.2f);
                         if (s > bestScore) { bestScore = s; best = p; }
                     }
                     if (bestScore == float.MinValue) return false;
@@ -209,11 +229,13 @@ namespace FrostAndFound
                     var fr = Frosty.Instance;
                     if (!fr) return false;
                     var c = fr.transform.position;
-                    for (int i = 0; i < 12; i++)
+                    float reach = fr.BodyReach + 0.7f;
+                    for (int i = 0; i < 20; i++)
                     {
-                        float ang = Random.Range(0f, Mathf.PI * 2f);
-                        var p = c + new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * (Frosty.FootprintRadius + Random.Range(0.3f, 0.6f));
-                        if (!SpotOk(p, player, 0.9f)) continue;
+                        // somewhere along his side, a short step back from him
+                        var p = c + new Vector3(Random.Range(-reach, reach), 0f, Random.Range(-reach, reach));
+                        float gap = fr.BodyGap(p);
+                        if (gap < 0.3f || gap > 0.7f || !SpotOk(p, player, 0.9f)) continue;
                         m_LookAt = c + Vector3.up * 0.15f;
                         return Go(a, p, Speed(a));
                     }
@@ -226,7 +248,9 @@ namespace FrostAndFound
                     var fwd = player.FlatForward;
                     for (int i = 0; i < 12; i++)
                     {
-                        var p = head.Flat() + Quaternion.Euler(0f, Random.Range(-60f, 60f), 0f) * fwd * Random.Range(1.2f, 1.7f);
+                        // off to one side of where you're looking, so we're not in the way of your shot
+                        float ang = Random.Range(25f, 65f) * (Random.value < 0.5f ? -1f : 1f);
+                        var p = head.Flat() + Quaternion.Euler(0f, ang, 0f) * fwd * Random.Range(1.2f, 1.7f);
                         p.y = room.FloorY;
                         if (!SpotOk(p, player, 0.9f)) continue;
                         m_LookAt = Vector3.zero;   // (looking at you is the default when you're near)
@@ -303,6 +327,7 @@ namespace FrostAndFound
                 Act.Explore => Random.Range(2f, 4f),
                 Act.Furniture => Random.Range(4f, 8f),
                 Act.Retreat => Random.Range(0.8f, 1.6f),
+                Act.Disperse => Random.Range(1.5f, 3.5f),
                 Act.Dash => Random.Range(0.6f, 1.5f),
                 _ => Random.Range(0.4f, 2.2f) * (1.4f - m_P.energy),
             };
@@ -339,6 +364,94 @@ namespace FrostAndFound
             return true;
         }
 
+        static bool SmallRoom
+        {
+            get { var r = RoomService.Current; return r != null && r.Bounds.width * r.Bounds.height < 14f; }
+        }
+
+        /// <summary>Three or more of us standing in a heap, someone right on top of us (a chat is fine at arm's
+        /// length), or two of us wedged by a wall.</summary>
+        bool Bunched(Vector3 me)
+        {
+            int near = 0;
+            float closest = 10f;
+            foreach (var k in Kid.All)
+            {
+                if (!k || k == m_Kid || k.IsMoving) continue;
+                float d = FrostUtil.FlatDistance(me, k.transform.position);
+                if (d < 1.15f) near++;
+                closest = Mathf.Min(closest, d);
+            }
+            if (near >= 2) return true;
+            if (closest < 0.65f && m_Act != Act.Chat) return true;
+            var room = RoomService.Current;
+            return near >= 1 && m_Act != Act.Chat && room != null && room.EdgeDistance(me.XZ()) < 0.5f;
+        }
+
+        /// <summary>The Polaroid is up and we're standing between it and Frosty or the clue it's after.</summary>
+        bool InShot(PlayerRig player, Vector3 me)
+        {
+            var cam = PolaroidCamera.Instance;
+            if (!cam || !cam.IsRaised || !cam.Lens) return false;
+            var from = cam.Lens.transform.position;
+            var aim = cam.Lens.transform.forward;
+            var toMe = m_Kid.ChestPoint - from;
+            float myDist = toMe.magnitude;
+            if (myDist > 2.6f || Vector3.Angle(aim, toMe) > 13f) return false;
+            // only if there's something past us you're trying to get: Frosty or the clue you need
+            var director = CaseDirector.I;
+            var clue = director ? Clue.Find(director.CurrentClue) : null;
+            if (clue && Behind(from, aim, clue.FocusPoint, myDist)) return true;
+            var fr = Frosty.Instance;
+            return fr && Behind(from, aim, fr.AimPoint, myDist);
+        }
+
+        static bool Behind(Vector3 from, Vector3 aim, Vector3 target, float myDist)
+        {
+            var to = target - from;
+            return to.magnitude > myDist + 0.3f && Vector3.Angle(aim, to) < 18f;
+        }
+
+        /// <summary>Somewhere with room to breathe: away from the others, off the walls, and out of the middle of your
+        /// view, not too far from here. Small rooms relax how much space we ask for.</summary>
+        bool Disperse(PlayerRig player, bool outOfShot)
+        {
+            var room = RoomService.Current;
+            if (room == null) return false;
+            var me = m_Kid.transform.position;
+            var head = player.Head.position;
+            var cam = PolaroidCamera.Instance;
+            var look = outOfShot && cam && cam.Lens ? cam.Lens.transform.forward.Flat() : player.FlatForward;
+            if (look.sqrMagnitude < 1e-4f) look = player.FlatForward;
+            var b = room.Bounds;
+            foreach (float gap in new[] { 0.95f, 0.75f, 0.6f })
+            {
+                Vector3 best = default; float bestScore = float.MinValue;
+                for (int i = 0; i < 28; i++)
+                {
+                    var p = new Vector3(Random.Range(b.xMin, b.xMax), room.FloorY, Random.Range(b.yMin, b.yMax));
+                    float d = FrostUtil.FlatDistance(p, me);
+                    if (d < 0.7f || d > 3f || !SpotOk(p, player, gap)) continue;
+                    float s = Mathf.Min(CrowdExceptMe(p), 2.5f) * 1.2f + Mathf.Min(room.EdgeDistance(p.XZ()), 1f) - d * 0.25f + Random.Range(0f, 0.4f);
+                    var toP = (p - head).Flat();
+                    if (toP.magnitude < 3f && Vector3.Angle(look, toP) < 25f) s -= 1.5f;   // keep out of the middle of your view
+                    if (s > bestScore) { bestScore = s; best = p; }
+                }
+                if (bestScore == float.MinValue) continue;
+                m_LookAt = Vector3.zero;
+                return Go(Act.Disperse, best, Speed(Act.Roam));
+            }
+            return false;
+        }
+
+        float CrowdExceptMe(Vector3 p)
+        {
+            float m = 10f;
+            foreach (var k in Kid.All)
+                if (k && k != m_Kid) m = Mathf.Min(m, Mathf.Min(FrostUtil.FlatDistance(p, k.transform.position), FrostUtil.FlatDistance(p, k.Destination)));
+            return m;
+        }
+
         static float Crowd(Vector3 p)
         {
             float m = 10f;
@@ -373,26 +486,30 @@ namespace FrostAndFound
         static Vector2 s_Origin;
         static float s_BuiltAt = -100f;
         static Vector3 s_FrostyAt;
+        static Quaternion s_FrostyRot;
 
         static void Ensure()
         {
             var room = RoomService.Current;
             if (room == null) { s_Room = null; return; }
-            var fr = Frosty.Instance ? Frosty.Instance.transform.position : new Vector3(1e4f, 0f, 1e4f);
+            var frosty = Frosty.Instance;
+            var fr = frosty ? frosty.transform.position : new Vector3(1e4f, 0f, 1e4f);
+            var frRot = frosty ? frosty.transform.rotation : Quaternion.identity;
             // the room's obstacles are set once the scene is laid out; refresh now and then in case anything moved
-            if (room == s_Room && s_Free != null && Time.time - s_BuiltAt < 10f && (fr - s_FrostyAt).sqrMagnitude < 0.01f) return;
-            s_Room = room; s_BuiltAt = Time.time; s_FrostyAt = fr;
+            // (he topples over in the intro without moving, so his turn counts too)
+            if (room == s_Room && s_Free != null && Time.time - s_BuiltAt < 10f && (fr - s_FrostyAt).sqrMagnitude < 0.01f && Quaternion.Angle(frRot, s_FrostyRot) < 2f) return;
+            s_Room = room; s_BuiltAt = Time.time; s_FrostyAt = fr; s_FrostyRot = frRot;
             var b = room.Bounds;
             s_Origin = new Vector2(b.xMin, b.yMin);
             s_W = Mathf.Max(1, Mathf.CeilToInt(b.width / Cell));
             s_H = Mathf.Max(1, Mathf.CeilToInt(b.height / Cell));
             s_Free = new bool[s_W * s_H];
-            float frostyR = Frosty.FootprintRadius + 0.1f;
             for (int y = 0; y < s_H; y++)
                 for (int x = 0; x < s_W; x++)
                 {
                     var p = CellPos(x, y);
-                    s_Free[y * s_W + x] = room.IsFree(p, Clearance, WallInset) && FrostUtil.FlatDistance(p, fr) > frostyR;
+                    // round his actual body as he lies, not a circle as long as he is: in a small room that cut the floor in two
+                    s_Free[y * s_W + x] = room.IsFree(p, Clearance, WallInset) && (!frosty || frosty.BodyGap(p) > 0.12f);
                 }
         }
 

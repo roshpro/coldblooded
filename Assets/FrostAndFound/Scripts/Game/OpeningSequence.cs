@@ -5,9 +5,9 @@ using UnityEngine;
 namespace FrostAndFound
 {
     /// <summary>
-    /// "The Knock" (~35 s, paced to give you time to react). A door fades into your room and someone knocks: Lucy,
-    /// muffled, wants you out building a snowman. The door opens and she comes in. Cheerful music; snow falls and slowly
-    /// piles up over the floor while the trees and rocks rise out of it. The music fades. Silence. A LOUD thud a short
+    /// "The Knock". A door fades into your room and someone knocks: Lucy, muffled, wants you out building a snowman.
+    /// Its knob glows: touch the door to let her in (or she barges in after a second round of knocking). Cheerful music;
+    /// snow falls and piles up over the floor while the trees and rocks rise out of it. The music fades. Silence. A LOUD thud a short
     /// way off in the middle of the room: Frosty's body. Once you've seen him, Lucy jabs at him: "It's a cold-blooded MURDER!!"
     /// Sirens blast, red and blue light, the room drains to noir grey, the logo stamps in above the body, the kids pop
     /// in and the case is open. Hold the menu button to skip straight to the investigation.
@@ -93,7 +93,7 @@ namespace FrostAndFound
         }
 
         // ------------------------------------------------------------------ the beats
-        // Paced slowly (~35 s) so there's time to take each moment in.
+        // You can open the door yourself (she barges in if you don't); from there it's about 9.5 s to the thud.
         IEnumerator Run()
         {
             var snow = SnowSurface.Instance;
@@ -102,30 +102,37 @@ namespace FrostAndFound
             // 1. the door fades into the quiet room; a pause; three sharp knocks; Lucy, muffled and impatient
             StartCoroutine(m_Door.Appear());
             yield return new WaitForSeconds(1.8f);
-            for (int i = 0; i < 3; i++)
-            {
-                AudioDirector.PlayAt(Sfx.Knock, m_Door.KnockPoint, 1f, Random.Range(0.96f, 1.04f));
-                m_Door.Rattle();
-                yield return new WaitForSeconds(0.42f);
-            }
-            yield return new WaitForSeconds(0.5f);
-            if (m_Lucy) yield return DialogueRunner.SayAndWait(Lines.Get("lucy_knock"), m_Lucy, true);
-            yield return new WaitForSeconds(1.0f);
+            yield return Knocks(3, 1f);
+            yield return new WaitForSeconds(0.3f);
 
-            // 2. the door swings open and Lucy comes in, a few steps into the room, and cheers at you
-            AudioDirector.PlayAt(Sfx.DoorBang, m_Door.KnockPoint, 0.75f, 1.05f);
-            StartCoroutine(m_Door.BangOpen());
-            if (m_Lucy)
+            // 2. let her in: the knob glows, and a touch on the door (or the knob) opens it. If you don't, she knocks
+            // again, then flings it open herself
+            m_Door.SetInviting(true);
+            if (m_Lucy) DialogueRunner.Say(Lines.Get("lucy_knock"), m_Lucy, true);
+            HandRig opener = null;
+            bool knockedAgain = false;
+            for (float waited = 0f; waited < 6f; )
             {
-                m_Lucy.SetHidden(false);
-                m_Lucy.VoiceMuffled = false;
-                bool arrived = false;
-                m_Lucy.MoveTo(m_LucyStop, 1.0f, () => arrived = true);
-                for (float t = 0f; !arrived && t < 4f; t += Time.deltaTime) yield return null;
-                m_Lucy.Face(m_Player.Head.position, 0.3f);
-                yield return new WaitForSeconds(0.3f);
-                m_Lucy.Anim.StrikePose(Pose.Cheer, 1.6f);
+                if (m_Door.TouchedBy(m_Player, out opener)) break;
+                if (!m_Lucy || !DialogueRunner.IsSpeaking(CastId.Lucy)) waited += Time.deltaTime;   // counting from the end of her line
+                if (!knockedAgain && waited > 3.5f) { knockedAgain = true; StartCoroutine(Knocks(3, 1.2f)); }
+                yield return null;
             }
+            m_Door.SetInviting(false);
+            if (opener != null)
+            {
+                AudioDirector.PlayAt(Sfx.DoorBang, m_Door.KnockPoint, 0.35f, 1.3f);
+                opener.Haptic(0.5f, 0.08f);
+                StartCoroutine(m_Door.SwingOpen());
+            }
+            else
+            {
+                AudioDirector.PlayAt(Sfx.DoorBang, m_Door.KnockPoint, 0.75f, 1.05f);
+                StartCoroutine(m_Door.BangOpen());
+            }
+
+            // Lucy comes in, a few steps into the room, and cheers at you; the snow follows her in
+            if (m_Lucy) StartCoroutine(LucyComesIn());
             yield return new WaitForSeconds(1.0f);
 
             // 3. cheerful music; snow starts falling and slowly piles up; the trees and rocks rise out of it, then the
@@ -137,22 +144,22 @@ namespace FrostAndFound
             NorthernLights.Begin(false);   // the lights fade in over the room with the snow, and stay up all game
             var tracker = GetComponent<FootprintTracker>();
             if (tracker) tracker.enabled = true;
-            const float pileUp = 12f;
+            const float pileUp = 7f;
             StartCoroutine(Settle(snow, pileUp));
-            yield return new WaitForSeconds(2.5f);
-            if (m_Scenery) StartCoroutine(RiseScenery(8.5f));
-            yield return new WaitForSeconds(6.5f);
+            yield return new WaitForSeconds(1.2f);
+            if (m_Scenery) StartCoroutine(RiseScenery(5f));
+            yield return new WaitForSeconds(3.6f);
             foreach (var p in m_Layout.Props)
             {
                 SetVisible(p, true);
                 if (p) Fx.SnowPuff(p.transform.position + Vector3.up * 0.1f, Vector3.up, 14, 0.7f);
             }
-            yield return new WaitForSeconds(pileUp - 9f + 1.5f);
+            yield return new WaitForSeconds(1.6f);
 
             // 4. the music fades away; a beat of silence
-            yield return FadeOut(m_Jingle, 1.6f);
+            yield return FadeOut(m_Jingle, 1.2f);
             m_Jingle = null;
-            yield return new WaitForSeconds(1.6f);
+            yield return new WaitForSeconds(0.8f);
 
             // 5. a LOUD thud in the middle of the room: Frosty, toppled in the snow
             if (frosty)
@@ -218,6 +225,42 @@ namespace FrostAndFound
             StartInvestigation(true);
             yield return new WaitForSeconds(2f);
             Done = true;
+        }
+
+        IEnumerator LucyComesIn()
+        {
+            m_LucyStop = LucyStopClearOf(m_Player.FeetPosition);
+            m_Lucy.SetHidden(false);
+            m_Lucy.VoiceMuffled = false;
+            bool arrived = false;
+            m_Lucy.MoveTo(m_LucyStop, 1.0f, () => arrived = true);
+            for (float t = 0f; !arrived && t < 3f; t += Time.deltaTime) yield return null;
+            m_Lucy.Face(m_Player.Head.position, 0.3f);
+            yield return new WaitForSeconds(0.3f);
+            m_Lucy.Anim.StrikePose(Pose.Cheer, 1.6f);
+        }
+
+        IEnumerator Knocks(int count, float volume)
+        {
+            for (int i = 0; i < count && m_Door; i++)
+            {
+                AudioDirector.PlayAt(Sfx.Knock, m_Door.KnockPoint, volume, Random.Range(0.96f, 1.04f));
+                m_Door.Rattle();
+                yield return new WaitForSeconds(0.42f);
+            }
+        }
+
+        /// <summary>Where Lucy stops inside the door: the planned spot, unless you've walked up to the door to let her
+        /// in, when she steps in beside you instead of into you.</summary>
+        Vector3 LucyStopClearOf(Vector3 feet)
+        {
+            if (FrostUtil.FlatDistance(m_LucyStop, feet) >= 0.9f) return m_LucyStop;
+            var into = m_Door.transform.forward.Flat().normalized;
+            var side = Vector3.Cross(Vector3.up, into);
+            float away = Vector3.Dot(feet - m_DoorPos, side) > 0f ? -1f : 1f;
+            var stop = m_DoorPos + into * 1.0f + side * (away * 0.75f);
+            stop.y = m_LucyStop.y;
+            return stop;
         }
 
         static IEnumerator FadeOut(AudioSource src, float seconds)
@@ -480,7 +523,10 @@ namespace FrostAndFound
     public class IntroDoor : MonoBehaviour
     {
         const float W = 0.92f, H = 2.0f, T = 0.05f;
-        Transform m_Root, m_Leaf;
+        Transform m_Root, m_Leaf, m_Knob;
+        Material m_KnobGlow;
+        bool m_Inviting;
+        float m_InviteFrom;
         public Vector3 KnockPoint => m_Leaf ? m_Leaf.TransformPoint(new Vector3(W * 0.5f, H * 0.62f, 0f)) : transform.position + Vector3.up * 1.2f;
 
         public static IntroDoor Create(Vector3 floorPos, Vector3 facing)
@@ -520,7 +566,10 @@ namespace FrostAndFound
                 ProcMesh.Part("Panel High", m_Leaf, ProcMesh.RoundedBox(0.2f, 2), panel, new Vector3(W * 0.5f + side * 0.2f, H * 0.69f, fz), new Vector3(0.3f, 0.62f, 0.014f));
                 ProcMesh.Part("Panel Low", m_Leaf, ProcMesh.RoundedBox(0.2f, 2), panel, new Vector3(W * 0.5f + side * 0.2f, H * 0.25f, fz), new Vector3(0.3f, 0.5f, 0.014f));
             }
-            ProcMesh.Part("Knob", m_Leaf, ProcMesh.Sphere(12, 8), brass, new Vector3(W - 0.1f, H * 0.47f, T * 0.5f + 0.04f), Vector3.one * 0.07f);
+            var knob = ProcMesh.Part("Knob", m_Leaf, ProcMesh.Sphere(12, 8), brass, new Vector3(W - 0.1f, H * 0.47f, T * 0.5f + 0.04f), Vector3.one * 0.07f);
+            m_Knob = knob.transform;
+            var kr = knob.GetComponent<Renderer>();
+            if (kr) { m_KnobGlow = new Material(kr.sharedMaterial) { name = "Knob Glow" }; kr.sharedMaterial = m_KnobGlow; }
             ProcMesh.Part("Knob Back", m_Leaf, ProcMesh.Sphere(12, 8), brass, new Vector3(W - 0.1f, H * 0.47f, -T * 0.5f - 0.04f), Vector3.one * 0.07f);
             ProcMesh.Part("Knocker", m_Leaf, ProcMesh.Torus(0.4f, 0.1f, 16, 6), brass, new Vector3(W * 0.5f, H * 0.62f, fz + 0.01f), Vector3.one * 0.1f, new Vector3(90f, 0f, 0f));
             // a winter wreath with a red bow
@@ -536,6 +585,69 @@ namespace FrostAndFound
             Fx.SnowPuff(transform.position + Vector3.up * 0.05f, Vector3.up, 24, 1f);
             yield return Ease.Tween(0.6f, k => m_Root.localScale = new Vector3(Mathf.Lerp(0.85f, 1f, k), Ease.OutBack(k), Mathf.Lerp(0.85f, 1f, k)), Ease.OutCubic, false);
             m_Root.localScale = Vector3.one;
+        }
+
+        /// <summary>The knob glows warm and swells gently: you can open this.</summary>
+        public void SetInviting(bool on)
+        {
+            m_Inviting = on;
+            m_InviteFrom = Time.time;
+            if (!on) { if (m_Knob) m_Knob.localScale = Vector3.one * 0.07f; if (m_KnobGlow) m_KnobGlow.SetColor("_EmissionColor", Color.black); }
+        }
+
+        void Update()
+        {
+            if (!m_Inviting || !m_Knob) return;
+            float k = Mathf.Clamp01((Time.time - m_InviteFrom) / 0.6f) * (0.5f + 0.5f * Mathf.Sin((Time.time - m_InviteFrom) * 4f));
+            m_Knob.localScale = Vector3.one * (0.07f * (1f + 0.3f * k));
+            if (m_KnobGlow) m_KnobGlow.SetColor("_EmissionColor", new Color(1f, 0.8f, 0.4f) * (0.5f + 1.8f * k));
+            // the same little glint the clues use, now and then, so your eye goes to it
+            if (Time.time >= m_NextGlint)
+            {
+                m_NextGlint = Time.time + 1.1f;
+                Fx.GlintAt(m_Knob.position + transform.forward * 0.03f, 0.07f, new Color(1f, 0.9f, 0.6f));
+            }
+        }
+        float m_NextGlint;
+
+        /// <summary>A hand on the door or its knob (desktop: click it, or walk right up to it).</summary>
+        public bool TouchedBy(PlayerRig rig, out HandRig hand)
+        {
+            hand = null;
+            if (!rig || !m_Root) return false;
+            if (rig.IsXR)
+            {
+                foreach (var h in new[] { rig.Left, rig.Right })
+                {
+                    if (!h.IsTracked) continue;
+                    if (Touches(h.HasJoints ? h.Joints[7] : (h.Tip ? h.Tip.position : h.Anchor ? h.Anchor.position : Vector3.zero)) ||
+                        (h.Palm && Touches(h.Palm.position)))
+                    { hand = h; return true; }
+                }
+                return false;
+            }
+            var head = rig.Head;
+            if (FrostUtil.FlatDistance(head.position, transform.position) < 0.75f) { hand = rig.Right; return true; }
+            if (!rig.Right.TriggerDown) return false;
+            var plane = new Plane(transform.forward, transform.position);
+            var ray = new Ray(head.position, head.forward);
+            if (!plane.Raycast(ray, out float d) || d > 6f) return false;
+            var local = transform.InverseTransformPoint(ray.GetPoint(d));
+            if (Mathf.Abs(local.x) < W * 0.5f + 0.1f && local.y > 0f && local.y < H + 0.1f) { hand = rig.Right; return true; }
+            return false;
+        }
+
+        bool Touches(Vector3 p)
+        {
+            if (m_Knob && Vector3.Distance(p, m_Knob.position) < 0.13f) return true;
+            var local = transform.InverseTransformPoint(p);   // the front faces you (+z)
+            return Mathf.Abs(local.x) < W * 0.5f + 0.06f && local.y > 0.25f && local.y < H && local.z > -0.06f && local.z < 0.1f;
+        }
+
+        /// <summary>You open it: it swings in toward you, easier than Lucy's shove.</summary>
+        public IEnumerator SwingOpen()
+        {
+            yield return Ease.Tween(0.55f, k => m_Leaf.localRotation = Quaternion.Euler(0f, -100f * k, 0f), Ease.OutCubic, false);
         }
 
         /// <summary>A knock: the door rattles in its frame.</summary>

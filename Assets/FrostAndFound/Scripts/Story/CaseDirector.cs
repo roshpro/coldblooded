@@ -215,6 +215,8 @@ namespace FrostAndFound
         IEnumerator React(Kid kid, PhotoData photo)
         {
             CutOffTalker();
+            // Lucy steps back too: a hint or nudge she's halfway through stops, so the kid you're showing gets the floor
+            if (DialogueRunner.IsSpeaking(CastId.Lucy)) DialogueRunner.Cut(CastId.Lucy);
             Reacting = true;
             Shows++;
             kid.Busy = true;
@@ -394,7 +396,7 @@ namespace FrostAndFound
             while (quiet < 0.6f && waited < 30f)
             {
                 if (Step != step || FinaleStarted || CaseClosed) yield break;
-                bool talking = m_Talker != null || DialogueRunner.AnyoneSpeaking || lucy.Busy;
+                bool talking = Reacting || m_Talker != null || DialogueRunner.AnyoneSpeaking || lucy.Busy;   // Reacting: a kid leaning in to look
                 quiet = talking ? 0f : quiet + Time.deltaTime;
                 waited += Time.deltaTime;
                 yield return null;

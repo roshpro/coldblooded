@@ -23,6 +23,53 @@ namespace FrostAndFound
         float m_LastHitLine;
 
         public Vector3 AimPoint => transform.position + Vector3.up * (FrostAssets.Instance && FrostAssets.Instance.frostyModel ? 0.12f : 0.5f);
+
+        // his outline on the floor: lying down he's long and narrow, so a capsule along his body, not a 2.5 m disc
+        MeshFilter m_BodyMesh;
+        bool m_BodySearched;
+        Vector3 m_BodyAt; Quaternion m_BodyRot; Vector3 m_BodyScale;
+        Vector2 m_BodyC, m_BodyU;
+        float m_BodyHalf = -1f, m_BodyR;
+
+        /// <summary>How far p is from the edge of his body on the floor (negative inside it).</summary>
+        public float BodyGap(Vector3 p)
+        {
+            UpdateOutline();
+            var q = p.XZ();
+            if (m_BodyHalf < 0f) return Vector2.Distance(q, transform.position.XZ()) - FootprintRadius;
+            float along = Mathf.Clamp(Vector2.Dot(q - m_BodyC, m_BodyU), -m_BodyHalf, m_BodyHalf);
+            return Vector2.Distance(q, m_BodyC + m_BodyU * along) - m_BodyR;
+        }
+
+        /// <summary>Half his length along the floor (m).</summary>
+        public float BodyReach { get { UpdateOutline(); return m_BodyHalf < 0f ? FootprintRadius : m_BodyHalf + m_BodyR; } }
+
+        void UpdateOutline()
+        {
+            if (!m_BodySearched)
+            {
+                m_BodySearched = true;
+                foreach (var mf in GetComponentsInChildren<MeshFilter>(true))
+                    if (mf.sharedMesh && (!m_BodyMesh || mf.sharedMesh.bounds.size.sqrMagnitude * mf.transform.lossyScale.sqrMagnitude > m_BodyMesh.sharedMesh.bounds.size.sqrMagnitude * m_BodyMesh.transform.lossyScale.sqrMagnitude)) m_BodyMesh = mf;
+            }
+            if (!m_BodyMesh) return;
+            var t = m_BodyMesh.transform;
+            if (m_BodyHalf >= 0f && t.position == m_BodyAt && t.rotation == m_BodyRot && t.lossyScale == m_BodyScale) return;
+            m_BodyAt = t.position; m_BodyRot = t.rotation; m_BodyScale = t.lossyScale;
+            // the mesh's box, laid flat: the longest of its axes on the floor is his length
+            var b = m_BodyMesh.sharedMesh.bounds;
+            var axes = new[] { t.TransformVector(new Vector3(b.extents.x, 0f, 0f)).XZ(), t.TransformVector(new Vector3(0f, b.extents.y, 0f)).XZ(), t.TransformVector(new Vector3(0f, 0f, b.extents.z)).XZ() };
+            var u = axes[0];
+            foreach (var a in axes) if (a.sqrMagnitude > u.sqrMagnitude) u = a;
+            u = u.sqrMagnitude > 1e-6f ? u.normalized : Vector2.right;
+            var v = new Vector2(-u.y, u.x);
+            float len = 0f, wid = 0f;
+            foreach (var a in axes) { len += Mathf.Abs(Vector2.Dot(a, u)); wid += Mathf.Abs(Vector2.Dot(a, v)); }
+            m_BodyC = t.TransformPoint(b.center).XZ();
+            m_BodyU = u;
+            m_BodyR = wid;
+            m_BodyHalf = Mathf.Max(0f, len - wid);
+        }
         public Vector3 Velocity => Vector3.zero;
         public bool AssistEligible => false;
 
