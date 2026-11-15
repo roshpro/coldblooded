@@ -5,12 +5,12 @@ using UnityEngine;
 namespace FrostAndFound
 {
     /// <summary>
-    /// "The Knock" (~15 s). A door fades into your room and someone knocks: Lucy, muffled, wants you out building a
-    /// snowman. Cheerful music, snow starts falling and settles over the floor. Record scratch. Silence. THUD behind
-    /// you: Frosty's body. The door bangs open, Lucy marches in and jabs her magnifying glass at him: "It's a
-    /// cold-blooded MURDER!!" Sirens, red and blue light, the room drains to noir grey and the logo stamps into the
-    /// air above the body. The kids pop in, Lucy points out the cocoa stain, and the case is open.
-    /// Hold the menu button to skip straight to the investigation.
+    /// "The Knock" (~35 s, paced to give you time to react). A door fades into your room and someone knocks: Lucy,
+    /// muffled, wants you out building a snowman. The door opens and she comes in. Cheerful music; snow falls and slowly
+    /// piles up over the floor while the trees and rocks rise out of it. The music fades. Silence. A LOUD thud a short
+    /// way behind you: Frosty's body. Once you've turned round, Lucy jabs at him: "It's a cold-blooded MURDER!!"
+    /// Sirens blast, red and blue light, the room drains to noir grey, the logo stamps in above the body, the kids pop
+    /// in and the case is open. Hold the menu button to skip straight to the investigation.
     /// </summary>
     public class OpeningSequence : MonoBehaviour
     {
@@ -93,91 +93,172 @@ namespace FrostAndFound
         }
 
         // ------------------------------------------------------------------ the beats
+        // Paced slowly (~35 s) so there's time to take each moment in.
         IEnumerator Run()
         {
             var snow = SnowSurface.Instance;
             var frosty = Frosty.Instance;
 
-            // 0:00 the door fades into the quiet room; three sharp knocks; Lucy, muffled and impatient
+            // 1. the door fades into the quiet room; a pause; three sharp knocks; Lucy, muffled and impatient
             StartCoroutine(m_Door.Appear());
-            yield return new WaitForSeconds(0.55f);
+            yield return new WaitForSeconds(1.8f);
             for (int i = 0; i < 3; i++)
             {
                 AudioDirector.PlayAt(Sfx.Knock, m_Door.KnockPoint, 1f, Random.Range(0.96f, 1.04f));
                 m_Door.Rattle();
-                yield return new WaitForSeconds(0.24f);
+                yield return new WaitForSeconds(0.42f);
             }
-            if (m_Lucy) DialogueRunner.Say(Lines.Get("lucy_knock"), m_Lucy, true);
-
-            // 0:03 cheerful music; snow starts falling and settles over the floor; the trees come up out of it
-            yield return new WaitForSeconds(1.8f);
-            m_Jingle = AudioDirector.Play2D(Sfx.Jingle, 0.75f);
-            AudioDirector.Quiet = false;
-            if (m_Snowfall) m_Snowfall.SetFalling(true);
-            var tracker = GetComponent<FootprintTracker>();
-            if (tracker) tracker.enabled = true;
-            StartCoroutine(Settle(snow, 4.6f));
-            if (m_Scenery) StartCoroutine(RiseScenery(4.2f));
-            yield return new WaitForSeconds(2.0f);
-            foreach (var p in m_Layout.Props)
-            {
-                SetVisible(p, true);
-                if (p) Fx.SnowPuff(p.transform.position + Vector3.up * 0.1f, Vector3.up, 14, 0.7f);
-            }
-
-            // 0:07 record scratch, the music cuts, a beat of silence
-            yield return new WaitForSeconds(2.0f);
-            if (m_Jingle) m_Jingle.Stop();
-            AudioDirector.Play2D(Sfx.RecordScratch, 0.9f);
+            yield return new WaitForSeconds(0.5f);
+            if (m_Lucy) yield return DialogueRunner.SayAndWait(Lines.Get("lucy_knock"), m_Lucy, true);
             yield return new WaitForSeconds(1.0f);
 
-            // 0:08 THUD behind you: Frosty, toppled in the snow
-            if (frosty)
-            {
-                AudioDirector.PlayAt(Sfx.Thud, frosty.transform.position + Vector3.up * 0.2f, 1f, 1f);
-                frosty.Drop();
-            }
-            yield return new WaitForSeconds(1.0f);
-
-            // 0:09 the door bangs open; Lucy marches in, stops dead and jabs at the body
-            AudioDirector.PlayAt(Sfx.DoorBang, m_Door.KnockPoint, 1f, 1f);
+            // 2. the door swings open and Lucy comes in, a few steps into the room, and cheers at you
+            AudioDirector.PlayAt(Sfx.DoorBang, m_Door.KnockPoint, 0.75f, 1.05f);
             StartCoroutine(m_Door.BangOpen());
             if (m_Lucy)
             {
                 m_Lucy.SetHidden(false);
                 m_Lucy.VoiceMuffled = false;
                 bool arrived = false;
-                m_Lucy.MoveTo(m_LucyStop, 1.7f, () => arrived = true);
-                float t = 0f;
-                while (!arrived && t < 1.2f) { t += Time.deltaTime; yield return null; }
+                m_Lucy.MoveTo(m_LucyStop, 1.0f, () => arrived = true);
+                for (float t = 0f; !arrived && t < 4f; t += Time.deltaTime) yield return null;
+                m_Lucy.Face(m_Player.Head.position, 0.3f);
+                yield return new WaitForSeconds(0.3f);
+                m_Lucy.Anim.StrikePose(Pose.Cheer, 1.6f);
+            }
+            yield return new WaitForSeconds(1.0f);
+
+            // 3. cheerful music; snow starts falling and slowly piles up; the trees and rocks rise out of it, then the
+            // sled and the bucket turn up in the drifts
+            m_Jingle = AudioDirector.Play2D(Sfx.Jingle, 0.75f);
+            if (m_Jingle) m_Jingle.loop = true;
+            AudioDirector.Quiet = false;
+            if (m_Snowfall) m_Snowfall.SetFalling(true);
+            var tracker = GetComponent<FootprintTracker>();
+            if (tracker) tracker.enabled = true;
+            const float pileUp = 12f;
+            StartCoroutine(Settle(snow, pileUp));
+            yield return new WaitForSeconds(2.5f);
+            if (m_Scenery) StartCoroutine(RiseScenery(8.5f));
+            yield return new WaitForSeconds(6.5f);
+            foreach (var p in m_Layout.Props)
+            {
+                SetVisible(p, true);
+                if (p) Fx.SnowPuff(p.transform.position + Vector3.up * 0.1f, Vector3.up, 14, 0.7f);
+            }
+            yield return new WaitForSeconds(pileUp - 9f + 1.5f);
+
+            // 4. the music fades away; a beat of silence
+            yield return FadeOut(m_Jingle, 1.6f);
+            m_Jingle = null;
+            yield return new WaitForSeconds(1.6f);
+
+            // 5. a LOUD thud a short way behind you, wherever there's room for him: Frosty, toppled in the snow
+            if (frosty)
+            {
+                PlaceFrostyBehind(frosty);
+                var at = frosty.transform.position + Vector3.up * 0.2f;
+                AudioDirector.PlayAt(Sfx.Thud, at, 1f, 1f);
+                AudioDirector.PlayAt(Sfx.Thud, at, 1f, 0.72f);
+                AudioDirector.Play2D(Sfx.Thud, 0.6f, 0.6f);   // felt in the chest as much as heard
+                m_Player.Left.Haptic(1f, 0.3f);
+                m_Player.Right.Haptic(1f, 0.3f);
+                frosty.Drop();
+                Fx.SnowPuff(frosty.transform.position + Vector3.up * 0.2f, Vector3.up, 40, 1.4f);
+
+                // give them time to turn round and take it in
+                float look = 0f;
+                for (float t = 0f; t < 6f; t += Time.deltaTime)
+                {
+                    var head = m_Player.Head;
+                    if (Vector3.Angle(head.forward, frosty.AimPoint - head.position) < 40f) { look += Time.deltaTime; if (look > 0.8f) break; }
+                    yield return null;
+                }
+                yield return new WaitForSeconds(0.6f);
+            }
+            else yield return new WaitForSeconds(2f);
+
+            // Lucy jabs at the body
+            if (m_Lucy)
+            {
                 if (frosty)
                 {
-                    m_Lucy.Face(frosty.AimPoint, 0.15f);
+                    m_Lucy.Face(frosty.AimPoint, 0.2f);
                     m_Lucy.JabAt(frosty.AimPoint);
                 }
                 DialogueRunner.Say(Lines.Get("lucy_murder"), m_Lucy, true);
-                yield return new WaitForSeconds(Mathf.Max(0f, 1.6f - t));
+                yield return new WaitForSeconds(1.6f);
             }
-            else yield return new WaitForSeconds(1.6f);
 
-            // 0:11 title drop: sirens, red and blue over the room, then it drains to noir grey; the logo stamps in
-            AudioDirector.Play2D(Sfx.Siren, 0.7f);
-            StartCoroutine(SirensToNoir(2.2f));
-            yield return new WaitForSeconds(0.35f);
-            var head = m_Player.Head.position;
-            var above = frosty ? frosty.transform.position + Vector3.up * 1.55f : head + m_Player.FlatForward * 2f;
-            m_Logo = TitleLogo.Create(above, head);
+            // 6. sirens blast: red and blue over the room, then it drains to noir grey; the logo stamps in over him
+            AudioDirector.Play2D(Sfx.Siren, 1f);
+            StartCoroutine(SirensToNoir(3.4f));
+            yield return new WaitForSeconds(0.5f);
+            var headPos = m_Player.Head.position;
+            var above = frosty ? frosty.transform.position + Vector3.up * 1.55f : headPos + m_Player.FlatForward * 2f;
+            m_Logo = TitleLogo.Create(above, headPos);
             yield return m_Logo.StampIn();
             StartCoroutine(m_Door.Vanish());
             m_Door = null;
             AudioDirector.MusicGate = 1f;   // the noir score fades in
-            yield return new WaitForSeconds(1.5f);
+            yield return new WaitForSeconds(2.4f);
 
-            // 0:13 the logo floats away; the kids pop in; Lucy points out the cocoa stain and the pinch hint comes up
+            // the game starts: the logo floats away, the kids pop in and Lucy gives you your first job
             if (m_Logo) StartCoroutine(m_Logo.FloatAway());
             StartInvestigation(true);
             yield return new WaitForSeconds(2f);
             Done = true;
+        }
+
+        static IEnumerator FadeOut(AudioSource src, float seconds)
+        {
+            if (!src) yield break;
+            float v = src.volume;
+            for (float t = 0f; t < seconds && src; t += Time.deltaTime)
+            {
+                src.volume = v * (1f - t / seconds);
+                yield return null;
+            }
+            if (src) { src.Stop(); src.loop = false; }
+        }
+
+        /// <summary>Frosty lands a short way behind wherever you're facing right now, on the nearest bit of free floor
+        /// big enough for him (if there's none, he stays where the layout put him).</summary>
+        void PlaceFrostyBehind(Frosty frosty)
+        {
+            var room = RoomService.Current;
+            if (room == null) return;
+            var feet = m_Player.FeetPosition;
+            var back = -m_Player.FlatForward;
+            float fr = Frosty.FootprintRadius * 0.7f;
+            float[] dists = { 1.3f, 1.6f, 1.1f, 1.9f, 2.3f };
+            float[] angles = { 0f, 20f, -20f, 40f, -40f, 60f, -60f, 80f, -80f };
+            foreach (var d in dists)
+                foreach (var a in angles)
+                {
+                    var c = feet + Quaternion.Euler(0f, a, 0f) * back * d;
+                    c.y = room.FloorY;
+                    if (!room.IsFree(c, fr, 0.6f)) continue;
+                    if (m_Lucy && FrostUtil.FlatDistance(c, m_Lucy.transform.position) < fr + 0.5f) continue;
+                    bool clear = true;
+                    foreach (var p in m_Layout.Props)
+                        if (p && FrostUtil.FlatDistance(c, p.transform.position) < fr + 0.35f) { clear = false; break; }
+                    if (!clear) continue;
+
+                    var delta = (c - frosty.transform.position).Flat();
+                    frosty.transform.SetPositionAndRotation(c, FrostUtil.FlatLookRotation(c, feet) * Quaternion.Euler(0f, Random.Range(-20f, 20f), 0f));
+                    // the (still hidden) kids were laid out around him: they come along
+                    foreach (var kv in m_Layout.Kids)
+                    {
+                        var k = kv.Value;
+                        if (!k || k == m_Lucy) continue;
+                        var q = room.ClampInside(k.transform.position + delta, 0.3f);
+                        if (!room.IsFree(q, 0.2f, 0.25f) || FrostUtil.FlatDistance(q, feet) < 0.8f || FrostUtil.FlatDistance(q, c) < fr + 0.3f) continue;
+                        k.transform.position = new Vector3(q.x, k.transform.position.y, q.z);
+                        k.HomePosition = k.transform.position;
+                    }
+                    return;
+                }
         }
 
         IEnumerator Settle(SnowSurface snow, float seconds)
@@ -261,7 +342,7 @@ namespace FrostAndFound
             if (Done || m_Skipped) return;
             m_Skipped = true;
             StopAllCoroutines();
-            if (m_Jingle) m_Jingle.Stop();
+            if (m_Jingle) { m_Jingle.loop = false; m_Jingle.Stop(); }
             if (SnowSurface.Instance) SnowSurface.Instance.Coverage = 1f;
             if (m_Snowfall && !m_Snowfall.gameObject.activeSelf) m_Snowfall.SetFalling(true);
             var tracker = GetComponent<FootprintTracker>();

@@ -20,8 +20,6 @@ namespace FrostAndFound
 
         readonly Dictionary<Sfx, List<AudioClip>> m_Sfx = new Dictionary<Sfx, List<AudioClip>>();
         readonly Dictionary<string, AudioClip> m_Voice = new Dictionary<string, AudioClip>();
-        readonly Dictionary<string, AudioClip> m_Stretched = new Dictionary<string, AudioClip>();   // sped-up recordings, by line id
-        readonly Dictionary<string, int> m_StretchFreq = new Dictionary<string, int>();
         readonly Dictionary<CastId, (AudioSource src, AudioClip clip)> m_Talking = new Dictionary<CastId, (AudioSource, AudioClip)>();
         static readonly Dictionary<string, bool> s_Recorded = new Dictionary<string, bool>();
         readonly ConcurrentQueue<(string key, float[] data, int kind)> m_Pending = new ConcurrentQueue<(string, float[], int)>();
@@ -98,20 +96,6 @@ namespace FrostAndFound
                     m_Pending.Enqueue((l.Id, Synth.Babble(l.Text, l.Speaker, l.Id.GetHashCode()), 1));
             });
 
-            // recordings to speed up (pitch kept): decoded here, stretched on a worker thread
-            foreach (var l in lines)
-            {
-                if (Mathf.Approximately(l.Tempo, 1f)) continue;
-                var rec = Resources.Load<AudioClip>("Voice/" + l.Clip);
-                if (!rec) continue;
-                if (rec.loadState != AudioDataLoadState.Loaded) rec.LoadAudioData();
-                var raw = new float[rec.samples * rec.channels];
-                if (!rec.GetData(raw, 0)) { Debug.LogWarning("[Frost] Can't read " + l.Clip + " to speed it up (import it as Decompress On Load)"); continue; }
-                int ch = rec.channels, freq = rec.frequency; float tempo = l.Tempo; string key = l.Id;
-                m_StretchFreq[key] = freq;
-                Task.Run(() => m_Pending.Enqueue((key, Synth.TimeStretch(raw, ch, freq, tempo), 3)));
-            }
-
             if (!synthMusic) StartMusic(music);
             m_Room.clip = null;
             float waited = 0f;
@@ -133,12 +117,6 @@ namespace FrostAndFound
                         if (!m_Voice.ContainsKey(item.key)) m_Voice[item.key] = Synth.ToClip("babble_" + item.key, item.data);
                     }
                     else if (item.kind == 2) StartMusic(Synth.ToClip("NoirScore", item.data, true));
-                    else if (item.kind == 3)
-                    {
-                        var c = AudioClip.Create("fast_" + item.key, item.data.Length, 1, m_StretchFreq[item.key], false);
-                        c.SetData(item.data, 0);
-                        m_Stretched[item.key] = c;
-                    }
                 }
                 if (m_Sfx.Count >= System.Enum.GetValues(typeof(Sfx)).Length) Ready = true;
                 waited += Time.unscaledDeltaTime;
@@ -291,7 +269,7 @@ namespace FrostAndFound
         public static float PlayVoice(Line line, Transform speaker)
         {
             if (!s_I || line == null) return 2f;
-            var clip = s_I.m_Stretched.TryGetValue(line.Id, out var fast) && fast ? fast : Resources.Load<AudioClip>("Voice/" + line.Clip);
+            var clip = Resources.Load<AudioClip>("Voice/" + line.Clip);
             if (!clip) s_I.m_Voice.TryGetValue(line.Id, out clip);
             if (!clip)
             {
