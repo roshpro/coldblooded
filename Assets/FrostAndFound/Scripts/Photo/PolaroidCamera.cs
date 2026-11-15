@@ -5,10 +5,11 @@ using UnityEngine;
 namespace FrostAndFound
 {
     /// <summary>
-    /// The chunky retro instant camera, with a live viewfinder on its back. It only appears in your camera hand
-    /// (left by default) when you make the camera gesture — a slight pinch, or a light squeeze of the trigger —
-    /// otherwise you just see mittens. Pinch fully (pull the trigger) → flash, ka-CHUNK, and the print slides out
-    /// of the slot and waits there, blank, until your other hand pulls it free; it develops in your hand over ~2 s.
+    /// The chunky retro instant camera, with a live viewfinder on its back. It fades into your camera hand (left by
+    /// default) as your thumb and index start closing (or the trigger starts to travel) and settles once they're
+    /// lightly pinched; otherwise you just see gloves. Your fingers stay your own and you aim it with your hand.
+    /// Pinch fully (pull the trigger) → flash, ka-CHUNK, and the print slides out of the slot and waits there, blank,
+    /// until your other hand pinches or grabs it; it develops in your hand over ~2 s.
     /// No film limit; a missed shot is just a photo of snow.
     /// </summary>
     [DefaultExecutionOrder(150)] // places itself after the mittens have taken their grip this frame
@@ -28,18 +29,18 @@ namespace FrostAndFound
         /// <summary>A print is sticking out of the slot, waiting for your other hand.</summary>
         public bool PrintWaiting => m_Waiting != null;
 
-        const float RaiseAt = 0.22f;        // pinch strength / trigger travel that brings the camera up
+        const float UpAtHand = 0.85f;       // camera-gesture progress where it's fully there (hand tracking: ~5 cm)
+        const float UpAtController = 0.3f;  // the same for a controller's trigger travel
+        const float StayAbove = 0.15f;      // once there, it stays while the gesture is held at least this much
         const float LowerDelay = 0.6f;      // the camera lingers this long after you relax your fingers
         const float EjectSeconds = 0.9f;
         const float DevelopSeconds = 2f;
-        const float GrabReach = 0.085f;     // how close your free hand has to get to the print
         /// <summary>The camera body's size (full size).</summary>
         public const float BodyScale = 1f;
-        /// <summary>Thumb tip to index tip in the mitten's camera hold (Mittens' CamJoints): about a light pinch.</summary>
-        public const float GripGap = 0.048f;
-        /// <summary>The camera (and the glove's hold round it) is scaled so that span matches your real pinch when
-        /// it comes up, so the fingers never spread wider than yours. Fixed while it stays up.</summary>
-        public float GripScale { get; private set; } = 1f;
+        /// <summary>Where a tracked hand's pinch sits on the camera (its root space, camera hand on the left):
+        /// just outside the top-back edge of the hump, so the closing thumb (behind) and index (on top) meet on the
+        /// camera's corner rather than inside it. Mirrored for a right camera hand.</summary>
+        static readonly Vector3 GripCorner = new Vector3(-0.035f, 0.0515f, -0.043f);
 
         RenderTexture m_Viewfinder;
         Transform m_Body;
@@ -49,8 +50,11 @@ namespace FrostAndFound
         float m_Cooldown;
         Material m_BlurMat;
         bool m_ForceRender;
-        float m_Raise, m_PoseTime, m_LastPose = -10f, m_FreeOpenTime = -10f;
-        bool m_QueuedShot, m_Busy, m_Hidden, m_InReach;
+        float m_Raise, m_LastPose = -10f, m_Pop = 1f;
+        bool m_Up, m_QueuedShot, m_Busy, m_Hidden, m_InReach;
+        // the tracked-hand hold, smoothed; the aim freezes while you squeeze the shutter
+        Vector3 m_HoldPos; Quaternion m_HoldRot = Quaternion.identity;
+        bool m_HoldValid, m_AimLocked;
         PolaroidPhoto m_Waiting;
         float m_SlotOut;
 
@@ -160,33 +164,38 @@ namespace FrostAndFound
             float dt = Time.deltaTime;
             if (m_Cooldown > 0f) m_Cooldown -= dt;
 
-            // ---- raise: the camera gesture brings it up; otherwise your hand is just a mitten
-            bool wantsUp;
-            if (!rig.IsXR) wantsUp = true;   // desktop stand-in: always in hand
+            // ---- raise: the camera fades in as you go into the camera gesture, and settles once you're there
+            float target;
+            bool gate = true;
+            if (!rig.IsXR) { target = 1f; m_Up = true; }   // desktop stand-in: always in hand
             else
             {
-                // a light pinch with the other fingers relaxed (not a fist), the hand up off the snow and empty
+                // other fingers relaxed (not a fist), the hand up off the snow, empty, and out in front of you
+                // (a relaxed hand at your side has its thumb and index a few cm apart too)
                 var snow = SnowSurface.Instance;
                 bool low = snow && hand.Palm && hand.Palm.position.y - snow.SurfaceHeightAt(hand.Palm.position) < FrostTuning.I.scoopHeight + 0.12f;
                 bool busy = SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand);
-                bool pose = Enabled && hand.IsTracked && hand.PhotoPose >= RaiseAt && hand.Grip < 0.55f && !busy && (!low || m_Raise > 0.5f);
-                m_PoseTime = pose ? m_PoseTime + dt : 0f;
-                if (pose && m_PoseTime >= 0.06f) m_LastPose = Time.time;
-                wantsUp = Time.time - m_LastPose < LowerDelay;
+                gate = Enabled && hand.IsTracked && hand.Grip < 0.55f && !busy && (m_Up || (!low && InView(rig, hand)));
+                float pose = gate ? Mathf.Clamp01(hand.PhotoPose) : 0f;
+                float upAt = hand.IsOpticalHand ? UpAtHand : UpAtController;
+                if (!m_Up && pose >= upAt) Settle(hand);
+                if (m_Up && pose > StayAbove) m_LastPose = Time.time;
+                if (m_Up && Time.time - m_LastPose >= LowerDelay && !m_Waiting && !m_Busy && !m_QueuedShot) m_Up = false;
+                target = m_Up ? 1f : Mathf.Clamp01(pose / upAt) * 0.9f;
             }
-            if (m_Waiting || m_Busy) wantsUp = true;    // mid-shot, or a print still in the slot
-            if (m_Hidden || !hand.IsTracked) wantsUp = false;
-            // coming up: size the camera to the pinch you're making right now
-            if (wantsUp && m_Raise <= 0.001f)
-                GripScale = rig.IsXR && hand.HasJoints ? Mathf.Clamp(Vector3.Distance(hand.Joints[3], hand.Joints[7]) / GripGap, 0.8f, 1.15f) : 1f;
-            m_Raise = Mathf.MoveTowards(m_Raise, wantsUp ? 1f : 0f, dt / (wantsUp ? 0.16f : 0.2f));
-            float scale = wantsUp ? Ease.OutBack(m_Raise) : Mathf.SmoothStep(0f, 1f, m_Raise);
+            if (m_Waiting || m_Busy) { target = 1f; m_Up = true; }    // mid-shot, or a print still in the slot
+            if (m_Hidden || !hand.IsTracked) { target = 0f; m_Up = false; m_QueuedShot = false; }
+            m_Raise = Mathf.MoveTowards(m_Raise, target, dt / (target > m_Raise ? 0.12f : 0.2f));
+            // a little bump as it settles into your hand
+            m_Pop = Mathf.Min(1f, m_Pop + dt / 0.2f);
+            float scale = Mathf.SmoothStep(0f, 1f, m_Raise) * (1f + 0.07f * Mathf.Sin(m_Pop * Mathf.PI));
             if (m_Body)
             {
                 bool show = scale > 0.01f;
                 if (m_Body.gameObject.activeSelf != show) m_Body.gameObject.SetActive(show);
-                m_Body.localScale = Vector3.one * Mathf.Max(scale * BodyScale * GripScale, 0.001f);
+                m_Body.localScale = Vector3.one * Mathf.Max(scale * BodyScale, 0.001f);
             }
+            if (m_Raise <= 0.001f) { m_HoldValid = false; m_AimLocked = false; }
 
 
             // the viewfinder renders at a third of the frame rate in XR (~24–30 fps) to save the Quest's draw calls;
@@ -199,10 +208,28 @@ namespace FrostAndFound
             {
                 if (m_Waiting) Jammed(hand);
                 else if (m_Raise >= 0.95f) TakePhoto();
-                else if (wantsUp || hand.PhotoPose >= RaiseAt) { m_QueuedShot = true; m_LastPose = Time.time; }
+                else if (gate) { if (!m_Up) Settle(hand); m_QueuedShot = true; m_LastPose = Time.time; }
             }
             if (m_QueuedShot && (!Enabled || !hand.IsTracked)) m_QueuedShot = false;
             if (m_QueuedShot && m_Raise >= 0.95f) { m_QueuedShot = false; if (!m_Waiting) TakePhoto(); }
+        }
+
+        /// <summary>The camera has come all the way into your hand.</summary>
+        void Settle(HandRig hand)
+        {
+            m_Up = true;
+            m_LastPose = Time.time;
+            m_Pop = 0f;
+            hand.Haptic(0.15f, 0.025f);
+        }
+
+        /// <summary>Your camera hand is out in front of you, roughly where you're looking.</summary>
+        static bool InView(PlayerRig rig, HandRig hand)
+        {
+            var head = rig.Head;
+            var p = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
+            var to = p - head.position;
+            return Vector3.Dot(to, head.forward) > 0.2f && Vector3.Angle(to, head.forward) < FrostTuning.I.cameraViewCone;
         }
 
         void LateUpdate()
@@ -211,7 +238,7 @@ namespace FrostAndFound
             if (!rig) return;
             var hand = rig.CameraHand;
             if (!hand.Anchor) return;
-            // sit in the mitten's grip: hanging under the hand, index on the shutter
+            // controllers: sit in the glove's grip, hanging under the hand, index on the shutter
             if (hand.HasCameraGrip) transform.SetPositionAndRotation(hand.CameraGrip.position, hand.CameraGrip.rotation);
             else
             {
@@ -221,7 +248,8 @@ namespace FrostAndFound
             if (m_Waiting) PlaceInSlot(m_Waiting.transform, m_SlotOut);
         }
 
-        /// <summary>Fallback when no mitten grip is available (no hand this frame).</summary>
+        /// <summary>Tracked hands (your fingers stay your own): the camera's corner sits on your pinch and it points
+        /// where your hand points. Also the fallback when there's no glove grip.</summary>
         void HoldPose(PlayerRig rig, HandRig hand, out Vector3 pos, out Quaternion rot)
         {
             if (!rig.IsXR)
@@ -235,11 +263,23 @@ namespace FrostAndFound
                 var j = hand.Joints;
                 Vector3 fwd = (j[8] - hand.Wrist);
                 if (fwd.sqrMagnitude < 1e-6f) fwd = hand.Anchor.forward;
-                // aim halfway between where the hand points and where you look, levelled so shots aren't tilted
-                var aim = Vector3.Slerp(fwd.normalized, rig.Head.forward, 0.5f);
-                rot = Quaternion.LookRotation(aim, Vector3.up);
+                // aim mostly where your hand points (a touch of your gaze steadies it), levelled so shots aren't tilted
+                var aim = Vector3.Slerp(fwd.normalized, rig.Head.forward, 0.25f);
+                if (Mathf.Abs(Vector3.Dot(aim, Vector3.up)) > 0.95f) aim = rig.Head.forward;
+                var wantRot = Quaternion.LookRotation(aim, Vector3.up);
+                // squeezing the shutter: hold the framing still so the click doesn't jerk the shot
+                if (hand.Trigger > 0.5f) m_AimLocked = true;
+                else if (hand.Trigger < 0.4f && !m_Busy) m_AimLocked = false;
+                float dt = Time.deltaTime;
+                if (!m_HoldValid) { m_HoldRot = wantRot; }
+                else if (!m_AimLocked) m_HoldRot = Quaternion.Slerp(m_HoldRot, wantRot, 1f - Mathf.Exp(-dt / 0.06f));
                 float side = hand.Side == HandSide.Left ? 1f : -1f;   // the body extends toward your middle
-                pos = hand.PinchPoint + rot * (new Vector3(0.035f * side, -0.0475f, 0.039f) * GripScale);
+                var corner = new Vector3(GripCorner.x * side, GripCorner.y, GripCorner.z);
+                var wantPos = hand.PinchPoint - m_HoldRot * corner;
+                m_HoldPos = m_HoldValid ? Vector3.Lerp(m_HoldPos, wantPos, 1f - Mathf.Exp(-dt / 0.03f)) : wantPos;
+                m_HoldValid = true;
+                pos = m_HoldPos;
+                rot = m_HoldRot;
                 return;
             }
             pos = hand.Anchor.TransformPoint(new Vector3(0, 0.03f, 0.03f));
@@ -326,7 +366,7 @@ namespace FrostAndFound
                 var rig = PlayerRig.Active;
                 bool closing = CaseDirector.I != null && CaseDirector.I.CaseClosed;
                 if (closing || (rig && !rig.IsXR && Time.time - waitStart > 0.7f)) break;   // finale / desktop: handed over
-                if (rig && TryGrab(rig)) break;
+                if (rig && TryGrab(rig, photo)) break;
                 if (!tipped && Time.time - waitStart > 4f && rig && rig.IsXR)
                 {
                     tipped = true;
@@ -346,19 +386,17 @@ namespace FrostAndFound
             p.SetPositionAndRotation(Slot.position + Slot.forward * along + Slot.up * -0.004f, rot);
         }
 
-        /// <summary>Your free hand pulls the print: reach the bit sticking out and close your fingers on it.</summary>
-        bool TryGrab(PlayerRig rig)
+        /// <summary>Your free hand takes the print: pinch or grab it where it sticks out of the slot.</summary>
+        bool TryGrab(PlayerRig rig, PolaroidPhoto photo)
         {
             var hand = rig.FreeHand;
+            var holder = PhotoHolder.Instance;
             if (!hand.IsTracked || !Slot || (SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand))) return false;
-            bool closed = hand.Grip > 0.6f || hand.Trigger > 0.6f;
-            if (!closed) m_FreeOpenTime = Time.time;
-            var grabAt = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
-            var edge = Slot.position + Slot.forward * (PolaroidPhoto.Height * 0.62f);
-            bool reach = Vector3.Distance(grabAt, edge) < GrabReach;
+            if (holder && (holder.Visible || holder.GrabbedThisFrame)) return false;   // that hand's already holding a photo
+            bool reach = PhotoHolder.InReach(hand, photo);
             if (reach && !m_InReach) hand.Haptic(0.12f, 0.02f);   // a little tick: you're touching it
             m_InReach = reach;
-            return reach && closed && Time.time - m_FreeOpenTime < 0.8f;
+            return reach && hand.GrabDown;
         }
 
         IEnumerator TakeOut(PolaroidPhoto photo)
@@ -367,8 +405,15 @@ namespace FrostAndFound
             var rig = PlayerRig.Active;
             var p = photo.transform;
             AudioDirector.PlayAt(Sfx.Whirr, p.position, 0.35f, 1.7f);
-            if (rig && holder)
+            if (rig && holder && rig.IsXR && rig.FreeHand.GrabHeld)
             {
+                // it leaves the slot with your hand, held just where you took it
+                holder.Grab(photo, rig.FreeHand);
+                ShowDropTip(rig);
+            }
+            else if (rig && holder)
+            {
+                // handed over (desktop, or the case closing): it glides into your hand
                 holder.Receive(photo, false);
                 var from = p.position; var fromRot = p.rotation;
                 for (float t = 0; t < 1f; t += Time.deltaTime / 0.16f)
@@ -381,19 +426,24 @@ namespace FrostAndFound
                     p.localScale = Vector3.one * Mathf.Lerp(BodyScale, 1f, k);
                     yield return null;
                 }
-                holder.MarkArrived();
+                if (rig.IsXR) holder.Grab(photo, rig.FreeHand);
+                else holder.MarkArrived();
                 rig.FreeHand.Haptic(0.3f, 0.05f);
-                if (!PhotoHolder.DropTipShown && rig.IsXR)
-                {
-                    PhotoHolder.DropTipShown = true;
-                    HToast.Show(rig.FreeHand.IsOpticalHand ? "Open your hand flat to drop a photo. Pinch it to pick it back up" : "Press A/X to drop a photo. Grab it to pick it back up", UIKit.Icon.Camera, 4.5f);
-                }
+                ShowDropTip(rig);
             }
             bool fast = CaseDirector.I != null && CaseDirector.I.CaseClosed;
             yield return photo.Develop(fast ? 0.6f : DevelopSeconds);
         }
 
-        public void SetVisible(bool on) { m_Hidden = !on; if (!on) m_Raise = 0f; }
+        static void ShowDropTip(PlayerRig rig)
+        {
+            if (PhotoHolder.DropTipShown || !rig.IsXR) return;
+            PhotoHolder.DropTipShown = true;
+            HToast.Show(rig.FreeHand.IsOpticalHand ? "Open your hand to let go of a photo. Pinch or grab it to pick it back up"
+                                                   : "Let go of the grip to drop a photo. Grab it to pick it back up", UIKit.Icon.Camera, 4.5f);
+        }
+
+        public void SetVisible(bool on) { m_Hidden = !on; if (!on) { m_Raise = 0f; m_Up = false; } }
 
         void OnDestroy()
         {

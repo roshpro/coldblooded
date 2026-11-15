@@ -83,6 +83,9 @@ namespace FrostAndFound
         }
     }
 
+    /// <summary>How a hand is holding on to something: a thumb–index pinch, or a closed fist.</summary>
+    public enum GrabStyle { None, Pinch, Fist }
+
     /// <summary>One tracked hand or controller, in a device-agnostic shape the game reads.</summary>
     public class HandRig
     {
@@ -101,8 +104,8 @@ namespace FrostAndFound
         public bool TriggerDown;        // went past the press threshold this frame
         public bool TriggerHeld;
         public bool PrimaryDown;        // A/X button (desktop: unused)
-        /// <summary>0..1, how far into the "camera" gesture this hand is: a slight pinch (hand tracking) or a light
-        /// squeeze of the index trigger (controllers). Desktop: always 1.</summary>
+        /// <summary>0..1, how far into the "camera" gesture this hand is: thumb and index closing in from a few
+        /// centimetres apart (hand tracking) or the index trigger's travel (controllers). Desktop: always 1.</summary>
         public float PhotoPose;
 
         /// <summary>Hand-tracking joints in world space (thumb, index, middle, ring, little × base→tip), valid when HasJoints.</summary>
@@ -111,6 +114,15 @@ namespace FrostAndFound
         public bool HasJoints;
         /// <summary>Between thumb and index tips (hand tracking), or just in front of the fingers otherwise.</summary>
         public Vector3 PinchPoint => HasJoints ? (Joints[3] + Joints[7]) * 0.5f : (Tip ? Tip.position : (Anchor ? Anchor.position : Vector3.zero));
+        /// <summary>Thumb tip to index tip in metres (hand tracking); +inf without joints.</summary>
+        public float PinchGap => HasJoints ? Vector3.Distance(Joints[3], Joints[7]) : float.MaxValue;
+
+        /// <summary>Holding on (a pinch or a fist, with a short release debounce so one lost tracking frame doesn't let go).</summary>
+        public bool GrabHeld;
+        /// <summary>Started / stopped holding on this frame.</summary>
+        public bool GrabDown, GrabUp;
+        /// <summary>What closed first when the hold started (None while not holding).</summary>
+        public GrabStyle Grab;
         /// <summary>Set by the mittens each frame: where a held snowball sits, cupped in the mitten's palm.</summary>
         public Transform Hold;
         /// <summary>Set by the mittens: where the camera body sits when this mitten holds it (valid while HasCameraGrip).</summary>
@@ -126,6 +138,26 @@ namespace FrostAndFound
 
         public System.Action<float, float> HapticImpl;
         public void Haptic(float amplitude, float seconds) => HapticImpl?.Invoke(amplitude, seconds);
+
+        bool m_PinchHeld, m_FistHeld;
+        float m_GrabLostAt = -1f;
+        /// <summary>Grab state from a pinch strength (or index trigger) and a fist curl (or grip trigger), both 0..1.</summary>
+        public void UpdateGrab(float pinch, float fist, float debounce)
+        {
+            m_PinchHeld = m_PinchHeld ? pinch > 0.35f : pinch > 0.7f;
+            m_FistHeld = m_FistHeld ? fist > 0.35f : fist > 0.6f;
+            bool was = GrabHeld;
+            if (m_PinchHeld || m_FistHeld) { GrabHeld = true; m_GrabLostAt = -1f; }
+            else if (GrabHeld)
+            {
+                if (m_GrabLostAt < 0f) m_GrabLostAt = Time.time;
+                if (Time.time - m_GrabLostAt >= debounce) GrabHeld = false;
+            }
+            GrabDown = GrabHeld && !was;
+            GrabUp = was && !GrabHeld;
+            if (GrabDown) Grab = m_PinchHeld ? GrabStyle.Pinch : GrabStyle.Fist;
+            if (!GrabHeld) Grab = GrabStyle.None;
+        }
 
         bool m_PrevTriggerHeld;
         public void UpdateTrigger(float value, float pressAt = 0.7f, float releaseAt = 0.45f)

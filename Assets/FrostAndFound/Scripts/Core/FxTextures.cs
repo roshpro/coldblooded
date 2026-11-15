@@ -5,7 +5,7 @@ namespace FrostAndFound
     /// <summary>Small procedural textures: particle sprites, the hand-drawn evidence circle, stamps, icons.</summary>
     public static class FxTextures
     {
-        static Texture2D s_Dot, s_Flake, s_Star, s_Circle, s_Ring, s_Splat, s_Note, s_Heart;
+        static Texture2D s_Dot, s_Flake, s_Star, s_Circle, s_Ring, s_Clump, s_Note, s_Heart;
 
         public static Texture2D SoftDot => s_Dot ? s_Dot : (s_Dot = Make("SoftDot", 64, (u, v) =>
         {
@@ -111,20 +111,18 @@ namespace FrostAndFound
             return new Color(1, 1, 1, a);
         }));
 
-        public static Texture2D Splat => s_Splat ? s_Splat : (s_Splat = Make("SnowSplat", 128, (u, v) =>
+        /// <summary>A lumpy clump of packed snow: an irregular solid edge, a little darker towards the rim so it reads as round.</summary>
+        public static Texture2D Clump => s_Clump ? s_Clump : (s_Clump = Make("SnowClump", 64, (u, v) =>
         {
             var p = new Vector2(u - 0.5f, v - 0.5f) * 2f;
-            float ang = Mathf.Atan2(p.y, p.x);
-            float edge = 0.55f + 0.18f * Mathf.Sin(ang * 5f) + 0.1f * Mathf.Sin(ang * 11f + 1.3f) + 0.06f * Mathf.Sin(ang * 23f);
-            float a = Mathf.Clamp01((edge - p.magnitude) * 8f);
-            // satellite droplets
-            for (int i = 0; i < 7; i++)
-            {
-                float da = i * 0.9f + 0.4f;
-                var c = new Vector2(Mathf.Cos(da), Mathf.Sin(da)) * (0.75f + 0.12f * (i % 3));
-                a = Mathf.Max(a, Mathf.Clamp01((0.08f - Vector2.Distance(p, c)) * 30f));
-            }
-            return new Color(1, 1, 1, a);
+            float ang = Mathf.Atan2(p.y, p.x), r = p.magnitude;
+            float edge = 0.78f + 0.09f * Mathf.Sin(ang * 3f + 0.7f) + 0.06f * Mathf.Sin(ang * 7f + 2.1f) + 0.03f * Mathf.Sin(ang * 13f);
+            float a = Mathf.Clamp01((edge - r) * 14f);
+            float shade = Mathf.Lerp(1f, 0.8f, Mathf.SmoothStep(0.35f, 1f, r / edge));
+            // a soft highlight up and to the left, a little crease of shadow down and to the right
+            shade += 0.06f * Mathf.Clamp01(1f - Vector2.Distance(p, new Vector2(-0.3f, 0.35f)) * 2.2f);
+            shade -= 0.05f * Mathf.Clamp01(1f - Vector2.Distance(p, new Vector2(0.35f, -0.3f)) * 2.5f);
+            return new Color(shade, shade, shade, a);
         }));
 
         public static Texture2D MusicNote => s_Note ? s_Note : (s_Note = Make("Note", 64, (u, v) =>

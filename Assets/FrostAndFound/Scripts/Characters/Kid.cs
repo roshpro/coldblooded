@@ -403,7 +403,6 @@ namespace FrostAndFound
             if (snowball)
             {
                 AudioDirector.PlayAt(headshot ? Sfx.Bonk : Sfx.Splat, point, headshot ? 0.7f : 0.9f, Random.Range(0.95f, 1.08f));
-                SplatDecal.Spawn(point, (point - ChestPoint).normalized, 0.12f, Rig.Spine);
             }
             else
             {

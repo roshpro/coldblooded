@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace FrostAndFound
 {
-    public enum GestureKind { Camera, ScoopThrow }
+    public enum GestureKind { Camera, ScoopThrow, ShowPhoto }
 
     /// <summary>
     /// A small looping hand-drawn gesture animation (no backing card), played from a sprite sheet in
@@ -22,7 +22,13 @@ namespace FrostAndFound
 
         static Texture2D Sheet(GestureKind kind)
         {
-            var tex = Resources.Load<Texture2D>(kind == GestureKind.Camera ? "Gestures/gesture_pinch_camera_sheet" : "Gestures/gesture_scoop_throw_sheet");
+            string path = kind switch
+            {
+                GestureKind.Camera => "Gestures/gesture_pinch_camera_sheet",
+                GestureKind.ShowPhoto => "Gestures/gesture_show_photo_sheet",
+                _ => "Gestures/gesture_scoop_throw_sheet",
+            };
+            var tex = Resources.Load<Texture2D>(path);
             if (tex) tex.wrapMode = TextureWrapMode.Clamp;
             else Debug.LogWarning("[Frost] Gesture sprite sheet missing for " + kind);
             return tex;
@@ -82,7 +88,7 @@ namespace FrostAndFound
 
     /// <summary>
     /// In-game gesture tutorials: a card that floats near the edge of your view on the side of the hand that does
-    /// the gesture (camera hand for the pinch, free hand for scoop &amp; throw). One at a time.
+    /// the gesture (camera hand for the pinch, free hand for scoop &amp; throw and for showing a photo). One at a time.
     /// </summary>
     public class GestureHint : MonoBehaviour
     {
@@ -91,6 +97,8 @@ namespace FrostAndFound
         HandSide m_Side;
 
         public static bool IsShowing(GestureKind kind) => s_I && s_I.m_Card && s_I.m_Card.Kind == kind && s_I.m_Card.IsShowing;
+        /// <summary>Some other tutorial is up (so two hints don't keep swapping places).</summary>
+        public static bool OtherShowing(GestureKind kind) => s_I && s_I.m_Card && s_I.m_Card.Kind != kind && s_I.m_Card.IsShowing;
 
         public static void Show(GestureKind kind)
         {

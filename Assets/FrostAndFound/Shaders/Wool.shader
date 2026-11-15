@@ -1,13 +1,17 @@
-// Knitted wool for the player's mittens (ported from the team's Frosty/WoolGlove). Colour comes from vertex
-// colours; vertex alpha picks the stitch: 1 = stocking stitch (rows of little V's), 0 = ribbing (vertical ribs,
-// for the cuff). UV.x is measured in knit columns, UV.y in metres along the hand. Soft wrapped lighting and a
-// fuzzy rim make the edges read as soft yarn rather than a hard outline. Casts shadows onto the snow.
+// Knitted wool for the player's gloves. Colour comes from vertex colours; vertex alpha picks the stitch:
+// 1 = stocking stitch (rows of little V's), 0 = ribbing (vertical ribs, for the cuff).
+// The knit doesn't come from UVs: UV1 is each vertex's position on the open, resting glove (metres, fingers +Z)
+// and UV2 its normal there. The stitches are laid out in that rest space at a fixed size and projected from the
+// three axes (blended by the rest normal), so they ride on the surface like real yarn: curling, spreading or a
+// wide knuckle never stretch or squash them, and there are no seams where the parts meet.
+// Soft wrapped lighting and a fuzzy rim make the edges read as soft yarn rather than a hard outline.
 Shader "FrostAndFound/Wool"
 {
     Properties
     {
         _Tint ("Tint", Color) = (1,1,1,1)
         _RowsPerMeter ("Knit Rows Per Metre", Float) = 150
+        _ColsPerMeter ("Knit Columns Per Metre", Float) = 135
         _StitchContrast ("Stitch Contrast", Range(0,1)) = 0.45
         _FuzzColor ("Fuzz Color", Color) = (1,0.95,0.92,1)
         _FuzzStrength ("Fuzz Strength", Range(0,1)) = 0.35
@@ -23,6 +27,7 @@ Shader "FrostAndFound/Wool"
         CBUFFER_START(UnityPerMaterial)
             float4 _Tint;
             float _RowsPerMeter;
+            float _ColsPerMeter;
             float _StitchContrast;
             float4 _FuzzColor;
             float _FuzzStrength;
@@ -48,7 +53,8 @@ Shader "FrostAndFound/Wool"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
-                float2 uv : TEXCOORD0;
+                float3 rest : TEXCOORD1;      // position on the resting glove
+                float3 restN : TEXCOORD2;     // normal there
                 float4 color : COLOR;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -58,8 +64,9 @@ Shader "FrostAndFound/Wool"
                 float4 positionCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
-                float2 uv : TEXCOORD2;
-                float4 color : TEXCOORD3;
+                float3 rest : TEXCOORD2;
+                float3 restN : TEXCOORD3;
+                float4 color : TEXCOORD4;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -71,10 +78,9 @@ Shader "FrostAndFound/Wool"
                 return frac(p.x * p.y);
             }
 
-            // 0..1 brightness of the yarn at this point of the knit
-            float knit(float2 uv, float stocking)
+            // 0..1 brightness of the yarn; g is in stitches (x across columns, y up rows)
+            float knit(float2 g, float stocking)
             {
-                float2 g = float2(uv.x, uv.y * _RowsPerMeter);
                 float px = frac(g.x) - 0.5;   // -0.5..0.5 across a column
                 float py = frac(g.y);         // 0..1 up a row
 
@@ -89,7 +95,24 @@ Shader "FrostAndFound/Wool"
 
                 float s = lerp(rib, loop, stocking);
                 float grain = hash21(floor(g * 7.0)) * 0.12; // stray fibres
-                return saturate(s + grain);
+                // far away (or seen edge-on) a stitch is smaller than a pixel: fade to the average instead of shimmering
+                float2 w = fwidth(g);
+                float fade = saturate(1.6 - 2.2 * max(w.x, w.y));
+                return lerp(0.62, saturate(s + grain), fade);
+            }
+
+            // the knit projected from the rest glove's three axes. Rows always run along the hand (+Z) on the
+            // top, bottom and sides, which is how a glove is knitted; the fingertips and the cuff's end get a
+            // view down the fingers. Blending is tight so a stitch is rarely seen doubled.
+            float knit3(float3 p, float3 n, float stocking)
+            {
+                float3 w = pow(abs(n), 6.0);
+                w /= max(w.x + w.y + w.z, 1e-5);
+                float cols = _ColsPerMeter, rows = _RowsPerMeter;
+                // all three always run: the stitch fade takes screen derivatives, which need uniform control flow
+                return w.y * knit(float2(p.x * cols, p.z * rows), stocking)            // back / palm
+                     + w.x * knit(float2(p.y * cols + 0.37, p.z * rows), stocking)     // sides
+                     + w.z * knit(float2(p.x * cols + 0.21, p.y * rows), stocking);    // tips / ends
             }
 
             Varyings vert(Attributes input)
@@ -102,7 +125,8 @@ Shader "FrostAndFound/Wool"
                 o.positionCS = vp.positionCS;
                 o.positionWS = vp.positionWS;
                 o.normalWS = TransformObjectToWorldNormal(input.normalOS);
-                o.uv = input.uv;
+                o.rest = input.rest;
+                o.restN = input.restN;
                 o.color = input.color;
                 return o;
             }
@@ -115,7 +139,7 @@ Shader "FrostAndFound/Wool"
                 float3 n = normalize(i.normalWS);
                 float3 v = GetWorldSpaceNormalizeViewDir(i.positionWS);
 
-                float k = knit(i.uv, step(0.5, i.color.a));
+                float k = knit3(i.rest, i.restN, step(0.5, i.color.a));
                 float3 albedo = i.color.rgb * _Tint.rgb * lerp(1.0 - _StitchContrast, 1.0, k);
 
                 // soft wrapped sun + sky: wool scatters light, so the shadow side stays warm and never goes black

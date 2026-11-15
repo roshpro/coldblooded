@@ -8,18 +8,24 @@ namespace FrostAndFound
     /// - Camera pinch: right after Lucy tells you to take a picture at the start of the case, and again whenever
     ///   the current clue still needs a photo and you haven't taken one in a long while. Hidden on your next photo.
     /// - Scoop &amp; throw: once Tony runs, if you haven't thrown a snowball in a long while. Hidden once you scoop.
-    /// Both respect the "Tips" toggle.
+    /// - Show a photo: holding a developed photo without showing it to anyone (soon for your first, then only if you
+    ///   seem stuck). Hidden the moment you show one, or when you stop holding a photo.
+    /// All respect the "Tips" toggle; one plays at a time.
     /// </summary>
     public class GestureDirector : MonoBehaviour
     {
         float m_InvestigatingSince = -1f, m_LastPhoto = -1f, m_LastThrow = -1f, m_FinaleSince = -1f;
         bool m_Prompted;
+        PolaroidPhoto m_HeldPhoto, m_ShownPhoto;
+        float m_HeldSince = -1f;
+        bool m_EverShown;
 
         void OnEnable()
         {
             PolaroidCamera.PhotoTaken += OnPhoto;
             Snowball.Thrown += OnThrown;
             SnowballHand.Formed += OnFormed;
+            ShowPhotoDetector.Shown += OnShown;
         }
 
         void OnDisable()
@@ -27,6 +33,21 @@ namespace FrostAndFound
             PolaroidCamera.PhotoTaken -= OnPhoto;
             Snowball.Thrown -= OnThrown;
             SnowballHand.Formed -= OnFormed;
+            ShowPhotoDetector.Shown -= OnShown;
+        }
+
+        void OnShown(Kid kid)
+        {
+            m_EverShown = true;
+            m_ShownPhoto = PhotoHolder.Instance ? PhotoHolder.Instance.Current : null;   // no more hints for this one
+            GestureHint.Hide(GestureKind.ShowPhoto);
+        }
+
+        static void HideAll()
+        {
+            GestureHint.Hide(GestureKind.Camera);
+            GestureHint.Hide(GestureKind.ScoopThrow);
+            GestureHint.Hide(GestureKind.ShowPhoto);
         }
 
         void OnPhoto(PhotoData p)
@@ -49,19 +70,15 @@ namespace FrostAndFound
             var gm = GameManager.I;
             var d = CaseDirector.I;
             if (!gm || d == null || gm.IsPaused) return;
-            if (gm.State != GameState.Investigating || d.CaseClosed)
-            {
-                GestureHint.Hide(GestureKind.Camera);
-                GestureHint.Hide(GestureKind.ScoopThrow);
-                return;
-            }
+            if (gm.State != GameState.Investigating || d.CaseClosed) { HideAll(); return; }
             if (m_InvestigatingSince < 0f) m_InvestigatingSince = Time.time;
-            if (!FrostPrefs.Tips) { GestureHint.Hide(GestureKind.Camera); GestureHint.Hide(GestureKind.ScoopThrow); return; }
+            if (!FrostPrefs.Tips) { HideAll(); return; }
             var tune = FrostTuning.I;
 
             if (d.FinaleStarted)
             {
                 GestureHint.Hide(GestureKind.Camera);
+                GestureHint.Hide(GestureKind.ShowPhoto);
                 if (m_FinaleSince < 0f) m_FinaleSince = Time.time;
                 var tony = Kid.Find(CastId.Tony) as TonyKid;
                 bool holding = SnowballHand.Instance && SnowballHand.Instance.IsHolding;
@@ -78,8 +95,17 @@ namespace FrostAndFound
                 if (d.Photos.Count == 0) StartCoroutine(PromptPhoto());
             }
 
+            // holding a developed photo but not showing it to anyone: teach holding it out to a kid
+            var holder = PhotoHolder.Instance;
+            var held = holder && holder.Visible && holder.Current && holder.Current.IsDeveloped ? holder.Current : null;
+            if (held != m_HeldPhoto) { m_HeldPhoto = held; m_HeldSince = Time.time; }
+            if (!held) GestureHint.Hide(GestureKind.ShowPhoto);
+            else if (held != m_ShownPhoto && d.CanShow && !GestureHint.IsShowing(GestureKind.ShowPhoto) && !GestureHint.OtherShowing(GestureKind.ShowPhoto)
+                     && Time.time - m_HeldSince > (m_EverShown ? tune.showGestureIdleSeconds : tune.showGestureFirstSeconds))
+                GestureHint.Show(GestureKind.ShowPhoto);
+
             // supposed to take a picture but hasn't for a long while: the current clue has no usable photo yet
-            if (m_Prompted && !d.Reacting && !NeedsNoPhoto(d) && !GestureHint.IsShowing(GestureKind.Camera))
+            if (m_Prompted && !d.Reacting && !NeedsNoPhoto(d) && !GestureHint.IsShowing(GestureKind.Camera) && !GestureHint.OtherShowing(GestureKind.Camera))
             {
                 float idle = Time.time - Mathf.Max(m_InvestigatingSince, m_LastPhoto, d.StepStartedAt);
                 if (idle > tune.cameraGestureIdleSeconds) GestureHint.Show(GestureKind.Camera);

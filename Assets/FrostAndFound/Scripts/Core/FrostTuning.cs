@@ -93,6 +93,22 @@ namespace FrostAndFound
         public float cameraGestureIdleSeconds = 20f;
         [Tooltip("Seconds into Tony's run without a throw before the scoop & throw gesture plays.")]
         public float throwGestureIdleSeconds = 10f;
+        [Tooltip("Seconds holding your first developed photo, without showing it to anyone, before the show-a-photo gesture plays.")]
+        public float showGestureFirstSeconds = 4f;
+        [Tooltip("The same for every photo after you've shown one: only if you seem stuck.")]
+        public float showGestureIdleSeconds = 12f;
+
+        [Header("Camera & photo hands")]
+        [Tooltip("Thumb-to-index gap (m) at which the camera starts fading into your hand.")]
+        public float cameraAppearGap = 0.075f;
+        [Tooltip("Thumb-to-index gap (m) at which it's fully there (closing all the way takes the picture).")]
+        public float cameraFullGap = 0.045f;
+        [Tooltip("The camera only comes up with your hand within this many degrees of where you're looking.")]
+        public float cameraViewCone = 55f;
+        [Tooltip("How close (m) your pinch or palm has to be to a photo to grab it.")]
+        public float photoGrabReach = 0.06f;
+        [Tooltip("Seconds your hand has to stay open before a held photo drops (rides out tracking glitches).")]
+        public float photoReleaseDebounce = 0.06f;
 
         [Header("Layout")]
         public float kidWallInset = 0.55f;

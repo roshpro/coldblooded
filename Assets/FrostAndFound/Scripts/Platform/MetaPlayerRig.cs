@@ -101,6 +101,7 @@ namespace FrostAndFound
                 h.UpdateTrigger(OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, ctrl));
                 h.PrimaryDown = OVRInput.GetDown(OVRInput.Button.One, ctrl);
                 h.PhotoPose = h.Trigger;
+                h.UpdateGrab(h.Trigger, h.Grip, FrostTuning.I.photoReleaseDebounce);
                 h.HasJoints = false;
             }
             else if (handTracked)
@@ -120,13 +121,18 @@ namespace FrostAndFound
                 float pinch = ovrHand.GetFingerPinchStrength(OVRHand.HandFinger.Index);
                 h.UpdateTrigger(pinch, 0.85f, 0.55f);
                 h.PrimaryDown = false;
-                h.PhotoPose = pinch;
+                // the camera starts coming in while thumb and index are still a few centimetres apart (OVR's pinch
+                // strength only moves once they're nearly touching); it's full size by a light pinch
+                var tune = FrostTuning.I;
+                h.PhotoPose = Mathf.Max(pinch, Mathf.InverseLerp(tune.cameraAppearGap, tune.cameraFullGap, h.PinchGap));
+                h.UpdateGrab(pinch, h.Grip, tune.photoReleaseDebounce);
             }
             else
             {
                 h.UpdateTrigger(0f);
                 h.PrimaryDown = false;
                 h.PhotoPose = 0f;
+                h.UpdateGrab(0f, 0f, FrostTuning.I.photoReleaseDebounce);
                 h.HasJoints = false;
             }
         }

@@ -45,9 +45,11 @@ namespace FrostAndFound
         static MittenGrip GripFor(PlayerRig rig, HandRig hand)
         {
             if (SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand)) return MittenGrip.Ball;
+            // tracked hands keep their real fingers round the camera and the photo; controllers and the desktop
+            // stand-in have none, so their gloves take a grip
             var cam = PolaroidCamera.Instance;
-            if (cam && cam.IsRaised && rig.CameraHand == hand) return MittenGrip.Camera;
-            if (rig.FreeHand == hand && PhotoHolder.Instance && PhotoHolder.Instance.Visible) return MittenGrip.Photo;
+            if (cam && cam.IsRaised && rig.CameraHand == hand && !hand.IsOpticalHand) return MittenGrip.Camera;
+            if (rig.FreeHand == hand && !rig.IsXR && PhotoHolder.Instance && PhotoHolder.Instance.Visible) return MittenGrip.Photo;
             return MittenGrip.Free;
         }
 
@@ -80,8 +82,7 @@ namespace FrostAndFound
         // (body x ±0.0525, y -0.0225..0.049 with the sloped top, z -0.045..0.03): the glove stands at the camera's
         // left end, palm against it; the index curls over the top onto the shutter, the middle lies beside it, the
         // ring and little fingers hook round the front-left corner, and the thumb rests on the back's top-left corner,
-        // clear of the screen. Thumb tip to index tip is PolaroidCamera.GripGap (≈ a light pinch), so the glove's
-        // fingers sit about where yours are; the whole hold scales with PolaroidCamera.GripScale.
+        // clear of the screen. Used for controllers (no real fingers); tracked hands keep their own fingers.
         static readonly Vector3 CamPalm = new Vector3(-0.0545f, -0.022f, -0.001f);
         static readonly Vector3 CamWrist = new Vector3(-0.070f, -0.068f, 0.002f);
         static readonly Vector3[] CamJoints =
@@ -185,7 +186,9 @@ namespace FrostAndFound
         readonly int[] _weld = new int[VertexCount];      // the vertex each one coincides with (itself if none)
         readonly int[] _tris;
         readonly int[] _partStart = new int[7];           // triangle ranges: palm, index, middle, ring, little, thumb
-        bool m_Oriented;
+        bool m_Oriented, m_RestBaked;
+        readonly Vector3[] _rest = new Vector3[VertexCount];   // each vertex on the open, resting glove (UV1)
+        readonly Vector3[] _restN = new Vector3[VertexCount];  // and its normal there (UV2)
         readonly float[] _ang = new float[S + 1], _ax = new float[S + 1], _ay = new float[S + 1];
         readonly float[] _kx = new float[4];
         readonly Vector3[] _pc = new Vector3[PR];
@@ -302,7 +305,6 @@ namespace FrostAndFound
                     case MittenGrip.Ball: Grip(0.5f, 0.56f, 0.55f); break;      // fingers wrapped round the ball
                     case MittenGrip.Camera:
                     {
-                        float gs = CamScale;
                         CameraPose(hand, publishMounts, out var pc, out var qc);
                         // pinching presses the index tip down onto the shutter
                         float press = Mathf.Clamp01((hand.Trigger - 0.2f) / 0.6f);
@@ -310,9 +312,9 @@ namespace FrostAndFound
                         {
                             var j = CamJoints[i];
                             if (i >= 4 && i < 8 && (i & 3) >= 2) j.y -= press * 0.006f * ((i & 3) - 1) * 0.5f;
-                            _joints[i] = pc + qc * (CamMirror(j) * gs);
+                            _joints[i] = pc + qc * CamMirror(j);
                         }
-                        _wrist = pc + qc * (CamMirror(CamWrist) * gs);
+                        _wrist = pc + qc * CamMirror(CamWrist);
                         m_CamPos = pc; m_CamRot = qc;
                         break;
                     }
@@ -374,10 +376,8 @@ namespace FrostAndFound
             if (Mathf.Abs(Vector3.Dot(aim, Vector3.up)) > 0.95f) aim = head ? head.forward : Vector3.forward;
             rot = Quaternion.LookRotation(aim, Vector3.up);
             var palm = hand.Palm ? hand.Palm.position : hand.Anchor.position;
-            pos = palm - rot * (CamMirror(CamPalm) * CamScale);
+            pos = palm - rot * CamMirror(CamPalm);
         }
-
-        static float CamScale => PolaroidCamera.Instance ? PolaroidCamera.Instance.GripScale : 1f;
 
         /// <summary>Snap the glove into a grip: index curl, the other fingers' curl, thumb fold (0..1).</summary>
         void Grip(float index, float grip, float thumb)
@@ -493,13 +493,84 @@ namespace FrostAndFound
         // ---------------------------------------------------------------- mesh
         void Apply()
         {
+            if (!m_RestBaked) BakeRest();
+            Shape(out var f, out var up, out var palmBase);
+            if (!m_Oriented) Orient(palmBase, f);
+            GatherNormals();
+            var toLocal = m_Root.worldToLocalMatrix;
+            for (int i = 0; i < VertexCount; i++)
+            {
+                var n = _nacc[_weld[i]];
+                _verts[i] = toLocal.MultiplyPoint3x4(_wp[i]);
+                _normals[i] = toLocal.MultiplyVector(n.sqrMagnitude > 1e-24f ? n : up).normalized;
+            }
+            m_Mesh.SetVertices(_verts);
+            m_Mesh.SetNormals(_normals);
+            m_Mesh.SetColors(_colors);
+            m_Mesh.RecalculateBounds();
+        }
+
+        /// <summary>
+        /// Once: shape the glove on an open, resting hand (wrist at the origin, fingers +Z, palm -Y) and keep every
+        /// vertex's position there as UV1. The wool shader lays its stitches out in that space at a fixed size in
+        /// metres, so the knit rides on the surface: curling, spreading or a fat knuckle slice never stretch it.
+        /// </summary>
+        void BakeRest()
+        {
+            var joints = (Vector3[])_joints.Clone();
+            var wrist = _wrist;
+            var curl = (float[])_curl.Clone();
+            var spread = (float[])_spread.Clone();
+            var frameWrist = m_FrameWrist;
+            var frameRot = m_FrameRot;
+
+            m_FrameWrist = Vector3.zero;
+            m_FrameRot = Quaternion.identity;
+            for (int f = 0; f < 5; f++) { _curl[f] = 0.06f; _spread[f] = RestSpread[f]; }
+            PoseHand(0.1f, 1f);
+            Shape(out _, out _, out _);
+            GatherNormals();
+            for (int i = 0; i < VertexCount; i++)
+            {
+                // un-mirrored, so both hands share one pattern (the shader only uses the normal's direction per axis)
+                _rest[i] = new Vector3(_wp[i].x * m_Mirror, _wp[i].y, _wp[i].z);
+                var n = _nacc[_weld[i]];
+                _restN[i] = n.sqrMagnitude > 1e-24f ? n.normalized : Vector3.up;
+            }
+            m_Mesh.SetUVs(1, _rest);
+            m_Mesh.SetUVs(2, _restN);
+
+            System.Array.Copy(joints, _joints, joints.Length);
+            _wrist = wrist;
+            System.Array.Copy(curl, _curl, curl.Length);
+            System.Array.Copy(spread, _spread, spread.Length);
+            m_FrameWrist = frameWrist;
+            m_FrameRot = frameRot;
+            m_RestBaked = true;
+        }
+
+        /// <summary>Area-weighted normals summed over every face, per welded vertex (so they're smooth across joins).</summary>
+        void GatherNormals()
+        {
+            System.Array.Clear(_nacc, 0, VertexCount);
+            for (int t = 0; t < _tris.Length; t += 3)
+            {
+                int a = _weld[_tris[t]], b = _weld[_tris[t + 1]], c = _weld[_tris[t + 2]];
+                var n = Vector3.Cross(_wp[b] - _wp[a], _wp[c] - _wp[a]);
+                _nacc[a] += n; _nacc[b] += n; _nacc[c] += n;
+            }
+        }
+
+        /// <summary>Every vertex position for this frame's joints (welded copies included).</summary>
+        void Shape(out Vector3 f, out Vector3 up, out Vector3 palmBase)
+        {
             float sign = m_Side == HandSide.Right ? 1f : -1f;
             Vector3 fwd = _joints[8] - _wrist;                       // wrist → middle knuckle
-            Vector3 f = fwd.sqrMagnitude > 1e-8f ? fwd.normalized : Vector3.forward;
+            f = fwd.sqrMagnitude > 1e-8f ? fwd.normalized : Vector3.forward;
             Vector3 xA = _joints[16] - _joints[4];                   // index knuckle → little knuckle
             xA -= f * Vector3.Dot(xA, f);
             xA = xA.sqrMagnitude > 1e-10f ? xA.normalized : Vector3.Cross(Vector3.up, f).normalized;
-            Vector3 up = Vector3.Cross(f, xA) * sign;                // out of the back of the hand
+            up = Vector3.Cross(f, xA) * sign;                        // out of the back of the hand
 
             Color glove = GloveColor; glove.a = 1f;      // stocking stitch
             Color cuff = CuffColor; cuff.a = 0f;         // ribbing
@@ -509,7 +580,7 @@ namespace FrostAndFound
             float h = PalmThickness * Bulk;
             Vector3 knuckleMid = (_joints[4] + _joints[16]) * 0.5f;
             float palmLen = Mathf.Max(0.02f, Vector3.Dot(knuckleMid - _wrist, f));
-            Vector3 palmBase = _wrist;
+            palmBase = _wrist;
             Vector3 cK = palmBase + f * (palmLen * PalmAt[PalmRings - 1]);
 
             // ---- the knuckle outline, shared out between the fingers: boundaries halfway between neighbouring knuckles
@@ -593,28 +664,8 @@ namespace FrostAndFound
             for (int fi = 0; fi < 4; fi++) BuildFinger(fi, f, xA, up, glove);
             BuildThumb(up, f, palmBase, glove);
 
-            // ---- weld, then smooth normals gathered across every join
+            // welded copies take their twin's position exactly
             for (int i = 0; i < VertexCount; i++) { int w = _weld[i]; if (w != i) _wp[i] = _wp[w]; }
-            if (!m_Oriented) Orient(palmBase, f);
-            System.Array.Clear(_nacc, 0, VertexCount);
-            for (int t = 0; t < _tris.Length; t += 3)
-            {
-                int a = _weld[_tris[t]], b = _weld[_tris[t + 1]], c = _weld[_tris[t + 2]];
-                var n = Vector3.Cross(_wp[b] - _wp[a], _wp[c] - _wp[a]);
-                _nacc[a] += n; _nacc[b] += n; _nacc[c] += n;
-            }
-            var toLocal = m_Root.worldToLocalMatrix;
-            for (int i = 0; i < VertexCount; i++)
-            {
-                var n = _nacc[_weld[i]];
-                _verts[i] = toLocal.MultiplyPoint3x4(_wp[i]);
-                _normals[i] = toLocal.MultiplyVector(n.sqrMagnitude > 1e-24f ? n : up).normalized;
-            }
-            m_Mesh.SetVertices(_verts);
-            m_Mesh.SetNormals(_normals);
-            m_Mesh.SetUVs(0, _uvs);
-            m_Mesh.SetColors(_colors);
-            m_Mesh.RecalculateBounds();
         }
 
         /// <summary>One finger: ring 0 is its slice of the knuckle outline; the rings after it follow a spline through

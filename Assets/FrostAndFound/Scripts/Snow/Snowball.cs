@@ -54,6 +54,7 @@ namespace FrostAndFound
         Rigidbody m_Rb;
         bool m_Flying, m_Done;
         float m_FlightTime;
+        Vector3 m_Vel;   // the velocity going into this physics step (a collision has already changed the body's)
         public Vector3 ThrowOrigin { get; private set; }
         public float ThrowSpeed { get; private set; }
         /// <summary>The kid who threw this one (null = the player's).</summary>
@@ -100,6 +101,7 @@ namespace FrostAndFound
             m_Flying = true;
             ThrowOrigin = transform.position;
             ThrowSpeed = velocity.magnitude;
+            m_Vel = velocity;
             if (ThrowSpeed > 2f) AudioDirector.PlayAt(Sfx.Whoosh, transform.position, Mathf.Clamp01(ThrowSpeed / 12f), Random.Range(0.95f, 1.15f));
             Thrown?.Invoke(this);
         }
@@ -107,6 +109,7 @@ namespace FrostAndFound
         void FixedUpdate()
         {
             if (!m_Flying) return;
+            m_Vel = m_Rb.linearVelocity;
             m_FlightTime += Time.fixedDeltaTime;
             // light air drag so long throws still feel like snow, not baseballs
             m_Rb.linearVelocity *= 1f - 0.08f * Time.fixedDeltaTime;
@@ -155,52 +158,12 @@ namespace FrostAndFound
         {
             if (m_Done) return;
             m_Done = true;
-            Fx.SnowPuff(point, normal, onSnow ? 10 : 18, 0.7f);
+            Fx.SnowImpact(point, normal, m_Vel, onSnow, target != null ? 0.85f : 1f);
             AudioDirector.PlayAt(Sfx.Splat, point, 0.8f, Random.Range(0.9f, 1.1f));
             var snow = SnowSurface.Instance;
             if (onSnow && snow) snow.Stamp(point, Random.Range(0f, 360f), StampShape.Crater, 0.16f, 0.8f);
-            else if (target == null) SplatDecal.Spawn(point, normal, 0.16f);
             Landed?.Invoke(this, point, target);
             Destroy(gameObject);
         }
-    }
-
-    /// <summary>A snowy splat left on walls, furniture and kids' clothes; it fades after a while.</summary>
-    public class SplatDecal : MonoBehaviour
-    {
-        static readonly Queue<SplatDecal> s_Live = new Queue<SplatDecal>();
-        float m_Born;
-        Material m_Mat;
-
-        public static void Spawn(Vector3 point, Vector3 normal, float size, Transform parent = null)
-        {
-            while (s_Live.Count > 24) { var old = s_Live.Dequeue(); if (old) Destroy(old.gameObject); }
-            var go = new GameObject("Snow Splat");
-            go.transform.position = point + normal * 0.004f;
-            go.transform.rotation = Quaternion.LookRotation(-normal) * Quaternion.Euler(0, 0, Random.Range(0f, 360f));
-            go.transform.localScale = Vector3.one * size * Random.Range(0.85f, 1.2f);
-            if (parent) go.transform.SetParent(parent, true);
-            go.AddComponent<MeshFilter>().sharedMesh = ProcMesh.Quad();
-            var mr = go.AddComponent<MeshRenderer>();
-            var d = go.AddComponent<SplatDecal>();
-            d.m_Mat = Palette.UnlitTextured(FxTextures.Splat, Palette.Snow, true, "Splat");
-            mr.sharedMaterial = d.m_Mat;
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            d.m_Born = Time.time;
-            s_Live.Enqueue(d);
-        }
-
-        void Update()
-        {
-            float age = Time.time - m_Born;
-            if (age > 25f)
-            {
-                float a = Mathf.Clamp01(1f - (age - 25f) / 3f);
-                m_Mat.SetColor("_BaseColor", Palette.Snow.WithAlpha(a));
-                if (a <= 0f) Destroy(gameObject);
-            }
-        }
-
-        void OnDestroy() { if (m_Mat) Destroy(m_Mat); }
     }
 }

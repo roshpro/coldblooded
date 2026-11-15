@@ -295,7 +295,6 @@ namespace FrostAndFound
 
         public void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot)
         {
-            SplatDecal.Spawn(point, (point - transform.position).normalized, 0.14f, transform);
             if (Time.time - m_LastHitLine > 10f)
             {
                 m_LastHitLine = Time.time;

@@ -14,6 +14,8 @@ namespace FrostAndFound
         float m_Cooldown;
 
         public Kid Candidate => m_Candidate;
+        /// <summary>You just showed a photo to this kid.</summary>
+        public static event System.Action<Kid> Shown;
 
         void Update()
         {
@@ -69,6 +71,7 @@ namespace FrostAndFound
                 AudioDirector.PlayAt(Sfx.UiClick, hand.Palm.position, 0.4f, 1.3f);
                 hand.Haptic(0.2f, 0.04f);
                 director.ShowPhoto(target, holder.Current.Data);
+                Shown?.Invoke(target);
             }
         }
     }
