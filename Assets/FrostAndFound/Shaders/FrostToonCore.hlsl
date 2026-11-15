@@ -20,6 +20,7 @@ CBUFFER_START(UnityPerMaterial)
     half _BandThreshold;
     half _ShadowStrength;
     half _AmbientStrength;
+    half _UnderShade;
     half _OutlineWidth;
     half _Sparkle;
     half _SparkleScale;
@@ -107,8 +108,13 @@ half4 ToonShade(Varyings input)
     half3 lightTint = lerp(half3(1, 1, 1), lc / lum, 0.5h);
     half3 col = lerp(shadeCol, baseCol * lightTint, band);
 
+    // undersides (chin, hat brim, coat hem, under the arms): no light comes back up off the snow, so faces turned
+    // toward the ground settle into the shade and get no ambient or rim from below
+    half under = saturate(-N.y) * _UnderShade;
+    col = lerp(col, shadeCol, under) * (1.0h - 0.22h * under);
+
     // the ambient answer: SH keeps shadow sides alive
-    col += SampleSH(N) * baseCol * _AmbientStrength;
+    col += SampleSH(N) * baseCol * _AmbientStrength * (1.0h - under);
 
     // a soft sheen on the brightest side (broad, so it reads as soft material rather than a painted stripe)
     half hi = smoothstep(0.7h, 1.0h, ndl) * band;
@@ -116,7 +122,7 @@ half4 ToonShade(Varyings input)
 
     // rim
     half rim = pow(1.0h - saturate(dot(N, V)), _RimPower) * _RimStrength;
-    col += _RimColor.rgb * rim * (0.35h + 0.65h * band);
+    col += _RimColor.rgb * rim * (0.35h + 0.65h * band) * (1.0h - under);
 
     // glitter
     col += _SparkleColor.rgb * FrostSparkle(input.positionWS, N, V, _Sparkle, _SparkleScale);

@@ -205,6 +205,8 @@ namespace FrostAndFound
             m.SetFloat("_BandThreshold", 0.42f);
             m.SetFloat("_BandSoftness", 0.34f);
             m.SetFloat("_AmbientStrength", 0.22f);
+            // no light from below: undersides (chin, hat brim, coat hem) sit in shade instead of looking lit by the snow
+            m.SetFloat("_UnderShade", 1f);
             m.SetFloat("_OutlineWidth", 0f);
             return m;
         }

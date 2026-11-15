@@ -35,6 +35,11 @@ namespace FrostAndFound
         const float GrabReach = 0.085f;     // how close your free hand has to get to the print
         /// <summary>The camera body's size (full size).</summary>
         public const float BodyScale = 1f;
+        /// <summary>Thumb tip to index tip in the mitten's camera hold (Mittens' CamJoints): about a light pinch.</summary>
+        public const float GripGap = 0.048f;
+        /// <summary>The camera (and the glove's hold round it) is scaled so that span matches your real pinch when
+        /// it comes up, so the fingers never spread wider than yours. Fixed while it stays up.</summary>
+        public float GripScale { get; private set; } = 1f;
 
         RenderTexture m_Viewfinder;
         Transform m_Body;
@@ -75,7 +80,8 @@ namespace FrostAndFound
             // the lens camera
             var lensGo = new GameObject("Lens Camera");
             lensGo.transform.SetParent(transform, false);
-            lensGo.transform.localPosition = new Vector3(0, 0.001f, 0.06f) * BodyScale;
+            float handSide = FrostPrefs.CameraHand == HandSide.Left ? -1f : 1f;
+            lensGo.transform.localPosition = new Vector3(0.008f * handSide, 0.009f, 0.05f) * BodyScale;
             Lens = lensGo.AddComponent<Camera>();
             Lens.fieldOfView = tune.photoFov;
             Lens.nearClipPlane = 0.04f;
@@ -97,9 +103,9 @@ namespace FrostAndFound
             m_Viewfinder.Create();
             Lens.targetTexture = m_Viewfinder;
 
-            // viewfinder screen on the back of the camera
+            // viewfinder screen on the back of the camera, set into its bezel, clear of your thumb
             var screen = ProcMesh.Part("Viewfinder", m_Body, ProcMesh.Quad(), Palette.UnlitTextured(m_Viewfinder, Color.white, false, "ViewfinderScreen"),
-                new Vector3(0.012f, 0.006f, -0.0496f), new Vector3(0.056f, 0.056f, 1f), new Vector3(0, 0, 0));
+                new Vector3(-0.006f * handSide, 0f, -0.0368f), new Vector3(0.034f, 0.034f, 1f), new Vector3(0, 0, 0));
             screen.transform.localRotation = Quaternion.Euler(0, 180f, 0) * Quaternion.Euler(0, 180f, 0); // quad faces -Z = toward you
             screen.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
@@ -111,32 +117,38 @@ namespace FrostAndFound
             var body = Palette.Toon(Palette.CameraBody, true, 0.2f);
             var dark = Palette.Toon(Palette.CameraDark, true, 0.3f);
             var t = m_Body;
-            // classic wedge body: main block + sloped top + chunky lens + flash window + red button + rainbow stripe
-            // (a little less tall than it was: the shell is 1.2 cm shorter and everything above it sits lower)
-            ProcMesh.Part("Shell", t, ProcMesh.RoundedBox(0.16f, 3), body, new Vector3(0, -0.011f, 0), new Vector3(0.13f, 0.073f, 0.095f));
-            ProcMesh.Part("Top", t, ProcMesh.RoundedBox(0.2f, 3), body, new Vector3(0, 0.033f, -0.01f), new Vector3(0.13f, 0.035f, 0.075f), new Vector3(-12, 0, 0));
-            ProcMesh.Part("Base", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(0, -0.05f, 0.002f), new Vector3(0.133f, 0.012f, 0.098f));
-            ProcMesh.Part("Lens Barrel", t, ProcMesh.Cylinder(18), dark, new Vector3(0, -0.004f, 0.052f), new Vector3(0.048f, 0.022f, 0.048f), new Vector3(90, 0, 0));
-            ProcMesh.Part("Lens Ring", t, ProcMesh.Torus(0.42f, 0.08f, 20, 8), Palette.Toon(Palette.Coal, false, 0.4f), new Vector3(0, -0.004f, 0.064f), new Vector3(0.055f, 0.055f, 0.055f), new Vector3(90, 0, 0));
-            ProcMesh.Part("Glass", t, ProcMesh.Disc(18), Palette.Toon(Palette.Lens, false, 0.9f, 0.15f), new Vector3(0, -0.004f, 0.0635f), new Vector3(0.036f, 0.002f, 0.036f), new Vector3(90, 0, 0));
+            // A compact retro instant camera, 10.5 × 5.4 × 7 cm plus a low sloped top: small enough that the hand holds
+            // it in a light pinch (index on the shutter, thumb on the back's top corner). Everything on its faces is
+            // kept inside that face's flat area and sunk partly into it, so nothing hangs off a rounded edge.
+            //   Shell flat areas: front/back x ±0.0378, y ±0.0194 (faces at z ±0.035); top hump flat x ±0.0364.
+            // The holding hand's end (left for the left hand) gets the shutter and the lens leans that way;
+            // the rainbow stripes and flash sit on the open side, where your fingers don't cover them.
+            float side = FrostPrefs.CameraHand == HandSide.Left ? -1f : 1f;
+            ProcMesh.Part("Shell", t, ProcMesh.RoundedBox(0.14f, 3), body, Vector3.zero, new Vector3(0.105f, 0.054f, 0.07f));
+            ProcMesh.Part("Top", t, ProcMesh.RoundedBox(0.15f, 3), body, new Vector3(0, 0.031f, -0.008f), new Vector3(0.104f, 0.016f, 0.05f), new Vector3(-10f, 0, 0));
+            ProcMesh.Part("Base", t, ProcMesh.RoundedBox(0.3f, 2), dark, new Vector3(0, -0.0285f, 0.001f), new Vector3(0.107f, 0.008f, 0.072f));
+            float lensX = 0.008f * side;
+            ProcMesh.Part("Lens Barrel", t, ProcMesh.Cylinder(18), dark, new Vector3(lensX, -0.001f, 0.039f), new Vector3(0.034f, 0.014f, 0.034f), new Vector3(90, 0, 0));
+            ProcMesh.Part("Lens Ring", t, ProcMesh.Torus(0.42f, 0.08f, 20, 8), Palette.Toon(Palette.Coal, false, 0.4f), new Vector3(lensX, -0.001f, 0.046f), new Vector3(0.038f, 0.038f, 0.038f), new Vector3(90, 0, 0));
+            ProcMesh.Part("Glass", t, ProcMesh.Disc(18), Palette.Toon(Palette.Lens, false, 0.9f, 0.15f), new Vector3(lensX, -0.001f, 0.0458f), new Vector3(0.026f, 0.002f, 0.026f), new Vector3(90, 0, 0));
+            // flash window, set into the sloped top's front face
             m_FlashMat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Unlit)) { name = "FlashBulb" };
             m_FlashMat.SetColor("_BaseColor", Palette.SkyHorizon);
-            var bulb = ProcMesh.Part("Flash", t, ProcMesh.RoundedBox(0.3f, 2), m_FlashMat, new Vector3(0.036f, 0.034f, 0.03f), new Vector3(0.036f, 0.018f, 0.012f), new Vector3(-12, 0, 0));
+            var bulb = ProcMesh.Part("Flash", t, ProcMesh.RoundedBox(0.3f, 2), m_FlashMat, new Vector3(-0.016f * side, 0.0353f, 0.0166f), new Vector3(0.022f, 0.009f, 0.004f), new Vector3(-10f, 0, 0));
             m_FlashBulb = bulb.GetComponent<Renderer>();
-            // the shutter sits on top at the holding hand's end, right under the mitten's tip (left end for the left hand)
-            float side = FrostPrefs.CameraHand == HandSide.Left ? -1f : 1f;
-            ProcMesh.Part("Shutter", t, ProcMesh.Cylinder(12), Palette.Toon(Palette.EvidenceRed, true, 0.4f), new Vector3(0.046f * side, 0.0525f, -0.004f), new Vector3(0.018f, 0.008f, 0.018f), new Vector3(-12f, 0, 0));
-            ProcMesh.Part("Eyepiece", t, ProcMesh.RoundedBox(0.25f, 2), dark, new Vector3(-0.035f * side, 0.040f, -0.035f), new Vector3(0.026f, 0.018f, 0.02f));
+            // the shutter, seated on the sloped top at the holding hand's end, right under the glove's index tip
+            ProcMesh.Part("Shutter", t, ProcMesh.Cylinder(12), Palette.Toon(Palette.EvidenceRed, true, 0.4f), new Vector3(0.028f * side, 0.0396f, -0.017f), new Vector3(0.014f, 0.006f, 0.014f), new Vector3(-10f, 0, 0));
+            // rainbow stripes: flush on the front, mostly sunk into it (only 0.6 mm proud)
             Color[] rainbow = { Palette.Rainbow1, Palette.Rainbow2, Palette.Rainbow3, Palette.Rainbow4, Palette.Rainbow5 };
             for (int i = 0; i < rainbow.Length; i++)
                 ProcMesh.Part("Stripe", t, ProcMesh.RoundedBox(0.1f, 1), Palette.Toon(rainbow[i], false, 0.2f),
-                    new Vector3(-0.012f + i * 0.0062f, 0.0f, 0.0482f), new Vector3(0.0058f, 0.05f, 0.002f));
-            // the photo slot at the front-bottom
-            ProcMesh.Part("Slot", t, ProcMesh.RoundedBox(0.3f, 1), Palette.Toon(Palette.Coal), new Vector3(0, -0.042f, 0.0475f), new Vector3(0.095f, 0.006f, 0.002f));
-            // viewfinder bezel on the back
-            ProcMesh.Part("Bezel", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(0.012f, 0.006f, -0.047f), new Vector3(0.064f, 0.064f, 0.004f));
-            Slot = ProcMesh.Pivot("PhotoSlot", t, new Vector3(0, -0.044f, 0.05f));
-            m_Body.localPosition = new Vector3(0, 0.015f, -0.01f);
+                    new Vector3(-side * (0.0151f + i * 0.0042f), 0f, 0.0341f), new Vector3(0.0042f, 0.032f, 0.003f));
+            // the photo slot along the front-bottom edge, just above the base
+            ProcMesh.Part("Slot", t, ProcMesh.RoundedBox(0.3f, 1), Palette.Toon(Palette.Coal), new Vector3(0, -0.0245f, 0.034f), new Vector3(0.08f, 0.0025f, 0.006f));
+            // viewfinder bezel on the back (the screen itself is added in Build)
+            ProcMesh.Part("Bezel", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(-0.006f * side, 0f, -0.0345f), new Vector3(0.04f, 0.039f, 0.004f));
+            Slot = ProcMesh.Pivot("PhotoSlot", t, new Vector3(0, -0.0245f, 0.037f));
+            m_Body.localPosition = new Vector3(0, 0.01f, -0.005f);
             MeshMerger.Merge(m_Body, null, 0f);
         }
 
@@ -164,13 +176,16 @@ namespace FrostAndFound
             }
             if (m_Waiting || m_Busy) wantsUp = true;    // mid-shot, or a print still in the slot
             if (m_Hidden || !hand.IsTracked) wantsUp = false;
+            // coming up: size the camera to the pinch you're making right now
+            if (wantsUp && m_Raise <= 0.001f)
+                GripScale = rig.IsXR && hand.HasJoints ? Mathf.Clamp(Vector3.Distance(hand.Joints[3], hand.Joints[7]) / GripGap, 0.8f, 1.15f) : 1f;
             m_Raise = Mathf.MoveTowards(m_Raise, wantsUp ? 1f : 0f, dt / (wantsUp ? 0.16f : 0.2f));
             float scale = wantsUp ? Ease.OutBack(m_Raise) : Mathf.SmoothStep(0f, 1f, m_Raise);
             if (m_Body)
             {
                 bool show = scale > 0.01f;
                 if (m_Body.gameObject.activeSelf != show) m_Body.gameObject.SetActive(show);
-                m_Body.localScale = Vector3.one * Mathf.Max(scale * BodyScale, 0.001f);
+                m_Body.localScale = Vector3.one * Mathf.Max(scale * BodyScale * GripScale, 0.001f);
             }
 
 
@@ -224,7 +239,7 @@ namespace FrostAndFound
                 var aim = Vector3.Slerp(fwd.normalized, rig.Head.forward, 0.5f);
                 rot = Quaternion.LookRotation(aim, Vector3.up);
                 float side = hand.Side == HandSide.Left ? 1f : -1f;   // the body extends toward your middle
-                pos = hand.PinchPoint + rot * new Vector3(0.05f * side, -0.032f, 0.012f);
+                pos = hand.PinchPoint + rot * (new Vector3(0.035f * side, -0.0475f, 0.039f) * GripScale);
                 return;
             }
             pos = hand.Anchor.TransformPoint(new Vector3(0, 0.03f, 0.03f));

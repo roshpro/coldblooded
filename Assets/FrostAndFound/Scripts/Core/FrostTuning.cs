@@ -61,6 +61,14 @@ namespace FrostAndFound
         public float divotHoldSeconds = 75f;
         [Tooltip("How long a print takes to fill back in once it starts fading.")]
         public float printFadeSeconds = 20f;
+
+        [Header("Punches (superhot-style)")]
+        [Tooltip("A hand moving at least this fast (m/s) into a kid dazes them like a snowball.")]
+        public float punchSpeed = 1.5f;
+        [Tooltip("Size of the fist used for the hit test (m).")]
+        public float punchRadius = 0.05f;
+        [Tooltip("After a punch lands, that hand can't land another for this long (s).")]
+        public float punchCooldown = 0.45f;
         [Header("Aim assist (light nudge, not a homing missile)")]
         public float aimAssistConeDegrees = 11f;
         [Range(0f, 1f)] public float aimAssistStrength = 0.35f;

@@ -105,6 +105,7 @@ namespace FrostAndFound
             gameObject.AddComponent<SnowballHand>().Enabled = false;
             gameObject.AddComponent<ShowPhotoDetector>();
             Mittens.Create();
+            gameObject.AddComponent<PlayerPunch>();
             m_Director = gameObject.AddComponent<CaseDirector>();
 
             gameObject.AddComponent<TipsDirector>();

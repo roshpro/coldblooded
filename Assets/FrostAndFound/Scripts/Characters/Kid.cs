@@ -391,12 +391,25 @@ namespace FrostAndFound
         public Pose SignaturePose => PoseFor();
 
         // ------------------------------------------------------------------ snowballs (just for fun, required only in the finale)
-        public virtual void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot)
+        public virtual void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot) => TakeHit(point, velocity, headshot, true);
+
+        /// <summary>Punched by your hand (superhot-style): the same stagger and daze as a snowball, minus the splat.</summary>
+        public virtual void OnPunched(Vector3 point, Vector3 velocity, bool headshot) => TakeHit(point, velocity, headshot, false);
+
+        protected void TakeHit(Vector3 point, Vector3 velocity, bool headshot, bool snowball)
         {
             Anim.HitReact();
             if (Faces) Faces.Dizzy(2.4f);
-            AudioDirector.PlayAt(headshot ? Sfx.Bonk : Sfx.Splat, point, headshot ? 0.7f : 0.9f, Random.Range(0.95f, 1.08f));
-            SplatDecal.Spawn(point, (point - ChestPoint).normalized, 0.12f, Rig.Spine);
+            if (snowball)
+            {
+                AudioDirector.PlayAt(headshot ? Sfx.Bonk : Sfx.Splat, point, headshot ? 0.7f : 0.9f, Random.Range(0.95f, 1.08f));
+                SplatDecal.Spawn(point, (point - ChestPoint).normalized, 0.12f, Rig.Spine);
+            }
+            else
+            {
+                AudioDirector.PlayAt(Sfx.Bonk, point, headshot ? 0.85f : 0.65f, Random.Range(1.02f, 1.15f));
+                Fx.SnowPuff(point, velocity.sqrMagnitude > 1e-6f ? -velocity.normalized : Vector3.up, 8, 0.45f);   // frost knocked off the coat
+            }
             if (Time.time - m_LastHitLine > 4f && !Busy)
             {
                 m_LastHitLine = Time.time;

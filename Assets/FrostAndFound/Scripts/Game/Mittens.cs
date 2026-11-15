@@ -76,18 +76,21 @@ namespace FrostAndFound
         // held things, in the hand's own frame (right hand: wrist at the origin, fingers +Z, palm facing -Y, thumb -X;
         // the left hand mirrors x). A snowball cups in the palm.
         static readonly Vector3 BallCenter = new Vector3(0.004f, -0.054f, 0.058f);
-        // the camera grip, in camera space for the LEFT hand (x mirrors for the right): the glove stands at the camera's
-        // left end, fingers up and palm against the end; the fingers curl over the top-left edge with the index tip on
-        // the shutter and the thumb tucks under the bottom, so the screen faces you, clear of the hand
-        static readonly Vector3 CamPalm = new Vector3(-0.092f, 0.005f, -0.012f);
-        static readonly Vector3 CamWrist = new Vector3(-0.094f, -0.052f, -0.014f);
+        // the camera grip, in camera space for the LEFT hand (x mirrors for the right), for the compact Polaroid
+        // (body x ±0.0525, y -0.0225..0.049 with the sloped top, z -0.045..0.03): the glove stands at the camera's
+        // left end, palm against it; the index curls over the top onto the shutter, the middle lies beside it, the
+        // ring and little fingers hook round the front-left corner, and the thumb rests on the back's top-left corner,
+        // clear of the screen. Thumb tip to index tip is PolaroidCamera.GripGap (≈ a light pinch), so the glove's
+        // fingers sit about where yours are; the whole hold scales with PolaroidCamera.GripScale.
+        static readonly Vector3 CamPalm = new Vector3(-0.0545f, -0.022f, -0.001f);
+        static readonly Vector3 CamWrist = new Vector3(-0.070f, -0.068f, 0.002f);
         static readonly Vector3[] CamJoints =
         {
-            new Vector3(-0.080f, -0.022f, -0.036f), new Vector3(-0.070f, -0.046f, -0.032f), new Vector3(-0.056f, -0.055f, -0.020f), new Vector3(-0.042f, -0.057f, -0.006f),   // thumb, under the bottom
-            new Vector3(-0.092f, 0.040f, -0.032f), new Vector3(-0.090f, 0.072f, -0.030f), new Vector3(-0.070f, 0.082f, -0.024f), new Vector3(-0.050f, 0.078f, -0.016f),     // index, tip on the shutter
-            new Vector3(-0.094f, 0.042f, -0.010f), new Vector3(-0.092f, 0.076f, -0.008f), new Vector3(-0.071f, 0.085f, -0.004f), new Vector3(-0.050f, 0.080f, 0.004f),      // middle
-            new Vector3(-0.093f, 0.040f, 0.012f), new Vector3(-0.091f, 0.072f, 0.014f), new Vector3(-0.072f, 0.082f, 0.016f), new Vector3(-0.053f, 0.077f, 0.022f),        // ring
-            new Vector3(-0.091f, 0.036f, 0.032f), new Vector3(-0.089f, 0.060f, 0.034f), new Vector3(-0.074f, 0.072f, 0.035f), new Vector3(-0.058f, 0.069f, 0.038f),        // little
+            new Vector3(-0.058f, -0.042f, -0.024f), new Vector3(-0.061f, -0.012f, -0.051f), new Vector3(-0.050f, 0.012f, -0.056f), new Vector3(-0.042f, 0.032f, -0.056f),   // thumb, on the back's top corner
+            new Vector3(-0.068f, 0.022f, -0.028f), new Vector3(-0.063f, 0.060f, -0.026f), new Vector3(-0.045f, 0.068f, -0.024f), new Vector3(-0.028f, 0.063f, -0.022f),     // index, tip on the shutter
+            new Vector3(-0.069f, 0.024f, -0.004f), new Vector3(-0.065f, 0.064f, -0.002f), new Vector3(-0.046f, 0.069f, 0.000f), new Vector3(-0.030f, 0.062f, 0.002f),       // middle, over the top
+            new Vector3(-0.068f, 0.021f, 0.018f), new Vector3(-0.063f, 0.052f, 0.022f), new Vector3(-0.047f, 0.050f, 0.030f), new Vector3(-0.036f, 0.040f, 0.040f),         // ring, round the front corner
+            new Vector3(-0.066f, 0.016f, 0.036f), new Vector3(-0.060f, 0.040f, 0.046f), new Vector3(-0.048f, 0.030f, 0.046f), new Vector3(-0.040f, 0.018f, 0.042f),         // little
         };
         Vector3 CamMirror(Vector3 v) => new Vector3(m_Side == HandSide.Left ? v.x : -v.x, v.y, v.z);
 
@@ -125,29 +128,46 @@ namespace FrostAndFound
         readonly float[] _curl = new float[5], _spread = new float[5];
 
         // ---------------------------------------------------------------- topology
-        // Palm: rings of S sides (+1 seam vertex): 0-6 ribbed cuff (stripe, lip back to the wrist) | 7-12 palm | 13-14
-        //   a rounded knuckle end, then caps at the cuff opening and over the knuckles.
-        // Fingers (thumb first): FR spline rings + FDome dome rings of F sides, a cap inside the palm and one at the tip.
-        const int S = 28, F = 14;
-        const int CuffRings = 7, PalmRings = 6, PalmDomeRings = 2, PR = CuffRings + PalmRings + PalmDomeRings;
-        const int FR = 13, FDome = 3, FRings = FR + FDome;
-        const int PalmVerts = PR * (S + 1) + 2;
-        const int FingerVerts = FRings * (F + 1) + 2;
-        const int VertexCount = PalmVerts + 5 * FingerVerts;
-        const float PalmStitches = 20f, FingerStitches = 7f, ThumbStitches = 8f;
+        // One closed surface, welded so the shading runs straight across every join:
+        //  • Palm: PR rings of S sides (+1 UV-seam vertex): 0-6 ribbed cuff (stripe, lip back to the wrist), 7-12 palm.
+        //    The last ring sits just behind the knuckles and its outline is shared out between the four fingers.
+        //  • Fingers (index → little): ring 0 IS the finger's slice of that knuckle outline, closed by "web" edges
+        //    through the hand that it shares with its neighbours, so every finger grows straight out of the palm and
+        //    neighbours meet in a crotch. The next rings round off into the finger, which ends in a domed tip.
+        //  • Thumb: grows out of an opening on the palm's lower index side; its ring 0 is that opening's edge loop.
+        const int NA = 4, NW = 3;                  // segments along a finger's top/bottom arc, and down a web
+        const int F = 2 * NA + 2 * NW;             // segments round a finger
+        const int OuterArc = 2 * NA + NW;          // the index/little finger's outer arc (top, side, bottom)
+        const int S = 2 * OuterArc + 4 * NA;       // segments round the palm
+        // the knuckle outline runs little side → over the back → index side → under the palm → back to the little side
+        const int KLittle = 0, KRingTop = OuterArc, KMidTop = KRingTop + NA, KIndex = KMidTop + NA, KMidBot = KIndex + OuterArc, KRingBot = KMidBot + NA;
+        static readonly int[] WebTop = { KIndex, KMidTop, KRingTop }, WebBot = { KMidBot, KRingBot, 0 };   // index|middle, middle|ring, ring|little
+        const int CuffRings = 7, PalmRings = 6, PR = CuffRings + PalmRings, KR = PR - 1;
+        const int FR = 12, FDome = 3, FRings = FR + FDome;
+        const int PatchR0 = CuffRings, PatchR1 = CuffRings + 3;
+        const int PatchK0 = KIndex + 3, PatchK1 = KIndex + 10;   // round the index side, turned a little toward the palm
+        const int Loop = 2 * ((PatchR1 - PatchR0) + (PatchK1 - PatchK0));
+        const int ThumbRings = 8;
+        const int PalmCap = PR * (S + 1);
+        const int PalmVerts = PalmCap + 1;
+        const int FingerVerts = FRings * (F + 1) + 1;
+        const int ThumbStart = PalmVerts + 4 * FingerVerts;
+        const int ThumbCap = ThumbStart + ThumbRings * (Loop + 1);
+        const int VertexCount = ThumbCap + 1;
+        const float PalmStitches = 22f, FingerStitches = 7f, ThumbStitches = 8f;
+        const float PalmSquare = 2.6f, FingerSquare = 2.35f;   // superellipse exponents: above 2 gives a firmer, slightly squared edge
+        const float Tau = Mathf.PI * 2f;
 
         static int PV(int r, int k) => r * (S + 1) + k;
-        static int PalmCapStart => PR * (S + 1);
-        static int PalmCapEnd => PR * (S + 1) + 1;
-        static int FBase(int f) => PalmVerts + f * FingerVerts;
-        static int FV(int f, int r, int k) => FBase(f) + r * (F + 1) + k;
-        static int FCapStart(int f) => FBase(f) + FRings * (F + 1);
-        static int FCapEnd(int f) => FCapStart(f) + 1;
+        static int FV(int f, int r, int m) => PalmVerts + f * FingerVerts + r * (F + 1) + m;
+        static int FCap(int f) => PalmVerts + f * FingerVerts + FRings * (F + 1);
+        static int TV(int r, int m) => ThumbStart + r * (Loop + 1) + m;
 
         static readonly float[] CuffAt = { -1f, -0.62f, -0.62f, -0.44f, -0.44f, -0.1f, -0.1f };
-        static readonly float[] PalmAt = { 0.05f, 0.24f, 0.43f, 0.62f, 0.8f, 0.93f };
-        static readonly float[] PalmDomeDeg = { 45f, 72f };
+        static readonly float[] PalmAt = { 0.05f, 0.24f, 0.43f, 0.62f, 0.8f, 0.96f };
         static readonly float[] FingerDomeDeg = { 38f, 64f, 82f };
+        static readonly float[] ThumbRadiusMul = { 0f, 1.3f, 1.12f, 1.05f, 1f, 0.95f };
+        static readonly float[] ThumbDomeDeg = { 50f, 78f };
 
         readonly HandSide m_Side;
         readonly Transform m_Root;
@@ -159,13 +179,25 @@ namespace FrostAndFound
         readonly Vector3[] _wp = new Vector3[VertexCount];
         readonly Vector3[] _verts = new Vector3[VertexCount];
         readonly Vector3[] _normals = new Vector3[VertexCount];
+        readonly Vector3[] _nacc = new Vector3[VertexCount];
         readonly Vector2[] _uvs = new Vector2[VertexCount];
         readonly Color[] _colors = new Color[VertexCount];
-        readonly Vector3[] _pc = new Vector3[PR];                 // palm ring centres
-        readonly Vector3[] _fc = new Vector3[FRings], _ft = new Vector3[FRings];
+        readonly int[] _weld = new int[VertexCount];      // the vertex each one coincides with (itself if none)
+        readonly int[] _tris;
+        readonly int[] _partStart = new int[7];           // triangle ranges: palm, index, middle, ring, little, thumb
+        bool m_Oriented;
+        readonly float[] _ang = new float[S + 1], _ax = new float[S + 1], _ay = new float[S + 1];
+        readonly float[] _kx = new float[4];
+        readonly Vector3[] _pc = new Vector3[PR];
+        readonly Vector3[] _fcen = new Vector3[4 * FRings];
+        readonly Vector3[] _fc = new Vector3[FRings], _ft = new Vector3[FRings], _fx = new Vector3[FRings], _fy = new Vector3[FRings];
         readonly float[] _fr = new float[FRings];
+        readonly float[] _x0 = new float[F + 1], _y0 = new float[F + 1], _fphi = new float[F + 1];
         readonly Vector3[] _ctrl = new Vector3[7];
-        readonly Vector3[] _ringCentre = new Vector3[PR + 5 * FRings];
+        readonly int[] _loopR = new int[Loop], _loopK = new int[Loop];
+        readonly float[] _phi = new float[Loop + 1];
+        readonly Vector3[] _tc = new Vector3[ThumbRings], _tt = new Vector3[ThumbRings];
+        readonly float[] _tr = new float[ThumbRings];
 
         public WoolGlove(Transform parent, HandSide side, Material mat)
         {
@@ -177,36 +209,80 @@ namespace FrostAndFound
             HoldPoint = new GameObject(side + " Glove Hold").transform;
             HoldPoint.SetParent(parent, false);
 
-            var idx = new List<int>(6 * (PR * S + 5 * FRings * F) + 3 * (2 * S + 10 * F));
+            // the thumb opening's edge loop
+            int li = 0;
+            for (int k = PatchK0; k < PatchK1; k++) { _loopR[li] = PatchR0; _loopK[li++] = k; }
+            for (int r = PatchR0; r < PatchR1; r++) { _loopR[li] = r; _loopK[li++] = PatchK1; }
+            for (int k = PatchK1; k > PatchK0; k--) { _loopR[li] = PatchR1; _loopK[li++] = k; }
+            for (int r = PatchR1; r > PatchR0; r--) { _loopR[li] = r; _loopK[li++] = PatchK0; }
+            BuildWelds();
+
+            var idx = new List<int>(6 * (PR * S + 4 * FRings * F + ThumbRings * Loop) + 3 * (S + 4 * F + Loop));
             void Quad(int a0, int b0, int c0, int d0) { idx.Add(a0); idx.Add(b0); idx.Add(c0); idx.Add(b0); idx.Add(d0); idx.Add(c0); }
             for (int r = 0; r + 1 < PR; r++)
-                for (int k = 0; k < S; k++) Quad(PV(r, k), PV(r, k + 1), PV(r + 1, k), PV(r + 1, k + 1));
-            for (int k = 0; k < S; k++)
-            {
-                idx.Add(PalmCapStart); idx.Add(PV(0, k + 1)); idx.Add(PV(0, k));
-                idx.Add(PalmCapEnd); idx.Add(PV(PR - 1, k)); idx.Add(PV(PR - 1, k + 1));
-            }
-            for (int f = 0; f < 5; f++)
-            {
-                for (int r = 0; r + 1 < FRings; r++)
-                    for (int k = 0; k < F; k++) Quad(FV(f, r, k), FV(f, r, k + 1), FV(f, r + 1, k), FV(f, r + 1, k + 1));
-                for (int k = 0; k < F; k++)
+                for (int k = 0; k < S; k++)
                 {
-                    idx.Add(FCapStart(f)); idx.Add(FV(f, 0, k + 1)); idx.Add(FV(f, 0, k));
-                    idx.Add(FCapEnd(f)); idx.Add(FV(f, FRings - 1, k)); idx.Add(FV(f, FRings - 1, k + 1));
+                    if (r >= PatchR0 && r < PatchR1 && k >= PatchK0 && k < PatchK1) continue;   // thumb opening
+                    Quad(PV(r, k), PV(r, k + 1), PV(r + 1, k), PV(r + 1, k + 1));
                 }
+            for (int k = 0; k < S; k++) { idx.Add(PalmCap); idx.Add(PV(0, k + 1)); idx.Add(PV(0, k)); }
+            for (int f = 0; f < 4; f++)
+            {
+                _partStart[1 + f] = idx.Count;
+                for (int r = 0; r + 1 < FRings; r++)
+                    for (int m = 0; m < F; m++) Quad(FV(f, r, m), FV(f, r, m + 1), FV(f, r + 1, m), FV(f, r + 1, m + 1));
+                for (int m = 0; m < F; m++) { idx.Add(FCap(f)); idx.Add(FV(f, FRings - 1, m)); idx.Add(FV(f, FRings - 1, m + 1)); }
             }
+            _partStart[5] = idx.Count;
+            for (int r = 0; r + 1 < ThumbRings; r++)
+                for (int m = 0; m < Loop; m++) Quad(TV(r, m), TV(r, m + 1), TV(r + 1, m), TV(r + 1, m + 1));
+            for (int m = 0; m < Loop; m++) { idx.Add(ThumbCap); idx.Add(TV(ThumbRings - 1, m)); idx.Add(TV(ThumbRings - 1, m + 1)); }
+            _partStart[6] = idx.Count;
+            _tris = idx.ToArray();
 
             m_Mesh = new Mesh { name = "WoolGlove" };
             m_Mesh.MarkDynamic();
             m_Mesh.vertices = _verts;
-            m_Mesh.SetTriangles(idx, 0);
+            m_Mesh.SetTriangles(_tris, 0);
             go.GetComponent<MeshFilter>().sharedMesh = m_Mesh;
             var mr = go.GetComponent<MeshRenderer>();
             mr.sharedMaterial = mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
             mr.receiveShadows = false;
             go.SetActive(false);
+        }
+
+        /// <summary>Which vertices are the same point: UV seams, each finger's ring 0 on the knuckle outline and the
+        /// webs between neighbours, and the thumb's ring 0 on its opening.</summary>
+        void BuildWelds()
+        {
+            for (int i = 0; i < VertexCount; i++) _weld[i] = i;
+            for (int r = 0; r < PR; r++) _weld[PV(r, S)] = PV(r, 0);
+            int K(int k) => PV(KR, k % S);
+            // a finger's ring 0 runs: up its own web (the one toward the little finger), along the top, down the
+            // neighbour's web, back along the bottom; the index and little fingers wrap the hand's sides instead
+            _weld[FV(0, 0, 0)] = K(KMidBot);
+            for (int i = 0; i <= OuterArc; i++) _weld[FV(0, 0, NW + i)] = K(KIndex + i);
+            _weld[FV(1, 0, 0)] = K(KRingBot);
+            for (int i = 0; i <= NA; i++) _weld[FV(1, 0, NW + i)] = K(KMidTop + i);
+            for (int i = 1; i < NW; i++) _weld[FV(1, 0, NW + NA + i)] = FV(0, 0, NW - i);
+            for (int i = 0; i <= NA; i++) _weld[FV(1, 0, 2 * NW + NA + i)] = K(KMidBot + i);
+            _weld[FV(2, 0, 0)] = K(S);
+            for (int i = 0; i <= NA; i++) _weld[FV(2, 0, NW + i)] = K(KRingTop + i);
+            for (int i = 1; i < NW; i++) _weld[FV(2, 0, NW + NA + i)] = FV(1, 0, NW - i);
+            for (int i = 0; i <= NA; i++) _weld[FV(2, 0, 2 * NW + NA + i)] = K(KRingBot + i);
+            for (int i = 0; i <= OuterArc; i++) _weld[FV(3, 0, i)] = K(KLittle + i);
+            for (int i = 1; i < NW; i++) _weld[FV(3, 0, OuterArc + i)] = FV(2, 0, NW - i);
+            for (int f = 0; f < 4; f++)
+                for (int r = 0; r < FRings; r++) _weld[FV(f, r, F)] = FV(f, r, 0);
+            for (int m = 0; m < Loop; m++) _weld[TV(0, m)] = PV(_loopR[m], _loopK[m]);
+            for (int r = 0; r < ThumbRings; r++) _weld[TV(r, Loop)] = TV(r, 0);
+            for (int i = 0; i < VertexCount; i++)
+            {
+                int w = i;
+                while (_weld[w] != w) w = _weld[w];
+                _weld[i] = w;
+            }
         }
 
         public void Dispose() { if (m_Mesh) Object.Destroy(m_Mesh); }
@@ -226,16 +302,17 @@ namespace FrostAndFound
                     case MittenGrip.Ball: Grip(0.5f, 0.56f, 0.55f); break;      // fingers wrapped round the ball
                     case MittenGrip.Camera:
                     {
+                        float gs = CamScale;
                         CameraPose(hand, publishMounts, out var pc, out var qc);
                         // pinching presses the index tip down onto the shutter
                         float press = Mathf.Clamp01((hand.Trigger - 0.2f) / 0.6f);
                         for (int i = 0; i < 20; i++)
                         {
                             var j = CamJoints[i];
-                            if (i >= 4 && i < 8 && (i & 3) >= 2) j.y -= press * 0.008f * ((i & 3) - 1) * 0.5f;
-                            _joints[i] = pc + qc * CamMirror(j);
+                            if (i >= 4 && i < 8 && (i & 3) >= 2) j.y -= press * 0.006f * ((i & 3) - 1) * 0.5f;
+                            _joints[i] = pc + qc * (CamMirror(j) * gs);
                         }
-                        _wrist = pc + qc * CamMirror(CamWrist);
+                        _wrist = pc + qc * (CamMirror(CamWrist) * gs);
                         m_CamPos = pc; m_CamRot = qc;
                         break;
                     }
@@ -297,8 +374,10 @@ namespace FrostAndFound
             if (Mathf.Abs(Vector3.Dot(aim, Vector3.up)) > 0.95f) aim = head ? head.forward : Vector3.forward;
             rot = Quaternion.LookRotation(aim, Vector3.up);
             var palm = hand.Palm ? hand.Palm.position : hand.Anchor.position;
-            pos = palm - rot * CamMirror(CamPalm);
+            pos = palm - rot * (CamMirror(CamPalm) * CamScale);
         }
+
+        static float CamScale => PolaroidCamera.Instance ? PolaroidCamera.Instance.GripScale : 1f;
 
         /// <summary>Snap the glove into a grip: index curl, the other fingers' curl, thumb fold (0..1).</summary>
         void Grip(float index, float grip, float thumb)
@@ -415,24 +494,45 @@ namespace FrostAndFound
         void Apply()
         {
             float sign = m_Side == HandSide.Right ? 1f : -1f;
-            Vector3 fwd = _joints[8] - _wrist;            // wrist → middle knuckle
-            Vector3 across = _joints[4] - _joints[16];    // little knuckle → index knuckle
-            Vector3 palmN = Vector3.Cross(fwd, across).normalized * sign;   // out of the palm
-            if (palmN.sqrMagnitude < 1e-6f) palmN = Vector3.down;
-            Vector3 backN = -palmN;
+            Vector3 fwd = _joints[8] - _wrist;                       // wrist → middle knuckle
             Vector3 f = fwd.sqrMagnitude > 1e-8f ? fwd.normalized : Vector3.forward;
+            Vector3 xA = _joints[16] - _joints[4];                   // index knuckle → little knuckle
+            xA -= f * Vector3.Dot(xA, f);
+            xA = xA.sqrMagnitude > 1e-10f ? xA.normalized : Vector3.Cross(Vector3.up, f).normalized;
+            Vector3 up = Vector3.Cross(f, xA) * sign;                // out of the back of the hand
 
             Color glove = GloveColor; glove.a = 1f;      // stocking stitch
             Color cuff = CuffColor; cuff.a = 0f;         // ribbing
             Color stripe = StripeColor; stripe.a = 0f;
 
-            // ---- palm + cuff
-            float width = across.magnitude + FingerRadius * 2.2f * Bulk;
+            float W = 0.5f * (Vector3.Distance(_joints[4], _joints[16]) + FingerRadius * 2.2f * Bulk);   // half-width at the knuckles
             float h = PalmThickness * Bulk;
             Vector3 knuckleMid = (_joints[4] + _joints[16]) * 0.5f;
             float palmLen = Mathf.Max(0.02f, Vector3.Dot(knuckleMid - _wrist, f));
             Vector3 palmBase = _wrist;
-            float wristHalfW = width * 0.5f * 0.74f, wristHalfH = h * 0.5f * 0.9f;
+            Vector3 cK = palmBase + f * (palmLen * PalmAt[PalmRings - 1]);
+
+            // ---- the knuckle outline, shared out between the fingers: boundaries halfway between neighbouring knuckles
+            for (int i = 0; i < 4; i++) _kx[i] = Vector3.Dot(_joints[4 + 4 * i] - cK, xA);
+            float gap = W * 0.16f, lim = W * 0.84f;
+            float b1 = Mathf.Clamp((_kx[0] + _kx[1]) * 0.5f, -lim, lim - 2f * gap);
+            float b2 = Mathf.Clamp((_kx[1] + _kx[2]) * 0.5f, b1 + gap, lim - gap);
+            float b3 = Mathf.Clamp((_kx[2] + _kx[3]) * 0.5f, b2 + gap, lim);
+            float aT1 = TopAngle(b1 / W), aT2 = TopAngle(b2 / W), aT3 = TopAngle(b3 / W);
+            Arc(KLittle, OuterArc, -aT3, aT3);
+            Arc(KRingTop, NA, aT3, aT2);
+            Arc(KMidTop, NA, aT2, aT1);
+            Arc(KIndex, OuterArc, aT1, Tau - aT1);
+            Arc(KMidBot, NA, Tau - aT1, Tau - aT2);
+            Arc(KRingBot, NA, Tau - aT2, Tau - aT3);
+            for (int k = 0; k <= S; k++)
+            {
+                _ax[k] = SgnPow(Mathf.Cos(_ang[k]), 2f / PalmSquare);
+                _ay[k] = SgnPow(Mathf.Sin(_ang[k]), 2f / PalmSquare);
+            }
+
+            // ---- cuff (0-6: ribbed, flared, a stripe; ring 6 steps back in to the wrist) and palm (7-12)
+            float wristHalfW = W * 0.74f, wristHalfH = h * 0.5f * 0.9f;
             float v = 0f;
             for (int r = 0; r < PR; r++)
             {
@@ -449,101 +549,66 @@ namespace FrostAndFound
                         col = r == 2 || r == 3 ? stripe : cuff;
                     }
                 }
-                else if (r < CuffRings + PalmRings)
+                else
                 {
                     float t = PalmAt[r - CuffRings];
                     c = palmBase + f * (palmLen * t);
-                    w = width * 0.5f * Mathf.Lerp(0.78f, 1f, Mathf.SmoothStep(0f, 1f, t));
+                    w = W * Mathf.Lerp(0.78f, 1f, Mathf.SmoothStep(0f, 1f, t / PalmAt[PalmRings - 1]));
                     hb = h * 0.5f; hp = h * 0.5f * 0.85f;   // a little flatter on the palm side
                     col = glove;
                 }
-                else
-                {
-                    // a rounded knuckle end; the fingers grow out of it
-                    float beta = PalmDomeDeg[r - CuffRings - PalmRings] * Mathf.Deg2Rad;
-                    float sc = Mathf.Pow(Mathf.Cos(beta), 0.6f), dome = h * 0.42f;
-                    c = palmBase + f * (palmLen * PalmAt[PalmRings - 1] + dome * Mathf.Sin(beta));
-                    w = width * 0.5f * sc; hb = h * 0.5f * sc; hp = h * 0.5f * 0.85f * sc;
-                    col = glove;
-                }
-                if (r > 0 && (c - _pc[r - 1]).sqrMagnitude > 1e-10f) v += Vector3.Distance(c, _pc[r - 1]);
+                if (r > 0) v += Vector3.Distance(c, _pc[r - 1]);
                 _pc[r] = c;
-                _ringCentre[r] = c;
-                Ring(PV(r, 0), S, c, f, backN, w, hb, hp, v, PalmStitches, col);
+                for (int k = 0; k <= S; k++)
+                {
+                    int i = PV(r, k);
+                    _wp[i] = c + xA * (w * _ax[k]) + up * (_ay[k] * (_ay[k] > 0f ? hb : hp));
+                    _uvs[i] = new Vector2(k / (float)S * PalmStitches, v);
+                    _colors[i] = col;
+                }
             }
             {
                 // the cuff's opening: recessed and dark, so it reads as the inside of the glove
                 Color inside = CuffColor * 0.3f; inside.a = 0f;
-                _wp[PalmCapStart] = _pc[0] + f * 0.018f; _normals[PalmCapStart] = -f;
-                _uvs[PalmCapStart] = new Vector2(PalmStitches * 0.5f, 0f); _colors[PalmCapStart] = inside;
-                float dome = h * 0.42f;
-                _wp[PalmCapEnd] = palmBase + f * (palmLen * PalmAt[PalmRings - 1] + dome); _normals[PalmCapEnd] = f;
-                _uvs[PalmCapEnd] = new Vector2(PalmStitches * 0.5f, v + dome); _colors[PalmCapEnd] = glove;
+                _wp[PalmCap] = _pc[0] + f * 0.018f;
+                _uvs[PalmCap] = new Vector2(PalmStitches * 0.5f, 0f);
+                _colors[PalmCap] = inside;
             }
-            Normals(PV, PR, S, 0);
 
-            // ---- fingers (thumb first)
-            Vector3 palmMid = palmBase + f * (palmLen * 0.45f);
-            for (int fi = 0; fi < 5; fi++)
+            // ---- the webs between neighbouring fingers: through the hand, bowed forward into a soft crotch
+            float crotch = FingerRadius * Bulk * 0.45f;
+            for (int j = 0; j < 3; j++)
             {
-                float r0 = fi == 0 ? ThumbRadius * Bulk : FingerRadius * Bulk * FingerRadiusMul[fi];
-                Vector3 k0 = _joints[fi * 4], j1 = _joints[fi * 4 + 1], j2 = _joints[fi * 4 + 2], j3 = _joints[fi * 4 + 3];
-                Vector3 tipDir = Dir(j2, j3, f);
-                // start buried in the palm so the finger grows out of the knit with no visible seam
-                Vector3 root = fi == 0 ? Vector3.Lerp(k0, palmMid, 0.5f) : k0 - Dir(k0, j1, f) * 0.018f;
-                float rTip = r0 * 0.86f;
-                _ctrl[0] = root - (k0 - root);               // phantom ends for the Catmull-Rom spline
-                _ctrl[1] = root; _ctrl[2] = k0; _ctrl[3] = j1; _ctrl[4] = j2; _ctrl[5] = j3 - tipDir * rTip * 0.55f;
-                _ctrl[6] = _ctrl[5] + (_ctrl[5] - j2);
-                for (int r = 0; r < FR; r++)
+                Vector3 top = _wp[PV(KR, WebTop[j])], bot = _wp[PV(KR, WebBot[j])];
+                for (int i = 1; i < NW; i++)
                 {
-                    float u = r / (float)(FR - 1) * 4f;
-                    int seg = Mathf.Min(3, (int)u);
-                    _fc[r] = CatmullRom(_ctrl[seg], _ctrl[seg + 1], _ctrl[seg + 2], _ctrl[seg + 3], u - seg);
-                    float along = u / 4f;
-                    _fr[r] = r0 * (fi == 0 ? Mathf.Lerp(1.12f, 0.88f, along) : Mathf.Lerp(1.05f, 0.86f, along));
+                    float t = i / (float)NW;
+                    _wp[FV(j, 0, i)] = Vector3.Lerp(bot, top, t) + f * (crotch * Mathf.Sin(Mathf.PI * t));
                 }
-                for (int r = 0; r < FR; r++) _ft[r] = Dir(_fc[Mathf.Max(0, r - 1)], _fc[Mathf.Min(FR - 1, r + 1)], tipDir);
-                float domeLen = _fr[FR - 1] * 1.05f;
-                for (int d = 0; d < FDome; d++)
-                {
-                    float beta = FingerDomeDeg[d] * Mathf.Deg2Rad;
-                    int r = FR + d;
-                    _ft[r] = _ft[FR - 1];
-                    _fc[r] = _fc[FR - 1] + _ft[r] * domeLen * Mathf.Sin(beta);
-                    _fr[r] = _fr[FR - 1] * Mathf.Pow(Mathf.Cos(beta), 0.85f);
-                }
-
-                // parallel-transported ring frames: no twisting however far the finger curls
-                Vector3 up = backN - _ft[0] * Vector3.Dot(backN, _ft[0]);
-                if (up.sqrMagnitude < 1e-8f) up = Vector3.Cross(_ft[0], across);
-                up.Normalize();
-                float fv = 0f, stitches = fi == 0 ? ThumbStitches : FingerStitches;
-                for (int r = 0; r < FRings; r++)
-                {
-                    if (r > 0)
-                    {
-                        fv += Vector3.Distance(_fc[r - 1], _fc[r]);
-                        up -= _ft[r] * Vector3.Dot(up, _ft[r]);
-                        up = up.sqrMagnitude > 1e-8f ? up.normalized : Vector3.Cross(_ft[r], across).normalized;
-                    }
-                    _ringCentre[PR + fi * FRings + r] = _fc[r];
-                    Ring(FV(fi, r, 0), F, _fc[r], _ft[r], up, _fr[r], _fr[r], _fr[r] * 0.94f, fv, stitches, glove);
-                }
-                int cs = FCapStart(fi), ce = FCapEnd(fi);
-                _wp[cs] = _fc[0] - _ft[0] * _fr[0] * 0.5f; _normals[cs] = -_ft[0];
-                _uvs[cs] = new Vector2(stitches * 0.5f, 0f); _colors[cs] = glove;
-                _wp[ce] = _fc[FR - 1] + _ft[FR - 1] * domeLen; _normals[ce] = _ft[FR - 1];
-                _uvs[ce] = new Vector2(stitches * 0.5f, fv + domeLen * 0.5f); _colors[ce] = glove;
-                int capturedF = fi;
-                Normals((r, k) => FV(capturedF, r, k), FRings, F, PR + fi * FRings);
             }
+            for (int fi = 0; fi < 4; fi++)
+                for (int m = 0; m <= F; m++) { int i = FV(fi, 0, m); _wp[i] = _wp[_weld[i]]; }
 
+            // ---- fingers
+            for (int fi = 0; fi < 4; fi++) BuildFinger(fi, f, xA, up, glove);
+            BuildThumb(up, f, palmBase, glove);
+
+            // ---- weld, then smooth normals gathered across every join
+            for (int i = 0; i < VertexCount; i++) { int w = _weld[i]; if (w != i) _wp[i] = _wp[w]; }
+            if (!m_Oriented) Orient(palmBase, f);
+            System.Array.Clear(_nacc, 0, VertexCount);
+            for (int t = 0; t < _tris.Length; t += 3)
+            {
+                int a = _weld[_tris[t]], b = _weld[_tris[t + 1]], c = _weld[_tris[t + 2]];
+                var n = Vector3.Cross(_wp[b] - _wp[a], _wp[c] - _wp[a]);
+                _nacc[a] += n; _nacc[b] += n; _nacc[c] += n;
+            }
             var toLocal = m_Root.worldToLocalMatrix;
             for (int i = 0; i < VertexCount; i++)
             {
+                var n = _nacc[_weld[i]];
                 _verts[i] = toLocal.MultiplyPoint3x4(_wp[i]);
-                _normals[i] = toLocal.MultiplyVector(_normals[i]).normalized;
+                _normals[i] = toLocal.MultiplyVector(n.sqrMagnitude > 1e-24f ? n : up).normalized;
             }
             m_Mesh.SetVertices(_verts);
             m_Mesh.SetNormals(_normals);
@@ -552,43 +617,213 @@ namespace FrostAndFound
             m_Mesh.RecalculateBounds();
         }
 
-        /// <summary>One ring of a tube: centre, tangent, an "up" toward the back of the hand, half-width, and half-heights
-        /// on the back and palm sides.</summary>
-        void Ring(int start, int sides, Vector3 c, Vector3 t, Vector3 upHint, float w, float hBack, float hPalm, float v, float stitches, Color col)
+        /// <summary>One finger: ring 0 is its slice of the knuckle outline; the rings after it follow a spline through
+        /// the finger's joints, rounding from that slice into a plump, slightly squared tube, and end in a dome.</summary>
+        void BuildFinger(int fi, Vector3 f, Vector3 xA, Vector3 up, Color glove)
         {
-            Vector3 up = upHint - t * Vector3.Dot(upHint, t);
-            up = up.sqrMagnitude > 1e-8f ? up.normalized : Vector3.Cross(t, Vector3.right).normalized;
-            Vector3 right = Vector3.Cross(up, t);
-            for (int k = 0; k <= sides; k++)
+            int jf = 4 + 4 * fi;
+            float r0 = FingerRadius * Bulk * FingerRadiusMul[fi + 1];
+            Vector3 k0 = _joints[jf], j1 = _joints[jf + 1], j2 = _joints[jf + 2], j3 = _joints[jf + 3];
+            Vector3 tipDir = Dir(j2, j3, f);
+
+            // ring 0's shape round its own centre, in the palm's cross-section
+            Vector3 c0 = Vector3.zero;
+            for (int m = 0; m < F; m++) c0 += _wp[FV(fi, 0, m)];
+            c0 /= F;
+            for (int m = 0; m <= F; m++)
             {
-                float a = k * Mathf.PI * 2f / sides, cs = Mathf.Cos(a), sn = Mathf.Sin(a);
-                int i = start + k;
-                _wp[i] = c + right * (cs * w) + up * (sn * (sn > 0f ? hBack : hPalm));
-                _uvs[i] = new Vector2(k / (float)sides * stitches, v);
-                _colors[i] = col;
+                var o = _wp[FV(fi, 0, m)] - c0;
+                _x0[m] = Vector3.Dot(o, xA);
+                _y0[m] = Vector3.Dot(o, up);
+                float phi = Mathf.Atan2(_y0[m], _x0[m]);
+                _fphi[m] = m == 0 ? phi : m == F ? _fphi[0] + Tau : _fphi[m - 1] + Mathf.Repeat(phi - _fphi[m - 1], Tau);
             }
+
+            // the centre line: out of the knuckle slice, through the joints, to just short of the tip
+            float rTip = r0 * 0.86f;
+            _ctrl[1] = c0;
+            _ctrl[2] = Vector3.Lerp(k0, j1, 0.35f);
+            _ctrl[3] = j1;
+            _ctrl[4] = j2;
+            _ctrl[5] = j3 - tipDir * rTip * 0.55f;
+            _ctrl[0] = c0 - f * Vector3.Distance(c0, _ctrl[2]);
+            _ctrl[6] = _ctrl[5] + (_ctrl[5] - j2);
+            for (int r = 0; r < FR; r++)
+            {
+                float u = r / (float)(FR - 1) * 4f;
+                int seg = Mathf.Min(3, (int)u);
+                _fc[r] = CatmullRom(_ctrl[seg], _ctrl[seg + 1], _ctrl[seg + 2], _ctrl[seg + 3], u - seg);
+                _fr[r] = r0 * Mathf.Lerp(1.06f, 0.86f, u / 4f);
+            }
+            _ft[0] = f;
+            for (int r = 1; r < FR; r++) _ft[r] = Dir(_fc[r - 1], _fc[Mathf.Min(FR - 1, r + 1)], tipDir);
+            // ring frames carried along the finger from the palm's own axes: no twist however far it curls
+            _fx[0] = xA; _fy[0] = up;
+            for (int r = 1; r < FR; r++)
+            {
+                Vector3 t = _ft[r], x = _fx[r - 1], y = _fy[r - 1];
+                x -= t * Vector3.Dot(x, t);
+                x = x.sqrMagnitude > 1e-10f ? x.normalized : _fx[r - 1];
+                y -= t * Vector3.Dot(y, t);
+                y -= x * Vector3.Dot(y, x);
+                y = y.sqrMagnitude > 1e-10f ? y.normalized : _fy[r - 1];
+                _fx[r] = x; _fy[r] = y;
+            }
+            float domeLen = _fr[FR - 1] * 1.05f;
+            for (int d = 0; d < FDome; d++)
+            {
+                float beta = FingerDomeDeg[d] * Mathf.Deg2Rad;
+                int r = FR + d;
+                _ft[r] = _ft[FR - 1]; _fx[r] = _fx[FR - 1]; _fy[r] = _fy[FR - 1];
+                _fc[r] = _fc[FR - 1] + _ft[r] * (domeLen * Mathf.Sin(beta));
+                _fr[r] = _fr[FR - 1] * Mathf.Pow(Mathf.Cos(beta), 0.85f);
+            }
+
+            float fv = 0f, e = 2f / FingerSquare;
+            for (int r = 0; r < FRings; r++)
+            {
+                if (r > 0) fv += Vector3.Distance(_fc[r - 1], _fc[r]);
+                _fcen[fi * FRings + r] = _fc[r];
+                float blend = r >= 3 ? 1f : Mathf.SmoothStep(0f, 1f, r / 3f);   // knuckle slice → round finger
+                for (int m = 0; m <= F; m++)
+                {
+                    int i = FV(fi, r, m);
+                    if (r > 0)
+                    {
+                        float cs = Mathf.Cos(_fphi[m]), sn = Mathf.Sin(_fphi[m]);
+                        float cx = _fr[r] * SgnPow(cs, e), cy = _fr[r] * SgnPow(sn, e) * (sn > 0f ? 1f : 0.92f);
+                        _wp[i] = _fc[r] + _fx[r] * Mathf.Lerp(_x0[m], cx, blend) + _fy[r] * Mathf.Lerp(_y0[m], cy, blend);
+                    }
+                    _uvs[i] = new Vector2(m / (float)F * FingerStitches, fv);
+                    _colors[i] = glove;
+                }
+            }
+            int cap = FCap(fi);
+            _wp[cap] = _fc[FR - 1] + _ft[FR - 1] * domeLen;
+            _uvs[cap] = new Vector2(FingerStitches * 0.5f, fv + domeLen * 0.3f);
+            _colors[cap] = glove;
         }
 
-        /// <summary>Smooth normals from the surface itself, turned to face away from each ring's centre.</summary>
-        void Normals(System.Func<int, int, int> V, int rings, int sides, int centreOffset)
+        /// The thumb: ring 0 is the palm opening's edge loop, later rings follow the thumb joints and end in a dome.
+        void BuildThumb(Vector3 back, Vector3 f, Vector3 palmBase, Color glove)
         {
-            for (int r = 0; r < rings; r++)
+            Vector3 p0 = Vector3.zero;
+            for (int m = 0; m < Loop; m++) p0 += _wp[PV(_loopR[m], _loopK[m])];
+            p0 /= Loop;
+            Vector3 n0 = p0 - (palmBase + f * Vector3.Dot(p0 - palmBase, f));   // out of the palm's side
+            n0 = n0.sqrMagnitude > 1e-10f ? n0.normalized : back;
+
+            float rT = ThumbRadius * Bulk;
+            Vector3 j1 = _joints[1], j2 = _joints[2], j3 = _joints[3];
+            Vector3 d1 = Dir(j1, j2, f), d2 = Dir(j2, j3, d1);
+            // push the first rings outward so the thumb leaves the palm instead of running inside it
+            _tc[0] = p0;
+            _tc[1] = Vector3.Lerp(p0, j1, 0.5f) + n0 * rT * 0.9f;
+            _tc[2] = j1 + n0 * rT * 0.35f;
+            _tc[3] = Vector3.Lerp(j1, j2, 0.5f);
+            _tc[4] = j2;
+            _tc[5] = j3 - d2 * rT * 0.9f;
+            for (int r = 1; r <= 5; r++) _tr[r] = rT * ThumbRadiusMul[r];
+            float dome = rT * 1.05f;
+            for (int j = 0; j < ThumbDomeDeg.Length; j++)
             {
-                int rp = Mathf.Min(r + 1, rings - 1), rm = Mathf.Max(r - 1, 0);
-                Vector3 centre = _ringCentre[centreOffset + r];
-                for (int k = 0; k < sides; k++)
-                {
-                    int kp = (k + 1) % sides, km = (k + sides - 1) % sides;
-                    Vector3 p = _wp[V(r, k)];
-                    Vector3 n = Vector3.Cross(_wp[V(r, kp)] - _wp[V(r, km)], _wp[V(rp, k)] - _wp[V(rm, k)]);
-                    Vector3 outward = p - centre;
-                    if (n.sqrMagnitude < 1e-14f) n = outward;
-                    if (Vector3.Dot(n, outward) < 0f) n = -n;
-                    _normals[V(r, k)] = n.normalized;
-                }
-                _normals[V(r, sides)] = _normals[V(r, 0)];
+                float beta = ThumbDomeDeg[j] * Mathf.Deg2Rad;
+                _tc[6 + j] = _tc[5] + d2 * dome * Mathf.Sin(beta);
+                _tr[6 + j] = _tr[5] * Mathf.Pow(Mathf.Cos(beta), 0.85f);
             }
+            for (int r = 0; r < ThumbRings; r++)
+            {
+                Vector3 from = r > 0 ? _tc[r - 1] : _tc[r] - n0 * 0.01f;
+                Vector3 to = r + 1 < ThumbRings ? _tc[r + 1] : _tc[r] + d2 * 0.01f;
+                _tt[r] = Dir(from, to, d2);
+            }
+
+            // angle of each loop vertex round the opening, so every ring lines up with it
+            Vector3 up1 = back - n0 * Vector3.Dot(back, n0);
+            up1 = up1.sqrMagnitude > 1e-8f ? up1.normalized : Vector3.Cross(n0, Vector3.right).normalized;
+            Vector3 right1 = Vector3.Cross(up1, n0);
+            for (int m = 0; m < Loop; m++)
+            {
+                Vector3 w = _wp[PV(_loopR[m], _loopK[m])] - p0;
+                float phi = Mathf.Atan2(Vector3.Dot(w, up1), Vector3.Dot(w, right1));
+                _phi[m] = m == 0 ? phi : _phi[m - 1] + Mathf.Repeat(phi - _phi[m - 1], Tau);
+            }
+            _phi[Loop] = _phi[0] + Tau;
+
+            float v = 0f;
+            for (int r = 0; r < ThumbRings; r++)
+            {
+                if (r > 0) v += Vector3.Distance(_tc[r - 1], _tc[r]);
+                FrameAt(r, back, out var right, out var up);
+                for (int m = 0; m <= Loop; m++)
+                {
+                    int i = TV(r, m);
+                    if (r == 0) _wp[i] = _wp[_weld[i]];
+                    else
+                    {
+                        float cs = Mathf.Cos(_phi[m]), sn = Mathf.Sin(_phi[m]);
+                        _wp[i] = _tc[r] + right * (cs * _tr[r]) + up * (sn * _tr[r] * 0.9f);
+                    }
+                    _uvs[i] = new Vector2((_phi[m] - _phi[0]) / Tau * ThumbStitches, v);
+                    _colors[i] = glove;
+                }
+            }
+            _wp[ThumbCap] = _tc[5] + d2 * dome;
+            _uvs[ThumbCap] = new Vector2(ThumbStitches * 0.5f, v + dome * 0.5f);
+            _colors[ThumbCap] = glove;
         }
+
+        void FrameAt(int r, Vector3 back, out Vector3 right, out Vector3 up)
+        {
+            Vector3 t = _tt[r];
+            up = back - t * Vector3.Dot(back, t);
+            up = up.sqrMagnitude > 1e-8f ? up.normalized : Vector3.Cross(t, Vector3.right).normalized;
+            right = Vector3.Cross(up, t);
+        }
+
+        /// <summary>Once, on the first pose: wind each part's triangles so they face outward (mirroring the left hand
+        /// flips the winding, and the knuckle-slice rings run their own way round).</summary>
+        void Orient(Vector3 palmBase, Vector3 f)
+        {
+            bool changed = false;
+            for (int p = 0; p < 6; p++)
+            {
+                float s = 0f;
+                for (int t = _partStart[p]; t < _partStart[p + 1]; t += 3)
+                {
+                    Vector3 a = _wp[_tris[t]], b = _wp[_tris[t + 1]], c = _wp[_tris[t + 2]];
+                    Vector3 cen = (a + b + c) / 3f;
+                    s += Vector3.Dot(Vector3.Cross(b - a, c - a), cen - Inside(p, _tris[t], cen, palmBase, f));
+                }
+                if (s >= 0f) continue;
+                for (int t = _partStart[p]; t < _partStart[p + 1]; t += 3) { int x = _tris[t + 1]; _tris[t + 1] = _tris[t + 2]; _tris[t + 2] = x; }
+                changed = true;
+            }
+            if (changed) m_Mesh.SetTriangles(_tris, 0);
+            m_Oriented = true;
+        }
+
+        /// <summary>A point inside the part near a triangle: the palm's axis, or the centre of the finger/thumb ring.</summary>
+        Vector3 Inside(int part, int vi, Vector3 cen, Vector3 palmBase, Vector3 f)
+        {
+            if (part == 0) return palmBase + f * Vector3.Dot(cen - palmBase, f);
+            if (part <= 4)
+            {
+                int fi = part - 1;
+                return _fcen[fi * FRings + Mathf.Min((vi - FV(fi, 0, 0)) / (F + 1), FRings - 1)];
+            }
+            return _tc[Mathf.Min((vi - ThumbStart) / (Loop + 1), ThumbRings - 1)];
+        }
+
+        void Arc(int k0, int n, float from, float to)
+        {
+            for (int i = 0; i <= n; i++) _ang[k0 + i] = Mathf.Lerp(from, to, i / (float)n);
+        }
+
+        static float SgnPow(float x, float e) => (x < 0f ? -1f : 1f) * Mathf.Pow(Mathf.Abs(x), e);
+
+        /// <summary>The angle round the palm's superellipse outline where its back surface sits at across-position u (-1..1).</summary>
+        static float TopAngle(float u) => Mathf.Acos(Mathf.Clamp(SgnPow(Mathf.Clamp(u, -1f, 1f), PalmSquare * 0.5f), -1f, 1f));
 
         static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
         {

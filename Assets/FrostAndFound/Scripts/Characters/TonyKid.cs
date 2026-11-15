@@ -221,6 +221,18 @@ namespace FrostAndFound
         public override void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot)
         {
             if (State == TonyState.Idle) { base.OnSnowballHit(ball, point, velocity, headshot); return; }
+            Bonked(point, velocity);
+        }
+
+        /// <summary>Catch him and punch him: the same daze as a snowball.</summary>
+        public override void OnPunched(Vector3 point, Vector3 velocity, bool headshot)
+        {
+            if (State == TonyState.Idle) { base.OnPunched(point, velocity, headshot); return; }
+            Bonked(point, velocity);
+        }
+
+        void Bonked(Vector3 point, Vector3 velocity)
+        {
             if (State == TonyState.Dazed || State == TonyState.Caught) { Anim.HitReact(); return; }
             // BONK
             WasEverHit = true;

@@ -12,6 +12,7 @@ Shader "FrostAndFound/ToonOutlined"
         _BandSoftness ("Band Softness", Range(0.001,0.2)) = 0.035
         _ShadowStrength ("Cast Shadow Strength", Range(0,1)) = 0.85
         _AmbientStrength ("Ambient (SH) Strength", Range(0,1)) = 0.1
+        _UnderShade ("Underside Shade (no bounce from the ground)", Range(0,1)) = 0
         [HDR] _EmissionColor ("Emission", Color) = (0,0,0,1)
         _Sparkle ("Glitter Amount", Range(0,1)) = 0
         _SparkleScale ("Glitter Density", Float) = 90
