@@ -77,9 +77,9 @@ namespace FrostAndFound
             var smr = model.GetComponentInChildren<SkinnedMeshRenderer>();
             if (smr)
             {
-                // our kids stand ~1.37 m tall (Visual carries each character's scale on top)
+                // our kids stand ~1.51 m tall (Visual carries each character's scale on top)
                 float h = MeshHeight(smr) / Mathf.Max(1e-4f, rig.Visual.lossyScale.y);
-                float want = 1.37f * (slot != null && slot.scale > 0f ? slot.scale : 1f);
+                float want = 1.507f * (slot != null && slot.scale > 0f ? slot.scale : 1f);
                 if (h > 0.05f) model.localScale *= want / h;
                 rig.Height = want * rig.Visual.lossyScale.y;
                 smr.sharedMaterial = Palette.SoftTextured(slot != null ? slot.texture : null, "Kid_" + model.root.name);
@@ -148,15 +148,17 @@ namespace FrostAndFound
                 }
                 case CastId.Dexter:
                 {
-                    // a steaming mug of his cocoa (twenty-five cents)
-                    // held by its handle: the handle sits in his fist, the mug just in front of his hand
+                    // a steaming mug of his cocoa (twenty-five cents), held by its handle: HeldByHandle keeps the handle in
+                    // his fist and the cup upright, out in front of his hand
                     var mug = PropMount.Create("Mug", rig.HandR, kid, new Vector3(0.0f, -0.085f, 0.045f), new Vector3(0f, 90f, 0f), s);
                     var ceramic = M(Palette.Paper, true, 0.3f);
                     P("Mug", mug, ProcMesh.Cylinder(18), ceramic, new Vector3(0, 0.04f, 0), new Vector3(0.078f, 0.085f, 0.078f));
                     P("Stripe", mug, ProcMesh.Cylinder(18), M(Palette.SledRed, false, 0.3f), new Vector3(0, 0.055f, 0), new Vector3(0.0795f, 0.014f, 0.0795f));
                     P("Cocoa", mug, ProcMesh.Disc(16), M(Palette.Cocoa, false, 0.2f), new Vector3(0, 0.078f, 0), new Vector3(0.068f, 0.002f, 0.068f));
-                    P("Handle", mug, ProcMesh.Torus(0.42f, 0.13f, 14, 6), ceramic, new Vector3(0.045f, 0.04f, 0), new Vector3(0.055f, 0.055f, 0.055f), new Vector3(90, 0, 0));
+                    // a wide D of a handle: his fist closes round its outer bar and a few cm of it show between fist and cup
+                    P("Handle", mug, ProcMesh.Torus(0.42f, 0.13f, 14, 6), ceramic, new Vector3(0.08f, 0.04f, 0), new Vector3(0.085f, 0.07f, 0.068f), new Vector3(90, 0, 0));
                     ThermosSteam.Attach(ProcMesh.Pivot("Steam", mug, new Vector3(0, 0.09f, 0)));
+                    HeldByHandle.Attach(mug, rig.HandR, kid, rig, new Vector3(0.132f, 0.04f, 0f), 0.032f);   // his fist at the handle's far end
                     break;
                 }
                 case CastId.Serena:
@@ -507,6 +509,47 @@ namespace FrostAndFound
 
     /// <summary>Holds a prop against a bone: seated in the kid's frame once the body has its first animated pose,
     /// then it simply rides the bone (so it moves with the hand or chest).</summary>
+    /// <summary>
+    /// Keeps a mug in a kid's fist by its handle, every frame: upright (no cocoa spilled whatever the arm is doing),
+    /// the handle's loop where the fist is (found by carrying on past the wrist along the forearm: the rigs have no
+    /// finger bones), and the cup itself out in front of the hand rather than inside it.
+    /// </summary>
+    public class HeldByHandle : MonoBehaviour
+    {
+        Transform m_Hand, m_Kid;
+        KidRig m_Rig;
+        PropMount m_Mount;
+        Vector3 m_Grip;     // the grip point (inside the handle's loop) in the prop's own space
+        float m_Reach;      // wrist to the middle of the fist, as a fraction of the kid's height
+
+        public static void Attach(Transform prop, Transform hand, Transform kid, KidRig rig, Vector3 grip, float reach)
+        {
+            if (!prop || !hand || !kid) return;
+            var h = prop.gameObject.AddComponent<HeldByHandle>();
+            h.m_Hand = hand; h.m_Kid = kid; h.m_Rig = rig; h.m_Grip = grip; h.m_Reach = reach;
+            h.m_Mount = prop.GetComponent<PropMount>();
+        }
+
+        void LateUpdate()
+        {
+            if (!m_Hand || !m_Kid || (m_Mount && m_Mount.enabled)) return;   // still growing in / not seated yet
+            var forearm = m_Hand.parent;
+            var along = forearm ? (m_Hand.position - forearm.position).normalized : Vector3.down;
+            float height = m_Rig != null && m_Rig.Height > 0.3f ? m_Rig.Height : 1.4f;
+            var fist = m_Hand.position + along * (m_Reach * height);
+            var fwd = m_Kid.forward; fwd.y = 0f;
+            if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
+            fwd.Normalize();
+            // the cup sits in front of the fist and in toward the kid's middle, so from the front you see the handle's
+            // loop between the cup and the hand; the handle (the prop's +x) points back at the fist
+            var inward = -Vector3.Cross(Vector3.up, fwd);   // the kid's left: in from the right hand
+            var toCup = (fwd * 0.45f + inward * 0.9f).normalized;
+            var rot = Quaternion.LookRotation(Vector3.Cross(-toCup, Vector3.up), Vector3.up);
+            float s = KidBuilder.WorldScale(transform);
+            transform.SetPositionAndRotation(fist - rot * (m_Grip * s), rot);
+        }
+    }
+
     public class PropMount : MonoBehaviour
     {
         Transform m_Bone, m_Kid;

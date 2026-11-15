@@ -110,6 +110,7 @@ namespace FrostAndFound
 
             gameObject.AddComponent<TipsDirector>();
             gameObject.AddComponent<GestureDirector>();
+            gameObject.AddComponent<SnowballFight>();   // hit the same kid four times and it's war
             yield return null;
             EnterTitle();
             if (autopilot && !Player.IsXR) gameObject.AddComponent<Autopilot>();

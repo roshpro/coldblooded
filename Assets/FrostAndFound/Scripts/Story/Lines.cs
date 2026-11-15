@@ -8,12 +8,16 @@ namespace FrostAndFound
         public string Id;
         public CastId Speaker;
         public string Text;
+        /// <summary>The recorded clip's file name in Resources/Voice (the voice_lines.csv id), when it isn't the line id.</summary>
+        public string Voice;
+        public string Clip => Voice ?? Id;
         public Line(string id, CastId speaker, string text) { Id = id; Speaker = speaker; Text = text; }
     }
 
     /// <summary>
-    /// Every voiced line with its subtitle. Recorded audio drops in by id: put "dexter_excuse.wav" (or .mp3/.ogg)
-    /// in Assets/FrostAndFound/Resources/Voice/ and it plays instead of the placeholder babble.
+    /// Every voiced line with its subtitle. Recorded audio drops in by name: put "dexter_bg_01.mp3" (or .wav/.ogg)
+    /// in Assets/FrostAndFound/Resources/Voice/ and it plays instead of the placeholder babble. Files are named by
+    /// the team's voice_lines.csv ids; where those differ from a line's id, the line names its clip (see the end).
     /// Menu: Frost & Found ▸ Export Voice Script writes this table as a CSV for the recording session / ElevenLabs.
     /// </summary>
     public static class Lines
@@ -22,8 +26,27 @@ namespace FrostAndFound
         public static IEnumerable<Line> All => s_Lines.Values;
 
         static void L(string id, CastId who, string text) => s_Lines[id] = new Line(id, who, text);
+        static void Clip(string id, string clip) { if (s_Lines.TryGetValue(id, out var l)) l.Voice = clip; }
 
         public static Line Get(string id) => s_Lines.TryGetValue(id, out var l) ? l : null;
+
+        static readonly List<Line> s_Pick = new List<Line>();
+
+        /// <summary>An idle line for a kid: a random recorded background line (never the same one twice running),
+        /// else their stock bark as babble.</summary>
+        public static Line Bark(CastId who, string last)
+        {
+            string key = Cast.Key(who), bg = key + "_bg_", stock = key + "_bark";
+            s_Pick.Clear();
+            Line fallback = null;
+            foreach (var l in s_Lines.Values)
+            {
+                if (l.Speaker != who || !(l.Id.StartsWith(bg) || l.Id == stock)) continue;
+                if (AudioDirector.HasVoice(l)) { if (l.Id != last) s_Pick.Add(l); }
+                else if (fallback == null || l.Id == stock) fallback = l;
+            }
+            return s_Pick.Count > 0 ? s_Pick[UnityEngine.Random.Range(0, s_Pick.Count)] : fallback;
+        }
 
         static Lines()
         {
@@ -43,6 +66,7 @@ namespace FrostAndFound
             // ---------------------------------------------------------------- finale (doc §6)
             L("tony_defense", CastId.Tony, "Circumstantial! No picture of ME, no case!");
             L("lucy_finale_hint", CastId.Lucy, "Well? He's not going to sit still for you.");
+            L("lucy_finale_closer", CastId.Lucy, "Closer, rookie! Get in his face before he gets up!");
             L("tony_taunt_1", CastId.Tony, "Can't catch the Turbo!");
             L("tony_taunt_2", CastId.Tony, "Too slow, no cap!");
             L("tony_taunt_3", CastId.Tony, "Turbo's untouchable!");
@@ -68,6 +92,34 @@ namespace FrostAndFound
             L("serena_hit", CastId.Serena, "My HAT!");
             L("lucy_hit", CastId.Lucy, "Assaulting a detective. Writing that down.");
             L("tony_hit_early", CastId.Tony, "No cap, that tickled.");
+
+            // ---------------------------------------------------------------- snowball fight: hit the same kid again and again
+            // the second hit: complaining
+            L("dexter_complain", CastId.Dexter, "Hey! That's TWO marshmallows! Those are fifty cents each!");
+            L("sherman_complain", CastId.Sherman, "Again?! My glasses are fogging up. This is unscientific.");
+            L("serena_complain", CastId.Serena, "Um, AGAIN? My coat is literally soaked.");
+            L("lucy_complain", CastId.Lucy, "That's two counts of assaulting a detective. I'm keeping score, rookie.");
+            L("tony_complain", CastId.Tony, "Bro. Twice? You're skating on thin ice. Literally.");
+            // the third: a warning
+            L("dexter_warn", CastId.Dexter, "Okay, don't you DARE throw another one. I mean it. Cocoa-serious.");
+            L("sherman_warn", CastId.Sherman, "Don't you dare throw another one. I have a ninety-nine percent accurate arm.");
+            L("serena_warn", CastId.Serena, "Don't you DARE. One more and you are SO done.");
+            L("lucy_warn", CastId.Lucy, "Don't. You. Dare. Throw. Another. One.");
+            L("tony_warn", CastId.Tony, "Don't you dare throw another one. I'm warning you, no cap.");
+            // the fourth: war (then the alarm and "SNOWBALL FIGHT!")
+            L("dexter_fight_start", CastId.Dexter, "That's IT!");
+            L("sherman_fight_start", CastId.Sherman, "That's it! Retaliation is statistically justified!");
+            L("serena_fight_start", CastId.Serena, "Oh, it is SO on!");
+            L("lucy_fight_start", CastId.Lucy, "That's IT! Everyone, get the rookie!");
+            L("tony_fight_start", CastId.Tony, "Oh, it's ON now!");
+            // shouted now and then mid-fight
+            L("dexter_fight", CastId.Dexter, "Free snowballs! No charge!");
+            L("sherman_fight", CastId.Sherman, "Calculating trajectory... FIRE!");
+            L("serena_fight", CastId.Serena, "This is for my HAT!");
+            L("lucy_fight", CastId.Lucy, "Hold still, suspect!");
+            L("tony_fight", CastId.Tony, "Turbo throw!");
+            // and Lucy calls it off
+            L("lucy_truce", CastId.Lucy, "Okay, okay, TRUCE! Back to the case, rookie.");
 
             // ---------------------------------------------------------------- right kid, old evidence again
             L("dexter_again", CastId.Dexter, "We've been over this. Want a cocoa while you think?");
@@ -160,6 +212,12 @@ namespace FrostAndFound
             L("lucy_blur", CastId.Lucy, "A blur. He won't sit still for you, rookie.");
 
             // ---------------------------------------------------------------- wrong kid: a joke line + a nudge
+            // any wrong photo (recorded; used when the specific joke line below has no recording yet)
+            L("dexter_wrong_generic", CastId.Dexter, "Not my mess, man. I only spill cocoa.");
+            L("sherman_wrong_generic", CastId.Sherman, "Erm, that's not mine. I'd remember. I remember everything.");
+            L("serena_wrong_generic", CastId.Serena, "Ew. Why would I be involved in THAT?");
+            L("lucy_wrong_generic", CastId.Lucy, "Wrong suspect. Obviously. Try using your eyes.");
+            L("tony_wrong_generic", CastId.Tony, "Cool picture, bro. Still not my problem.");
             // cocoa stain
             L("sherman_wrong_stain", CastId.Sherman, "Brown liquid. Not my department. Statistically, that's a cocoa guy.");
             L("serena_wrong_stain", CastId.Serena, "Ew, brown? I would NEVER. Ask the cocoa boy.");
@@ -186,6 +244,13 @@ namespace FrostAndFound
             L("serena_wrong_sled", CastId.Serena, "That ugly sled? Tony's. Obviously.");
             L("lucy_wrong_sled", CastId.Lucy, "Why are you showing ME? Show HIM.");
 
+            // ---------------------------------------------------------------- Lucy's guide: she points out each clue to photograph
+            L("lucy_pic1", CastId.Lucy, "Ugh, LOOK! A cocoa stain! Take a picture, obviously! And don't get any ideas about being lead detective. I'm the brains here, you're just the camera crew. If you need help, come to ME. Now MOVE!");
+            L("lucy_pic2", CastId.Lucy, "Um, hello? The carrot? Take a picture! Do I have to do EVERYTHING around here?");
+            L("lucy_pic3", CastId.Lucy, "Ugh, GLITTER. Everywhere. Gee, I wonder who could POSSIBLY be responsible. Go take a picture and shove it in Serena's face. Let's see Miss Sparkle explain THAT.");
+            L("lucy_pic4", CastId.Lucy, "That red scrape is practically screaming EVIDENCE. Take a picture and bring it to me. Chop chop!");
+            L("lucy_pic5", CastId.Lucy, "See that guy in red? That's Tony. Go get a picture of his sled. I'll handle the actual thinking.");
+
             // ---------------------------------------------------------------- Lucy's safety-net nudges (vague, not answers)
             L("lucy_snap", CastId.Lucy, "Well? Don't just stand there. Take a picture, rookie. It'll last longer.");
             L("lucy_nudge_guilty", CastId.Lucy, "Hmph. Some people look awfully guilty.");
@@ -201,13 +266,60 @@ namespace FrostAndFound
             L("sherman_bark", CastId.Sherman, "Snowmen are 85% water. The other 15% is hope.");
             L("serena_bark", CastId.Serena, "Lady Frostington would never look this tragic.");
             L("tony_bark", CastId.Tony, "Turbo's the name, speed's the game. No cap.");
+            // background idle chatter (recorded): a random one now and then when you wander close
+            L("dexter_bg_01", CastId.Dexter, "It's not that deep, honestly.");
+            L("dexter_bg_02", CastId.Dexter, "Man, I could really use some cocoa right now.");
+            L("dexter_bg_03", CastId.Dexter, "Serena called my outfit basic. Fair enough.");
+            L("dexter_bg_04", CastId.Dexter, "I'm just here for the vibes. Bad vibes, apparently.");
+            L("sherman_bg_01", CastId.Sherman, "Erm, actually, that's scientifically inaccurate.");
+            L("sherman_bg_02", CastId.Sherman, "Correlation does NOT imply causation!");
+            L("sherman_bg_03", CastId.Sherman, "Fun fact: snow is approximately 90% air.");
+            L("sherman_bg_04", CastId.Sherman, "My mother says I'm intellectually gifted.");
+            L("sherman_bg_05", CastId.Sherman, "I don't believe in luck. I believe in standard deviation.");
+            L("serena_bg_01", CastId.Serena, "I don't gossip. I distribute information.");
+            L("serena_bg_02", CastId.Serena, "If I go missing, check the nearest Sephora.");
+            L("serena_bg_03", CastId.Serena, "Is that my reflection? Oh, cute.");
+            L("serena_bg_04", CastId.Serena, "I literally cannot be seen with these people.");
+            L("serena_bg_05", CastId.Serena, "Tony thinks he's mysterious. He's just unemployed.");
+            L("serena_bg_06", CastId.Serena, "I would cry, but my mascara was expensive.");
+            L("serena_bg_07", CastId.Serena, "I don't have an attitude. I have standards.");
+            L("lucy_bg_01", CastId.Lucy, "Nobody touch anything! That's an ORDER!");
+            L("lucy_bg_02", CastId.Lucy, "I've watched twelve detective shows. I'm qualified.");
+            L("lucy_bg_03", CastId.Lucy, "Suspicious. Very suspicious.");
+            L("lucy_bg_04", CastId.Lucy, "I need a notebook. And a badge.");
+            L("lucy_bg_05", CastId.Lucy, "Everyone's a suspect. Including that squirrel.");
+            L("lucy_bg_06", CastId.Lucy, "I knew something was wrong. I always do.");
+            L("lucy_bg_07", CastId.Lucy, "I should really be getting paid for this.");
+            L("tony_bg_01", CastId.Tony, "Rules are more like suggestions.");
+            L("tony_bg_02", CastId.Tony, "Snitches get stitches. Snowmen get ditches.");
+            L("tony_bg_03", CastId.Tony, "Yeah, I dented my sled. You gonna cry about it?");
+            L("tony_bg_04", CastId.Tony, "Lucy's acting like she owns the FBI.");
+            L("tony_bg_05", CastId.Tony, "I didn't do nothing. Probably.");
+            L("tony_bg_06", CastId.Tony, "My sled's faster than your Wi-Fi.");
+            L("tony_bg_07", CastId.Tony, "Catch me if you can. Actually, don't.");
+            L("tony_bg_08", CastId.Tony, "I got 99 problems and a snowman ain't one.");
+            L("tony_bg_09", CastId.Tony, "You think I'm scared of a snowball? Cute.");
+
+            // ---------------------------------------------------------------- recorded clips named differently from their line
+            Clip("dexter_excuse", "dexter_step1_excuse");
+            Clip("dexter_point", "dexter_step1_point");
+            Clip("sherman_excuse", "sherman_step2_excuse");
+            Clip("sherman_point", "sherman_step2_point");
+            Clip("serena_excuse", "serena_step3_excuse");
+            Clip("lucy_excuse", "lucy_step4_excuse");
+            Clip("lucy_point", "lucy_step4_point");
+            Clip("tony_excuse", "tony_step5_excuse");
+            Clip("lucy_nudge_worst", "lucy_insult");
+            Clip("lucy_nudge_guilty", "lucy_idle_nudge");
+            Clip("tony_pose", "tony_sled_photo");      // "Get my good side." (also when you photograph his sled)
+            Clip("tony_taunt_1", "tony_taunt");
         }
 
         public static string ExportCsv()
         {
             var sb = new StringBuilder("id,speaker,line\n");
             foreach (var l in s_Lines.Values)
-                sb.Append(l.Id).Append(',').Append(l.Speaker).Append(",\"").Append(l.Text.Replace("\"", "\"\"")).Append("\"\n");
+                sb.Append(l.Clip).Append(',').Append(l.Speaker).Append(",\"").Append(l.Text.Replace("\"", "\"\"")).Append("\"\n");
             return sb.ToString();
         }
     }

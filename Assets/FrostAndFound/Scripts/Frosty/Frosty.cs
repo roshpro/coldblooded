@@ -11,6 +11,10 @@ namespace FrostAndFound
     /// </summary>
     public class Frosty : MonoBehaviour, ISnowballTarget
     {
+        /// <summary>The team's snowman model's scale: lying in the snow he's about 2 m long.</summary>
+        public const float ModelScale = 1.8125f;
+        /// <summary>Roughly how far his body reaches across the snow from his centre (m); kids, Tony and props keep clear.</summary>
+        public static float FootprintRadius => 0.54f * ModelScale;
         public static Frosty Instance { get; private set; }
         public Clue Stain { get; private set; }
         public Clue Glitter { get; private set; }
@@ -73,7 +77,7 @@ namespace FrostAndFound
             {
                 // the team's snowman: fallen and flattened, lying in the snow. In body space he lies along z with his
                 // head and hat at -z, the coal-buttoned middle in the centre and the plain base at +z.
-                const float scale = 1.45f;
+                const float scale = ModelScale;
                 var body = new GameObject("Body").transform;
                 body.SetParent(m_Visual, false);
                 body.localRotation = Quaternion.Euler(0f, 90f, 0f);   // lying across your view, so you see all of him

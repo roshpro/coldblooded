@@ -70,7 +70,7 @@ namespace FrostAndFound
             var gm = GameManager.I;
             var d = CaseDirector.I;
             if (!gm || d == null || gm.IsPaused) return;
-            if (gm.State != GameState.Investigating || d.CaseClosed) { HideAll(); return; }
+            if (gm.State != GameState.Investigating || d.CaseClosed || SnowballFight.Active) { HideAll(); return; }
             if (m_InvestigatingSince < 0f) m_InvestigatingSince = Time.time;
             if (!FrostPrefs.Tips) { HideAll(); return; }
             var tune = FrostTuning.I;
@@ -123,7 +123,17 @@ namespace FrostAndFound
         IEnumerator PromptPhoto()
         {
             var lucy = Kid.Find(CastId.Lucy);
-            if (lucy) yield return lucy.SayAndWait("lucy_snap", false);
+            var line = Lines.Get("lucy_pic1") ?? Lines.Get("lucy_snap");
+            if (lucy && line != null)
+            {
+                // she points the cocoa stain out; the pinch hint comes up once she's got to "take a picture"
+                var at = CaseDirector.GuideTarget(0);
+                if (at.HasValue && lucy is LucyKid lk) lk.JabAt(at.Value);
+                DialogueRunner.Say(line, lucy, false);
+                yield return null;
+                float t = 0f;
+                while (t < 3.2f && DialogueRunner.IsSpeaking(CastId.Lucy)) { t += Time.deltaTime; yield return null; }
+            }
             var d = CaseDirector.I;
             if (d != null && d.Photos.Count == 0 && !d.FinaleStarted && FrostPrefs.Tips) GestureHint.Show(GestureKind.Camera);
         }

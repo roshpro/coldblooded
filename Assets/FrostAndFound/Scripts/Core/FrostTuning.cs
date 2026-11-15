@@ -120,7 +120,7 @@ namespace FrostAndFound
         public bool furnitureOccludes = true;
 
         [Header("Audio")]
-        [Range(0f, 1f)] public float musicVolume = 0.32f;
+        [Range(0f, 1f)] public float musicVolume = 0.256f;   // (20% under the old 0.32, so every voice comes through)
         [Range(0f, 1f)] public float sfxVolume = 0.9f;
         [Range(0f, 1f)] public float voiceVolume = 1f;
 

@@ -104,8 +104,8 @@ namespace FrostAndFound
             var tune = FrostTuning.I;
             var player = rig.FeetPosition;
 
-            // safety net: trips over his own sled
-            if (!WasEverHit && Time.time > m_TripAt) { StartCoroutine(Trip()); return; }
+            // safety net: trips over his own sled (and again every 20 s after he's back up, so the finale can't stall)
+            if (Time.time > m_TripAt) { StartCoroutine(Trip()); return; }
 
             // dodge the camera whenever he is in the viewfinder
             if (InViewfinder() && Time.time > m_NextDodge && !IsDodging) Dodge();
@@ -147,7 +147,8 @@ namespace FrostAndFound
                 float dPlayer = FrostUtil.FlatDistance(p, player);
                 float dSelf = FrostUtil.FlatDistance(p, transform.position);
                 if (dSelf < 0.7f || dSelf > 2.6f) continue;
-                if (frosty.HasValue && SegmentDistance(transform.position.XZ(), p.XZ(), frosty.Value.XZ()) < 0.65f) continue;
+                if (frosty.HasValue && (SegmentDistance(transform.position.XZ(), p.XZ(), frosty.Value.XZ()) < Frosty.FootprintRadius + 0.1f
+                    || FrostUtil.FlatDistance(p, frosty.Value) < Frosty.FootprintRadius + 0.3f)) continue;   // round him, never through him
                 if (SegmentDistance(transform.position.XZ(), p.XZ(), player.XZ()) < 0.8f) continue;
                 // far side of the room, sideways to his current heading (zig-zag)
                 var dir = (p - transform.position).Flat().normalized;
@@ -273,9 +274,19 @@ namespace FrostAndFound
             m_DazeRoutine = StartCoroutine(Daze(FrostTuning.I.tonyDazeSeconds + 2.5f, true));
         }
 
+        float m_DazeBonus;
+
+        /// <summary>A photo of him dazed that didn't count (too far, something in the way): a moment longer on the
+        /// ground to try again (at most 3 s extra per daze).</summary>
+        public void GiveMoreTime(float seconds)
+        {
+            if (State == TonyState.Dazed) m_DazeBonus = Mathf.Min(3f, m_DazeBonus + seconds);
+        }
+
         IEnumerator Daze(float seconds, bool tripped)
         {
             State = TonyState.Dazed;
+            m_DazeBonus = 0f;
             Anim.SetSitting(true);
             if (!m_Birdies) m_Birdies = DazeBirdies.Create(Rig.Head, HeadPoint);
             if (!tripped && !m_FaceSnow)
@@ -286,7 +297,7 @@ namespace FrostAndFound
                 ProcMesh.Part("Face Snow Bit", m_FaceSnow.transform, ProcMesh.Sphere(8, 6), Palette.Toon(Palette.Snow, true, 0.3f), new Vector3(-0.6f, 0.3f, 0.2f), Vector3.one * 0.4f);
             }
             float end = Time.time + seconds;
-            while (Time.time < end)
+            while (Time.time < end + m_DazeBonus)
             {
                 if (State == TonyState.Caught) yield break;
                 yield return null;

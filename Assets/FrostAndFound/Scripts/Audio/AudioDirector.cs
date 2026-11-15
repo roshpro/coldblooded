@@ -20,6 +20,8 @@ namespace FrostAndFound
 
         readonly Dictionary<Sfx, List<AudioClip>> m_Sfx = new Dictionary<Sfx, List<AudioClip>>();
         readonly Dictionary<string, AudioClip> m_Voice = new Dictionary<string, AudioClip>();
+        readonly Dictionary<CastId, (AudioSource src, AudioClip clip)> m_Talking = new Dictionary<CastId, (AudioSource, AudioClip)>();
+        static readonly Dictionary<string, bool> s_Recorded = new Dictionary<string, bool>();
         readonly ConcurrentQueue<(string key, float[] data, int kind)> m_Pending = new ConcurrentQueue<(string, float[], int)>();
         readonly List<AudioSource> m_Pool = new List<AudioSource>();
         AudioSource m_Music, m_Room;
@@ -169,7 +171,7 @@ namespace FrostAndFound
             return clip ? s_I.PlayClip(clip, Vector3.zero, volume * SfxVolume, pitch, false) : null;
         }
 
-        AudioSource PlayClip(AudioClip clip, Vector3 pos, float volume, float pitch, bool spatial)
+        AudioSource PlayClip(AudioClip clip, Vector3 pos, float volume, float pitch, bool spatial, bool voice = false)
         {
             var src = Grab();
             src.transform.position = pos;
@@ -177,8 +179,25 @@ namespace FrostAndFound
             src.volume = volume;
             src.pitch = pitch;
             src.loop = false;
-            src.spatialBlend = spatial ? 1f : 0f;
-            src.spatialize = spatial && PlayerRig.Active && PlayerRig.Active.IsXR;
+            if (voice)
+            {
+                // voices carry across the room: full volume within 3 m and a gentle fall-off after, a fifth of the line
+                // always heard straight, and Unity's own panning for direction (the headset's spatialiser attenuated
+                // them so hard you had to stand right next to a kid to hear them)
+                src.spatialBlend = spatial ? 0.8f : 0f;
+                src.spatialize = false;
+                src.rolloffMode = AudioRolloffMode.Logarithmic;
+                src.minDistance = 3f;
+                src.maxDistance = 25f;
+            }
+            else
+            {
+                src.spatialBlend = spatial ? 1f : 0f;
+                src.spatialize = spatial && PlayerRig.Active && PlayerRig.Active.IsXR;
+                src.rolloffMode = AudioRolloffMode.Logarithmic;
+                src.minDistance = 0.6f;
+                src.maxDistance = 14f;
+            }
             src.Play();
             return src;
         }
@@ -206,11 +225,39 @@ namespace FrostAndFound
             src.Play();
         }
 
+        /// <summary>A booming 2D announcement (the "SNOWBALL FIGHT!" voice) from Resources/Voice/&lt;clipId&gt;, or a deep
+        /// babble placeholder until that recording lands. Ducks the music under it. Returns its length.</summary>
+        public static float PlayAnnouncer(string clipId, string text)
+        {
+            if (!s_I) return 1.5f;
+            var clip = Resources.Load<AudioClip>("Voice/" + clipId);
+            float pitch = 1f;
+            if (!clip)
+            {
+                if (!s_I.m_Voice.TryGetValue(clipId, out clip) || !clip)
+                    s_I.m_Voice[clipId] = clip = Synth.ToClip("babble_" + clipId, Synth.Babble(text, CastId.Tony, clipId.GetHashCode()));
+                pitch = 0.7f;   // deeper: an announcer, not a kid
+            }
+            var src = s_I.PlayClip(clip, Vector3.zero, 1f, pitch, false);
+            float len = clip.length / pitch;
+            s_I.StartCoroutine(s_I.TrackSpeaking(len, src, null));
+            return len;
+        }
+
+        /// <summary>Is there a recording for this line in Resources/Voice (rather than placeholder babble)?</summary>
+        public static bool HasVoice(Line line)
+        {
+            if (line == null) return false;
+            if (!s_Recorded.TryGetValue(line.Clip, out bool has))
+                s_Recorded[line.Clip] = has = Resources.Load<AudioClip>("Voice/" + line.Clip) != null;
+            return has;
+        }
+
         /// <summary>Plays a voiced line at the speaker. Returns its duration (for subtitles).</summary>
         public static float PlayVoice(Line line, Transform speaker)
         {
             if (!s_I || line == null) return 2f;
-            var clip = Resources.Load<AudioClip>("Voice/" + line.Id);
+            var clip = Resources.Load<AudioClip>("Voice/" + line.Clip);
             if (!clip) s_I.m_Voice.TryGetValue(line.Id, out clip);
             if (!clip)
             {
@@ -218,8 +265,9 @@ namespace FrostAndFound
                 clip = Synth.ToClip("babble_" + line.Id, Synth.Babble(line.Text, line.Speaker, line.Id.GetHashCode()));
                 s_I.m_Voice[line.Id] = clip;
             }
-            var src = s_I.PlayClip(clip, speaker ? speaker.position : Vector3.zero, VoiceVolume, 1f, speaker);
+            var src = s_I.PlayClip(clip, speaker ? speaker.position : Vector3.zero, VoiceVolume, 1f, speaker, true);
             if (speaker && src) src.transform.position = speaker.position;
+            if (src) s_I.m_Talking[line.Speaker] = (src, clip);
             s_I.StartCoroutine(s_I.TrackSpeaking(clip.length, src, speaker));
             return clip.length;
         }
@@ -252,10 +300,20 @@ namespace FrostAndFound
                    $"room={(s_I.m_Room.clip ? "on" : "off")} activeSources={playing}";
         }
 
+        /// <summary>Cuts off one kid mid-line (recorded or babble), e.g. when they start a new line.</summary>
+        public static void StopVoice(CastId who)
+        {
+            if (!s_I || !s_I.m_Talking.TryGetValue(who, out var t)) return;
+            if (t.src && t.src.isPlaying && t.src.clip == t.clip) t.src.Stop();   // the pooled source may have moved on
+            s_I.m_Talking.Remove(who);
+        }
+
         public static void StopAllVoices()
         {
             if (!s_I) return;
             foreach (var s in s_I.m_Pool) if (s.isPlaying && s.clip && s.clip.name.StartsWith("babble_")) s.Stop();
+            foreach (var kv in s_I.m_Talking) if (kv.Value.src && kv.Value.src.isPlaying && kv.Value.src.clip == kv.Value.clip) kv.Value.src.Stop();
+            s_I.m_Talking.Clear();
         }
     }
 }

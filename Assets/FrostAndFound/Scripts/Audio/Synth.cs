@@ -7,7 +7,7 @@ namespace FrostAndFound
     public enum Sfx
     {
         Footstep, ScoopCrunch, Shutter, Whirr, Whoosh, Splat, Bonk, Tweet, Sting, Twinkle, Marker, StampSlam,
-        UiClick, Plop, Scribble, BookThud, Whistle, Fanfare, RoomTone, Boing, Gasp, UiHover
+        UiClick, Plop, Scribble, BookThud, Whistle, Fanfare, RoomTone, Boing, Gasp, UiHover, Alarm
     }
 
     /// <summary>
@@ -189,6 +189,7 @@ namespace FrostAndFound
                     Fade(d); return d;
                 }
                 case Sfx.Sting: return Sting(rng);
+                case Sfx.Alarm: return Alarm();
                 case Sfx.Twinkle:
                 {
                     var d = Buf(0.6f);
@@ -351,6 +352,26 @@ namespace FrostAndFound
                 if (i % 64 == 0) lp = Biquad.LowPass(Mathf.Lerp(600f, 2400f * bright, Mathf.Clamp01(env)), 0.9f, SR);
                 d[start + i] += lp.Process((Saw(ph) + Saw(ph2)) * 0.5f) * env * amp;
             }
+        }
+
+        /// <summary>The snowball-fight alarm: a buzzing two-tone siren that whoops up and down for about 2.6 s.</summary>
+        static float[] Alarm()
+        {
+            var d = Buf(2.6f);
+            var lp = Biquad.LowPass(3200, 0.7f, SR);
+            double ph = 0, ph2 = 0;
+            for (int i = 0; i < d.Length; i++)
+            {
+                float t = i / (float)SR;
+                float sweep = 0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * 1.6f * t);   // whoop up and down, 1.6 times a second
+                float f = Mathf.Lerp(600f, 980f, sweep);
+                ph += f / SR; ph2 += f * 1.5f / SR;
+                float tone = Sq(ph) * 0.34f + Saw(ph2) * 0.22f + Sin(ph) * 0.34f;
+                float buzz = 0.85f + 0.15f * Mathf.Sin(2f * Mathf.PI * 22f * t);
+                d[i] = lp.Process(tone * buzz);
+            }
+            Normalize(d, 0.85f); Fade(d, 0.01f, 0.3f);
+            return d;
         }
 
         static float[] Sting(System.Random rng)

@@ -181,7 +181,7 @@ namespace FrostAndFound
             }
             // wander: every so often stroll to a free spot near home, if there's space for it
             var gm = GameManager.I;
-            bool calm = gm && !gm.IsPaused && !DialogueRunner.IsSpeaking(id) && !(Anim && Anim.IsThrowing)
+            bool calm = gm && !gm.IsPaused && !DialogueRunner.IsSpeaking(id) && !(Anim && Anim.IsThrowing) && !SnowballFight.Active
                         && (gm.State == GameState.Investigating || gm.State == GameState.Title);
             if (WandersWhenIdle && player && m_Move == null && CanMove && !Busy && calm && gm.State == GameState.Investigating && Time.time > m_NextWander)
             {
@@ -216,17 +216,28 @@ namespace FrostAndFound
                 Anim.Fidget(FidgetLook(player));
             }
             // ambient barks when the player wanders close and nothing else is happening
-            if (player && Time.time > m_NextBark && !Busy && !DialogueRunner.AnyoneSpeaking && GameManager.I && GameManager.I.State == GameState.Investigating)
+            // (one bit of chatter at a time across all the kids, and never straight after someone else has spoken)
+            if (player && Time.time > m_NextBark && Time.time > s_NextAnyBark && DialogueRunner.QuietFor > 6f && !Busy && !SnowballFight.Active
+                && GameManager.I && GameManager.I.State == GameState.Investigating)
             {
-                m_NextBark = Time.time + Random.Range(35f, 60f);
-                if (FrostUtil.FlatDistance(transform.position, player.Head.position) < 2.2f) Bark();
+                m_NextBark = Time.time + Random.Range(28f, 50f);
+                if (FrostUtil.FlatDistance(transform.position, player.Head.position) < 2.8f)
+                {
+                    s_NextAnyBark = Time.time + Random.Range(10f, 18f);
+                    Bark();
+                }
             }
         }
 
+        string m_LastBark;
+        static float s_NextAnyBark;
+
         protected virtual void Bark()
         {
-            var line = Lines.Get(Cast.Key(id) + "_bark");
-            if (line != null) DialogueRunner.Say(line, this, false);
+            var line = Lines.Bark(id, m_LastBark);
+            if (line == null) return;
+            m_LastBark = line.Id;
+            DialogueRunner.Say(line, this, false);
         }
 
         // ------------------------------------------------------------------ movement
@@ -291,7 +302,7 @@ namespace FrostAndFound
                 else if (kind < 0.32f && Frosty.Instance)
                 {
                     float a = Random.Range(0f, Mathf.PI * 2f);
-                    p = frosty + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(1.1f, 1.35f);
+                    p = frosty + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (Frosty.FootprintRadius + Random.Range(0.3f, 0.55f));
                     look = frosty + Vector3.up * 0.1f;
                 }
                 else
@@ -305,7 +316,7 @@ namespace FrostAndFound
                 if (room.EdgeDistance(new Vector2(p.x, p.z)) < 0.3f) continue;
                 if (room.IsBlocked != null && room.IsBlocked(p, 0.22f)) continue;
                 if (FrostUtil.FlatDistance(p, player.Head.position) < 0.8f) continue;
-                if (FrostUtil.FlatDistance(p, frosty) < 0.95f) continue;
+                if (FrostUtil.FlatDistance(p, frosty) < Frosty.FootprintRadius + 0.15f) continue;
                 float gap = 10f;   // from where the others stand and where they're walking to
                 foreach (var k in All) if (k && k != this) gap = Mathf.Min(gap, Mathf.Min(FrostUtil.FlatDistance(p, k.transform.position), FrostUtil.FlatDistance(p, k.Destination)));
                 if (gap < (look != Vector3.zero ? 1.0f : 0.95f)) continue;   // keep our distance from the others
@@ -324,7 +335,7 @@ namespace FrostAndFound
             {
                 var q = Vector3.Lerp(from, to, d / len);
                 if (room.IsBlocked != null && room.IsBlocked(q, 0.2f)) return false;
-                if (FrostUtil.FlatDistance(q, frosty) < 0.75f || FrostUtil.FlatDistance(q, player.Head.position) < 0.45f) return false;
+                if (FrostUtil.FlatDistance(q, frosty) < Frosty.FootprintRadius - 0.05f || FrostUtil.FlatDistance(q, player.Head.position) < 0.45f) return false;
                 foreach (var k in All) if (k && k != this && FrostUtil.FlatDistance(q, k.transform.position) < 0.5f) return false;
             }
             return true;
@@ -391,12 +402,12 @@ namespace FrostAndFound
         public Pose SignaturePose => PoseFor();
 
         // ------------------------------------------------------------------ snowballs (just for fun, required only in the finale)
-        public virtual void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot) => TakeHit(point, velocity, headshot, true);
+        public virtual void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot) => TakeHit(point, velocity, headshot, true, ball && !ball.Thrower);
 
         /// <summary>Punched by your hand (superhot-style): the same stagger and daze as a snowball, minus the splat.</summary>
         public virtual void OnPunched(Vector3 point, Vector3 velocity, bool headshot) => TakeHit(point, velocity, headshot, false);
 
-        protected void TakeHit(Vector3 point, Vector3 velocity, bool headshot, bool snowball)
+        protected void TakeHit(Vector3 point, Vector3 velocity, bool headshot, bool snowball, bool playerSnowball = false)
         {
             Anim.HitReact();
             if (Faces) Faces.Dizzy(2.4f);
@@ -409,14 +420,24 @@ namespace FrostAndFound
                 AudioDirector.PlayAt(Sfx.Bonk, point, headshot ? 0.85f : 0.65f, Random.Range(1.02f, 1.15f));
                 Fx.SnowPuff(point, velocity.sqrMagnitude > 1e-6f ? -velocity.normalized : Vector3.up, 8, 0.45f);   // frost knocked off the coat
             }
-            if (Time.time - m_LastHitLine > 4f && !Busy)
+            HitLine(playerSnowball);
+            CaseDirector.I?.NotifyActivity();
+        }
+
+        /// <summary>The line for a hit: their usual yelp, or, if you keep hitting the same kid with snowballs, a
+        /// complaint, then "don't you DARE", then "that's IT!" and a snowball fight (see SnowballFight).</summary>
+        void HitLine(bool playerSnowball)
+        {
+            int n = playerSnowball && SnowballFight.I ? SnowballFight.I.RegisterHit(this) : 0;
+            string key = Cast.Key(id);
+            if (n >= 2 || (Time.time - m_LastHitLine > 4f && !Busy))
             {
                 m_LastHitLine = Time.time;
-                HitGag();
-                var line = Lines.Get(Cast.Key(id) + "_hit");
+                if (n <= 1) HitGag();   // the gag (books dropped, hat hop...) is the first hit's
+                string lineId = n == 2 ? key + "_complain" : n == 3 ? key + "_warn" : n >= 4 ? key + "_fight_start" : key + "_hit";
+                var line = Lines.Get(lineId) ?? Lines.Get(key + "_hit");
                 if (line != null) DialogueRunner.Say(line, this, true);
             }
-            CaseDirector.I?.NotifyActivity();
         }
 
         protected virtual void HitGag() { }

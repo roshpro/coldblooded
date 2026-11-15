@@ -60,6 +60,13 @@ namespace FrostAndFound
             if (!target) { m_LastShown = null; return; }
             // one show per reach: lower your arm (or turn to someone else) to show again
             if (target == m_LastShown) return;
+            if (SnowballFight.Active)
+            {
+                // mid-fight nobody's looking at photos: say so, rather than silently ignoring the reach
+                m_Dwell += Time.deltaTime;
+                if (m_Dwell >= FrostTuning.I.showDwellSeconds) { m_Dwell = 0f; m_LastShown = target; SnowballFight.I.NotNow(target); }
+                return;
+            }
             if (!director.CanShow || target.Busy) return;
 
             m_Dwell += Time.deltaTime;

@@ -42,6 +42,11 @@ namespace FrostAndFound
         public bool IsThrowing { get; private set; }
         /// <summary>Only calm idles (a gentle sway, looking round) and no talking hands: for kids whose sleeves twist.</summary>
         public bool CalmArms;
+        /// <summary>No arms raised overhead: their stretches and waves become hands on hips or a weight shift.</summary>
+        public bool LowArms;
+        /// <summary>Where the right hand rests when nothing else wants it, in kid space as fractions of their height
+        /// (x right, y up, z forward): Dexter carries his mug in front of his belly.</summary>
+        public Vector3? RestRightHand { get; set; }
         /// <summary>Look here instead of at LookTarget (a friend we walked over to, Frosty...).</summary>
         public Vector3? LookOverride { get; set; }
 
@@ -58,6 +63,7 @@ namespace FrostAndFound
             if (!m_Humanoid || m_Gesture != Gesture.None || IsThrowing || m_Pose != Pose.None || m_PointWeight > 0.01f || m_Sit > 0.01f) return;
             var g = (Gesture)Random.Range(1, 9);
             if (g == Gesture.Wave && Random.value < 0.6f) g = Gesture.LookAround;   // waves are rarer
+            if (LowArms && (g == Gesture.Stretch || g == Gesture.Wave)) g = Random.value < 0.5f ? Gesture.HandsOnHips : Gesture.ShiftWeight;
             if (CalmArms) g = Random.value < 0.55f ? Gesture.ShiftWeight : Gesture.LookAround;
             StartCoroutine(GestureRoutine(g, lookAt));
         }
@@ -224,6 +230,12 @@ namespace FrostAndFound
                 g = w <= 0.001f ? goal : Vector3.Lerp(g, goal, weight);
                 w = Mathf.Max(w, weight);
             }
+            // a resting hold (lowest of all: fidgets, poses, pointing and talking hands all take over from it)
+            if (RestRightHand.HasValue)
+            {
+                var rr = RestRightHand.Value;
+                Layer(ref gr, ref wr, root + right * rr.x * H + up * rr.y * H + fwd * rr.z * H, 0.85f);
+            }
             // idle fidgets (lowest priority: anything the story asks for wins)
             if (m_Gesture != Gesture.None && m_GestureW > 0.001f)
             {
@@ -300,16 +312,16 @@ namespace FrostAndFound
             l = shL; r = shR; wl = 1f; wr = 1f;
             switch (pose)
             {
-                case Pose.PeaceSigns:
-                    l = head - right * 0.2f * H + up * 0.04f * H + fwd * 0.1f * H;
-                    r = head + right * 0.2f * H + up * 0.04f * H + fwd * 0.1f * H;
+                case Pose.PeaceSigns:   // Sherman: two peace signs held out in front of his chest, not up over his head
+                    l = chest - right * 0.15f * H + up * 0.08f * H + fwd * 0.18f * H;
+                    r = chest + right * 0.15f * H + up * 0.08f * H + fwd * 0.18f * H;
                     break;
                 case Pose.Flex:
                     l = shL - right * 0.12f * H + up * 0.2f * H + fwd * 0.03f * H + up * Mathf.Sin(t * 8f) * 0.01f * H;
                     r = shR + right * 0.12f * H + up * 0.2f * H + fwd * 0.03f * H;
                     break;
-                case Pose.HairFlip:
-                    l = head - right * 0.06f * H + up * 0.09f * H - fwd * 0.02f * H;
+                case Pose.HairFlip:     // Serena: a hand on her hip, the other smoothing her braid at the shoulder
+                    l = shL + fwd * 0.07f * H + right * 0.05f * H - up * 0.04f * H;
                     r = root + right * 0.17f * H + up * 0.5f * H + fwd * 0.02f * H;
                     break;
                 case Pose.BlockLens:

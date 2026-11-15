@@ -29,6 +29,10 @@ namespace FrostAndFound
         /// <summary>A kid starts a line (faces use it to pick the expression they settle into afterwards).</summary>
         public static event System.Action<Kid, Line> LineStarted;
 
+        static float s_QuietFrom;
+        /// <summary>How long nobody has said anything (0 while someone is still talking or their subtitle is up).</summary>
+        public static float QuietFor => Mathf.Max(0f, Time.time - s_QuietFrom);
+
         public static bool IsSpeaking(CastId id) => s_I && s_I.m_SpeakingUntil.TryGetValue(id, out var t) && t > Time.time;
 
         public static void Ensure()
@@ -58,13 +62,14 @@ namespace FrostAndFound
         {
             var id = speaker.id;
             if (IsSpeaking(id) && !interrupt) yield break;
-            if (interrupt && IsSpeaking(id)) AudioDirector.StopAllVoices();
+            if (interrupt && IsSpeaking(id)) AudioDirector.StopVoice(id);   // only their own line, recorded or babble
             LineStarted?.Invoke(speaker, line);
             float voiceLen = AudioDirector.PlayVoice(line, speaker.Rig.Head ? speaker.Rig.Head : speaker.transform);
             // subtitles stay up at least long enough to read
             float readLen = Mathf.Max(voiceLen, 0.9f + line.Text.Length * 0.045f);
             readLen = Mathf.Min(readLen, voiceLen + 1.6f);
             m_SpeakingUntil[id] = Time.time + voiceLen;
+            s_QuietFrom = Mathf.Max(s_QuietFrom, Time.time + readLen);
             if (FrostPrefs.Subtitles)
             {
                 if (!m_Bubbles.TryGetValue(id, out var bubble) || !bubble)

@@ -28,13 +28,14 @@ namespace FrostAndFound
             float dPlayer = FrostUtil.FlatDistance(center, feet);
             if (dPlayer < 1.3f) center += fwd * (1.3f - dPlayer);
             center = room.ClampInside(center, 0.8f);
-            if (!room.IsFree(center, 0.55f, 0.7f))
+            float fr = Frosty.FootprintRadius * 0.7f;
+            if (!room.IsFree(center, fr, 0.7f))
             {
                 var rng = new System.Random(3);
                 for (int i = 0; i < 40; i++)
                 {
-                    var c = room.RandomFreePoint(0.55f, 0.7f, rng, 1);
-                    if (room.IsFree(c, 0.55f, 0.7f) && FrostUtil.FlatDistance(c, feet) > 1.1f) { center = c; break; }
+                    var c = room.RandomFreePoint(fr, 0.7f, rng, 1);
+                    if (room.IsFree(c, fr, 0.7f) && FrostUtil.FlatDistance(c, feet) > 1.1f) { center = c; break; }
                 }
             }
             center.y = room.FloorY;
@@ -52,7 +53,7 @@ namespace FrostAndFound
                 {
                     var p = room.RandomFreePoint(0.25f, 0.35f, rngP, 20);
                     float edge = room.EdgeDistance(new Vector2(p.x, p.z));
-                    if (edge > 0.95f || FrostUtil.FlatDistance(p, center) < 1.3f || FrostUtil.FlatDistance(p, feet) < 1.2f) continue;
+                    if (edge > 0.95f || FrostUtil.FlatDistance(p, center) < Frosty.FootprintRadius + 0.45f || FrostUtil.FlatDistance(p, feet) < 1.2f) continue;
                     bool near = false;
                     foreach (var a in avoid) if (FrostUtil.FlatDistance(p, a) < minFrom) near = true;
                     if (near) continue;
@@ -79,7 +80,7 @@ namespace FrostAndFound
                 {
                     var p = new Vector3(x, room.FloorY, z);
                     if (!room.IsFree(p, 0.26f, 0.3f)) continue;
-                    if (FrostUtil.FlatDistance(p, center) < 1.0f) continue;   // clear of Frosty and his chalk outline
+                    if (FrostUtil.FlatDistance(p, center) < Frosty.FootprintRadius + 0.25f) continue;   // clear of Frosty
                     if (FrostUtil.FlatDistance(p, feet) < 0.85f) continue;
                     slots.Add(p);
                 }
@@ -180,7 +181,7 @@ namespace FrostAndFound
             // ---------------- the cocoa drip trail from the stain to Dexter's feet
             if (res.Kids.TryGetValue(CastId.Dexter, out var dexter))
             {
-                var from = center + frostyFacing * Vector3.forward * 0.38f;   // just clear of his (bigger) body
+                var from = center + frostyFacing * Vector3.forward * (0.38f * Frosty.ModelScale / 1.45f);   // just clear of his body
                 var to = dexter.transform.position + (center - dexter.transform.position).Flat().normalized * 0.22f;
                 var drips = DripTrail.Create(from, to, room.FloorY);
                 res.Frosty.AttachDrips(drips);

@@ -21,10 +21,11 @@ namespace FrostAndFound
 
         public static readonly ChainStep[] Chain =
         {
-            new ChainStep { clue = ClueId.CocoaStain,    kid = CastId.Dexter,  excuse = "dexter_excuse",  point = "dexter_point",  pointsAt = CastId.Sherman, next = ClueId.CarrotBits },
-            new ChainStep { clue = ClueId.CarrotBits,    kid = CastId.Sherman, excuse = "sherman_excuse", point = "sherman_point", pointsAt = CastId.Serena,  next = ClueId.PurpleGlitter },
+            // (the kids still point at the next suspect; Lucy's guide line names the next clue, so there's no "that's him" line)
+            new ChainStep { clue = ClueId.CocoaStain,    kid = CastId.Dexter,  excuse = "dexter_excuse",  point = null,            pointsAt = CastId.Sherman, next = ClueId.CarrotBits },
+            new ChainStep { clue = ClueId.CarrotBits,    kid = CastId.Sherman, excuse = "sherman_excuse", point = null,            pointsAt = CastId.Serena,  next = ClueId.PurpleGlitter },
             new ChainStep { clue = ClueId.PurpleGlitter, kid = CastId.Serena,  excuse = "serena_excuse",  point = null,            pointsAt = null,           next = ClueId.RedScrape },
-            new ChainStep { clue = ClueId.RedScrape,     kid = CastId.Lucy,    excuse = "lucy_excuse",    point = "lucy_point",    pointsAt = CastId.Tony,    next = ClueId.DentedSled },
+            new ChainStep { clue = ClueId.RedScrape,     kid = CastId.Lucy,    excuse = "lucy_excuse",    point = null,            pointsAt = CastId.Tony,    next = ClueId.DentedSled },
             new ChainStep { clue = ClueId.DentedSled,    kid = CastId.Tony,    excuse = null,             point = null,            pointsAt = null,           next = ClueId.None },
         };
 
@@ -117,6 +118,12 @@ namespace FrostAndFound
                 photo.Blurred = true;
                 if (photo.Clue == ClueId.DentedSled) photo.Clue = ClueId.None;
             }
+            else
+            {
+                // dazed, but you're too far away or something's in the way: he stays down a moment longer and Lucy says so
+                photo.TooFar = true;
+                tony.GiveMoreTime(1.5f);
+            }
         }
 
         static bool Occluded(Vector3 from, Kid target)
@@ -136,6 +143,8 @@ namespace FrostAndFound
                 if (kid && !(FinaleStarted && id == CastId.Tony)) kid.OnPhotographed(photo);
             }
             if (photo.Guilty) { m_GuiltyPhoto = photo; StartCoroutine(CloseTheCase(photo)); return; }
+            if (photo.Subject == SubjectKind.Sled) SledQuip();
+            if (FinaleStarted && photo.TooFar && Kid.Find(CastId.Tony) is TonyKid t && t.IsDazed) StartCoroutine(CloserHint());
 
             if (photo.Clue != ClueId.None && photo.Clue == CurrentClue)
             {
@@ -151,6 +160,18 @@ namespace FrostAndFound
             if (photo.Blurred && FinaleStarted && !m_FinaleHintGiven) StartCoroutine(FinaleHint());
         }
 
+        float m_LastCloserHint = -99f;
+
+        IEnumerator CloserHint()
+        {
+            if (Time.time - m_LastCloserHint < 4f) yield break;
+            m_LastCloserHint = Time.time;
+            yield return new WaitForSeconds(0.25f);
+            var lucy = Kid.Find(CastId.Lucy);
+            var line = Lines.Get("lucy_finale_closer");
+            if (lucy && line != null) DialogueRunner.Say(line, lucy, false);
+        }
+
         IEnumerator LucyLine(string id, float delay)
         {
             yield return new WaitForSeconds(delay);
@@ -162,7 +183,7 @@ namespace FrostAndFound
         public void OnTonyHit() { Hits++; }
 
         // ------------------------------------------------------------------ show a photo (doc §5.2)
-        public bool CanShow => !Reacting && !CaseClosed;
+        public bool CanShow => !Reacting && !CaseClosed && !SnowballFight.Active;
 
         public void ShowPhoto(Kid kid, PhotoData photo)
         {
@@ -204,8 +225,12 @@ namespace FrostAndFound
                 // wrong kid: a joke line and a nudge toward the right one
                 WrongShows++;
                 var owner = OwnerOf(clue);
-                var lineId = Cast.Key(kid.id) + "_wrong_" + ClueKey(clue);
-                var line = Lines.Get(lineId) ?? Lines.Get(Cast.Key(kid.id) + "_snow");
+                // their joke line about this clue if it's been recorded, else their recorded "not mine" line
+                var specific = Lines.Get(Cast.Key(kid.id) + "_wrong_" + ClueKey(clue));
+                var generic = Lines.Get(Cast.Key(kid.id) + "_wrong_generic");
+                var line = AudioDirector.HasVoice(specific) ? specific
+                         : AudioDirector.HasVoice(generic) ? generic
+                         : specific ?? generic ?? Lines.Get(Cast.Key(kid.id) + "_snow");
                 var target = Kid.Find(owner);
                 if (target && target != kid) kid.Anim.Point(target.HeadPoint, 2.2f);
                 yield return DialogueRunner.SayAndWait(line, kid);
@@ -315,6 +340,49 @@ namespace FrostAndFound
             SetSparkling(step.next);
             AudioDirector.Play2D(Sfx.Sting, 0.8f);
             Progress();
+            StartCoroutine(GuideLine(Step));
+        }
+
+        /// <summary>Lucy points out the clue to photograph next ("Um, hello? The carrot?"), once the talking's done.
+        /// Step 0's line (the cocoa stain) opens the case from the gesture tutorial.</summary>
+        IEnumerator GuideLine(int step)
+        {
+            var line = Lines.Get("lucy_pic" + (step + 1));
+            var lucy = Kid.Find(CastId.Lucy) as LucyKid;
+            if (line == null || !lucy) yield break;
+            // she's the guide throughout: wait for a quiet moment (up to ~15 s) instead of giving up on the line
+            float waited = 0f;
+            while ((DialogueRunner.AnyoneSpeaking || Reacting || lucy.Busy) && waited < 15f) { waited += Time.deltaTime; yield return null; }
+            yield return new WaitForSeconds(0.4f);
+            while (DialogueRunner.IsSpeaking(CastId.Lucy) || lucy.Busy) yield return null;
+            if (Step != step || FinaleStarted || CaseClosed) yield break;
+            var player = PlayerRig.Active;
+            if (player) lucy.Face(player.Head.position, 0.3f);
+            var at = GuideTarget(step);
+            if (at.HasValue) lucy.JabAt(at.Value);
+            DialogueRunner.Say(line, lucy, false);
+        }
+
+        public static Vector3? GuideTarget(int step)
+        {
+            var id = step < Chain.Length ? Chain[step].clue : ClueId.None;
+            if (id == ClueId.DentedSled) { var tony = Kid.Find(CastId.Tony); if (tony) return tony.HeadPoint; }   // "see that guy in red?"
+            var clue = Clue.Find(id);
+            return clue ? clue.FocusPoint : (Vector3?)null;
+        }
+
+        float m_LastSledQuip = -99f;
+
+        /// <summary>Photograph the sled and its (supposedly anonymous) owner can't help himself: "Get my good side."</summary>
+        void SledQuip()
+        {
+            var tony = Kid.Find(CastId.Tony);
+            var player = PlayerRig.Active;
+            if (!tony || !player || tony.Busy || FinaleStarted || Time.time - m_LastSledQuip < 40f || DialogueRunner.IsSpeaking(CastId.Tony)) return;
+            if (FrostUtil.FlatDistance(tony.transform.position, player.Head.position) > 6f) return;
+            m_LastSledQuip = Time.time;
+            var line = Lines.Get("tony_pose");
+            if (line != null) DialogueRunner.Say(line, tony, false);
         }
 
         void SetSparkling(ClueId id)
@@ -359,7 +427,7 @@ namespace FrostAndFound
         void Update()
         {
             if (GameManager.I == null || GameManager.I.State != GameState.Investigating || FinaleStarted || CaseClosed) return;
-            if (Reacting || DialogueRunner.AnyoneSpeaking) { m_NextNudge = Mathf.Max(m_NextNudge, Time.time + 4f); return; }
+            if (Reacting || DialogueRunner.AnyoneSpeaking || SnowballFight.Active) { m_NextNudge = Mathf.Max(m_NextNudge, Time.time + 4f); return; }
             if (Time.time < m_NextNudge) return;
             StartCoroutine(Nudge());
             m_NextNudge = Time.time + FrostTuning.I.idleNudgeSeconds + 6f;

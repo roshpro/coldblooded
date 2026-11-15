@@ -91,6 +91,11 @@ namespace FrostAndFound
             m_Content.gameObject.layer = Layers.UI3D;
             m_Play = HButton.Create(m_Content, "Play", HButton.Variant.Round, new Vector2(ButtonSize, ButtonSize), UIKit.Icon.Play, () => Begin(null));
             m_Play.transform.localPosition = new Vector3(0, 0, -0.004f);
+            // the game's name over the button (a soft dark outline so it reads against any room)
+            var title = HUI.Label(m_Content, "Cold Blooded", UIKit.Face.Display, 0.62f, Palette.UiText, new Vector2(0.6f, 0.09f), TextAlignmentOptions.Center, 0f, false);
+            title.transform.localPosition = new Vector3(0, ButtonSize * 0.5f + 0.075f, -0.004f);
+            title.outlineWidth = 0.14f;
+            title.outlineColor = new Color32(18, 28, 58, 190);
             // how to start: scoop snow and throw it at the button
             m_Gesture = GestureCard.Create(m_Content, GestureKind.ScoopThrow, 0.15f);
             m_Gesture.transform.localPosition = new Vector3(0, -ButtonSize * 0.5f - 0.03f - 0.075f, -0.002f);

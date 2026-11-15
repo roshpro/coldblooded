@@ -17,12 +17,12 @@ namespace FrostAndFound
             if (rig)
             {
                 var fwd = rig.FlatForward;
-                root.position = rig.Head.position + fwd * 1.25f + Vector3.up * 0.1f;
+                root.position = rig.Head.position + fwd * 1.5f + Vector3.up * 0.12f;
                 root.rotation = Quaternion.LookRotation(fwd, Vector3.up);
             }
             var stamp = UIKit.Stamp(root, "CASE CLOSED", 1.25f, Palette.StampRed, -7f, 0.95f);
             root.gameObject.SetLayerRecursive(Layers.UI3D);
-            yield return Ease.Tween(0.2f, t => root.localScale = Vector3.one * Mathf.Lerp(3f, 1f, t), Ease.InCubic, false);
+            yield return Ease.Tween(0.2f, t => root.localScale = Vector3.one * Mathf.Lerp(1.8f, 1f, t), Ease.InCubic, false);
             AudioDirector.Play2D(Sfx.StampSlam, 1f);
             AudioDirector.Play2D(Sfx.Fanfare, 0.7f);
             rig?.CameraHand.Haptic(1f, 0.15f);

@@ -13,6 +13,7 @@ namespace FrostAndFound
         protected override void Build()
         {
             base.Build();
+            if (Anim) Anim.RestRightHand = new Vector3(0.1f, 0.5f, 0.2f);   // carrying his cocoa in front of his belly
             var head = Rig.Head;
             m_Notes = Fx.MakeSystem("Whistle Notes", head, FxTextures.MusicNote, false, 20, true);
             m_Notes.transform.localPosition = new Vector3(0.13f, 0.1f, 0.2f);
@@ -70,6 +71,12 @@ namespace FrostAndFound
     /// <summary>Sherman — peace signs for photos; drops his stack of books when snowballed.</summary>
     public class ShermanKid : Kid
     {
+        protected override void Build()
+        {
+            base.Build();
+            if (Anim) Anim.LowArms = true;   // no overhead stretches or waves
+        }
+
         protected override Pose PoseFor() => Pose.PeaceSigns;
 
         protected override void HitGag()
@@ -112,6 +119,12 @@ namespace FrostAndFound
     /// <summary>Serena — hair flip for photos; her enormous pom-pom hat flies off when snowballed ("My HAT!").</summary>
     public class SerenaKid : Kid
     {
+        protected override void Build()
+        {
+            base.Build();
+            if (Anim) Anim.LowArms = true;   // no overhead stretches or waves
+        }
+
         protected override Pose PoseFor() => Pose.HairFlip;
 
         protected override void HitGag()

@@ -30,6 +30,9 @@ MonoBehaviour:
   throwMultiplierControllers: 1.05
   minThrowSpeed: 0.9
   maxThrowSpeed: 18
+  printHoldSeconds: 40
+  divotHoldSeconds: 75
+  printFadeSeconds: 20
   aimAssistConeDegrees: 11
   aimAssistStrength: 0.35
   aimAssistMaxDegrees: 4.5
@@ -39,9 +42,14 @@ MonoBehaviour:
   tonyTripAfterSeconds: 25
   tonyDodgeCooldown: 0.35
   idleNudgeSeconds: 15
+  cameraPromptDelay: 1.5
+  cameraGestureIdleSeconds: 20
+  throwGestureIdleSeconds: 10
   kidWallInset: 0.55
   minKidSpacing: 0.9
   fallbackRoomSize: {x: 4, y: 4}
-  musicVolume: 0.32
+  sceneryDensity: 1
+  furnitureOccludes: 1
+  musicVolume: 0.256
   sfxVolume: 0.9
   voiceVolume: 1
