@@ -55,6 +55,12 @@ namespace FrostAndFound
         public float throwMultiplierControllers = 1.05f;
         public float minThrowSpeed = 0.9f;
         public float maxThrowSpeed = 18f;
+        [Tooltip("Footprints and sled tracks stay crisp this long, then fill back in.")]
+        public float printHoldSeconds = 40f;
+        [Tooltip("Scoop holes and snowball craters stay this long before filling in.")]
+        public float divotHoldSeconds = 75f;
+        [Tooltip("How long a print takes to fill back in once it starts fading.")]
+        public float printFadeSeconds = 20f;
         [Header("Aim assist (light nudge, not a homing missile)")]
         public float aimAssistConeDegrees = 11f;
         [Range(0f, 1f)] public float aimAssistStrength = 0.35f;
@@ -84,6 +90,8 @@ namespace FrostAndFound
         public float kidWallInset = 0.55f;
         public float minKidSpacing = 0.9f;
         public Vector2 fallbackRoomSize = new Vector2(4f, 4f);
+        [Tooltip("Trees, shrubs, rocks and big drifts per m² of open floor (0 = none). Big rooms get the most.")]
+        [Range(0f, 2f)] public float sceneryDensity = 1f;
 
         [Header("Audio")]
         [Range(0f, 1f)] public float musicVolume = 0.32f;

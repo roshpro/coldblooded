@@ -71,8 +71,9 @@ namespace FrostAndFound
         static FaceExpression RestFor(string id)
         {
             if (string.IsNullOrEmpty(id)) return FaceExpression.Smirk;
-            if (id.Contains("case_closed")) return FaceExpression.Smile;
-            if (id.Contains("_hit") || id.Contains("_snow") || id.Contains("_again") || id.Contains("_tamper") || id.Contains("_pose"))
+            if (id.Contains("case_closed") || id.Contains("_self_")) return FaceExpression.Smile;   // they love a photo of themselves
+            if (id.Contains("_hit") || id.Contains("_snow") || id.Contains("_again") || id.Contains("_tamper") || id.Contains("_pose")
+                || id.Contains("_frosty") || id.Contains("_nothing") || id.Contains("_blur"))
                 return FaceExpression.Frown;
             return FaceExpression.Smirk;
         }

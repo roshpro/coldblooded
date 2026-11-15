@@ -259,6 +259,7 @@ namespace FrostAndFound
             PhotoCount++;
             var data = new PhotoData { Number = PhotoCount, TakenAt = Time.time };
             ClueDetector.Detect(Lens, data);
+            SubjectDetector.Detect(Lens, data);
             Evaluate?.Invoke(data, Lens);
 
             var rt = new RenderTexture(m_Viewfinder.width, m_Viewfinder.height, 0, RenderTextureFormat.ARGB32) { name = "Photo " + data.Number };

@@ -19,6 +19,14 @@ namespace FrostAndFound
         public bool TooFar;          // a clue was in frame but beyond range (for Lucy's hint)
         public float TakenAt;
         public readonly List<CastId> KidsInFrame = new List<CastId>();
+        /// <summary>Kids you can actually make out in the picture (unblocked, big enough, face in shot).</summary>
+        public readonly List<CastId> KidsSeen = new List<CastId>();
+        /// <summary>Kids who are a main part of the shot (not just someone small in the background).</summary>
+        public readonly List<CastId> KidsFeatured = new List<CastId>();
+        /// <summary>What the picture is "of": its biggest, most central subject (see SubjectDetector).</summary>
+        public SubjectKind Subject = SubjectKind.None;
+        public CastId SubjectKid;            // valid when Subject == Kid
+        public bool MostlySnow;
         public bool IsEvidence => Clue != ClueId.None && !Blurred;
     }
 

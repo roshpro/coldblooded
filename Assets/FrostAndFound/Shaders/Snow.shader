@@ -1,5 +1,6 @@
 // The snow layer laid over the detected floor. A grid mesh spanning the room bounds is displaced by
-//   _MaskMap  R = inside-the-room alpha (soft edge), G = drift (snow piles up against walls)
+//   _MaskMap  R = inside-the-room alpha (soft edge), G = drift (snow piles up against walls), B = soft mounds,
+//             A = big drifts heaped up by the scenery (around trees, in corners of bigger rooms)
 //   _TrailMap R = depression (footprints, scoop divots, snowball craters), written by SnowSurface on the CPU
 // plus soft procedural dunes. Lighting is soft and painterly rather than banded: sunlit snow is a warm white,
 // shade and cast shadows are a luminous sky blue (never grey), prints get cool soft occlusion, grazing angles
@@ -18,6 +19,7 @@ Shader "FrostAndFound/Snow"
         _DriftHeight ("Drift Height (m)", Float) = 0.07
         _DuneHeight ("Dune Height (m)", Float) = 0.022
         _MoundHeight ("Mound Height (m)", Float) = 0.035
+        _BigDriftHeight ("Big Drift Height (m)", Float) = 0.34
         _HollowTint ("Hollow Tint", Color) = (0.8,0.86,0.95,1)
         _GrainStrength ("Grain", Range(0,0.3)) = 0.07
         _EnvironmentDepthBias ("Environment Depth Bias", Float) = 0.06
@@ -59,6 +61,7 @@ Shader "FrostAndFound/Snow"
                 float _DriftHeight;
                 float _DuneHeight;
                 float _MoundHeight;
+                float _BigDriftHeight;
                 half4 _HollowTint;
                 half _GrainStrength;
                 float _EnvironmentDepthBias;
@@ -84,9 +87,9 @@ Shader "FrostAndFound/Snow"
 
             float HeightAt(float2 uv)
             {
-                float3 m = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0).rgb;
+                float4 m = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0);
                 float t = SAMPLE_TEXTURE2D_LOD(_TrailMap, sampler_TrailMap, uv, 0).r;
-                float h = _Thickness * smoothstep(0.0, 0.6, m.r) + m.g * _DriftHeight + m.b * _MoundHeight;
+                float h = _Thickness * smoothstep(0.0, 0.6, m.r) + m.g * _DriftHeight + m.b * _MoundHeight + m.a * _BigDriftHeight;
                 return h - t * _Thickness * 0.85;
             }
 
@@ -114,10 +117,10 @@ Shader "FrostAndFound/Snow"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 float2 uv = input.uv;
                 float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
-                float3 mk = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0).rgb;
+                float4 mk = SAMPLE_TEXTURE2D_LOD(_MaskMap, sampler_MaskMap, uv, 0);
                 float inside = smoothstep(0.0, 0.6, mk.r);
                 float2 xz = posWS.xz;
-                o.vary = half2(saturate(mk.b + mk.g * 0.6), VNoise(xz * 1.7) * 0.65 + VNoise(xz * 4.6 + 7.1) * 0.35);
+                o.vary = half2(saturate(mk.b + mk.g * 0.6 + mk.a * 0.8), VNoise(xz * 1.7) * 0.65 + VNoise(xz * 4.6 + 7.1) * 0.35);
                 posWS.y += HeightAt(uv) + Dunes(xz) * inside;
 
                 // normal from the height field (texture part in uv steps, dunes in world steps)

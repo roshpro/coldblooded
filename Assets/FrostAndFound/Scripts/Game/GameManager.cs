@@ -94,6 +94,7 @@ namespace FrostAndFound
             // the world: snow on the floor, light snowfall, your footprints
             SnowSurface.Create(r);
             Snowfall.Create(r);
+            Scenery.Create(r, Player);   // snowy redwoods, shrubs, rocks and drifts — more of them in bigger rooms
             gameObject.AddComponent<FootprintTracker>();
             PhotoBackdrop.Create(r);
 

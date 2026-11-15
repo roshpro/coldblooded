@@ -84,6 +84,81 @@ namespace FrostAndFound
             L("tony_snow", CastId.Tony, "Bro took a picture of the floor.");
             L("tony_blur", CastId.Tony, "Blurry! Can't prove nothing!");
 
+            // ---------------------------------------------------------------- a photo of... something else (what's in the picture)
+            // themselves: they recognise their own face (two each, alternating)
+            L("dexter_self_1", CastId.Dexter, "Hey, that's me! Do I look trustworthy? I feel like I look trustworthy.");
+            L("dexter_self_2", CastId.Dexter, "Ooh, frame that one. Signed copies, fifty cents.");
+            L("sherman_self_1", CastId.Sherman, "Me. Adequately lit. The glasses are doing most of the work.");
+            L("sherman_self_2", CastId.Sherman, "A portrait of the scientist. I'll file it under S. For Sherman.");
+            L("serena_self_1", CastId.Serena, "Okay, obsessed. Send me that. Like, right now.");
+            L("serena_self_2", CastId.Serena, "Wait, is my hat crooked? No. It's iconic. Keep it.");
+            L("lucy_self_1", CastId.Lucy, "Me. Looking competent. As usual.");
+            L("lucy_self_2", CastId.Lucy, "Photographing the detective? Bold. I'm not a suspect, rookie.");
+            L("tony_self_1", CastId.Tony, "Heh. Turbo, looking fresh. No cap.");
+            L("tony_self_2", CastId.Tony, "Why've you got pictures of ME? ...Delete that.");
+            // somebody else
+            L("dexter_about_sherman", CastId.Dexter, "That's Sherman. He reads books for FUN. In the snow!");
+            L("dexter_about_serena", CastId.Dexter, "Serena! She bought a cocoa once. Said it clashed with her hat.");
+            L("dexter_about_lucy", CastId.Dexter, "Lucy. She charged me five cents to tell me I'm a suspect.");
+            L("dexter_about_tony", CastId.Dexter, "Tony. Never pays for his cocoa. Not once.");
+            L("sherman_about_dexter", CastId.Sherman, "Dexter. Ninety percent cocoa, ten percent nerves.");
+            L("sherman_about_serena", CastId.Sherman, "Serena. Her hat has its own gravitational field.");
+            L("sherman_about_lucy", CastId.Sherman, "Lucy. Self-appointed detective. No formal credentials.");
+            L("sherman_about_tony", CastId.Sherman, "Tony. Average sledding speed: reckless.");
+            L("serena_about_dexter", CastId.Serena, "Cocoa boy. His scarf literally doesn't match anything.");
+            L("serena_about_sherman", CastId.Serena, "Bunny boy. Is he eating? He's always eating.");
+            L("serena_about_lucy", CastId.Serena, "Miss Detective. That notebook is SO last season.");
+            L("serena_about_tony", CastId.Serena, "Tony? Those goggles are, like, a whole crime.");
+            L("lucy_about_dexter", CastId.Lucy, "Dexter. Jumpier than a snowman in July.");
+            L("lucy_about_sherman", CastId.Lucy, "Sherman. Knows everything except where his snacks come from.");
+            L("lucy_about_serena", CastId.Lucy, "Serena. She leaves glitter on everything she touches. Useful.");
+            L("lucy_about_tony", CastId.Lucy, "Tony. Fast, loud, and never where you left him.");
+            L("tony_about_dexter", CastId.Tony, "Cocoa kid. He owes me a refund.");
+            L("tony_about_sherman", CastId.Tony, "Little nerd. Probably calculating something.");
+            L("tony_about_serena", CastId.Tony, "Miss Sparkle. Don't touch her hat, bro. Trust me.");
+            L("tony_about_lucy", CastId.Tony, "Detective girl. She's been staring at me all day. Weird.");
+            // Frosty (before he's evidence of anything)
+            L("dexter_frosty", CastId.Dexter, "Poor Frosty... I can't look. I need a cocoa.");
+            L("sherman_frosty", CastId.Sherman, "The victim. Eighty-five percent water. One hundred percent tragic.");
+            L("serena_frosty", CastId.Serena, "Ugh, he's a mess. And not in a cute way.");
+            L("lucy_frosty", CastId.Lucy, "Yes, rookie, that's the victim. I need EVIDENCE.");
+            L("tony_frosty", CastId.Tony, "Rough day for the big guy. Not my problem.");
+            // the sled standing in the snow (nobody gives away whose it is)
+            L("dexter_sled", CastId.Dexter, "A sled! Sledding makes me thirsty. Cocoa?");
+            L("sherman_sled", CastId.Sherman, "A sled, parked vertically. An odd choice.");
+            L("serena_sled", CastId.Serena, "Red's not my color, so... not mine.");
+            L("lucy_sled", CastId.Lucy, "Somebody parked a sled at my crime scene. Noted.");
+            L("tony_sled", CastId.Tony, "It's a sled, bro. Why are you asking me?");
+            // the sand bucket and spade
+            L("dexter_toys", CastId.Dexter, "A sand bucket? In the snow? Bold.");
+            L("sherman_toys", CastId.Sherman, "Beach equipment in sub-zero conditions. Fascinating.");
+            L("serena_toys", CastId.Serena, "A plastic bucket? That's not giving winter.");
+            L("lucy_toys", CastId.Lucy, "A bucket and a spade. Not evidence. Next.");
+            L("tony_toys", CastId.Tony, "Who brings beach toys to a snow day?");
+            // the snowy redwoods (the Stanford tree)
+            L("dexter_tree", CastId.Dexter, "Nice tree! Trees don't buy cocoa, though.");
+            L("sherman_tree", CastId.Sherman, "A coast redwood. They can live two thousand years. Show-offs.");
+            L("serena_tree", CastId.Serena, "Cute tree. Very... outdoorsy.");
+            L("lucy_tree", CastId.Lucy, "A tree. Trees have alibis, rookie.");
+            L("tony_tree", CastId.Tony, "I could totally jump that. With a sled. Probably.");
+            // shrubs, rocks, logs
+            L("dexter_nature", CastId.Dexter, "Pretty! Nature doesn't buy cocoa, though.");
+            L("sherman_nature", CastId.Sherman, "Flora, under snow. I left my field guide at home.");
+            L("serena_nature", CastId.Serena, "A bush. With snow on it. Iconic, I guess?");
+            L("lucy_nature", CastId.Lucy, "Scenery. Scenery has alibis, rookie.");
+            L("tony_nature", CastId.Tony, "Bro's doing nature photography now.");
+            // nothing much at all (a wall, the air, the ceiling)
+            L("dexter_nothing", CastId.Dexter, "Um... what am I looking at? Want a cocoa while you figure it out?");
+            L("sherman_nothing", CastId.Sherman, "I detect no subject. Fascinating composition.");
+            L("serena_nothing", CastId.Serena, "Is this... a mood? Bold choice.");
+            L("lucy_nothing", CastId.Lucy, "That's a picture of nothing. Impressive, even for you.");
+            L("tony_nothing", CastId.Tony, "Bro took a picture of the air.");
+            // a blur (Tony dodging the lens in the finale)
+            L("dexter_blur", CastId.Dexter, "It's all blurry. Was that Tony? He's so fast.");
+            L("sherman_blur", CastId.Sherman, "Motion blur. Estimated subject velocity: Tony.");
+            L("serena_blur", CastId.Serena, "Blurry. Ugh, hold the camera STILL.");
+            L("lucy_blur", CastId.Lucy, "A blur. He won't sit still for you, rookie.");
+
             // ---------------------------------------------------------------- wrong kid: a joke line + a nudge
             // cocoa stain
             L("sherman_wrong_stain", CastId.Sherman, "Brown liquid. Not my department. Statistically, that's a cocoa guy.");

@@ -193,8 +193,7 @@ namespace FrostAndFound
             }
             else if (clue == ClueId.None)
             {
-                string id = photo.Blurred && kid.id == CastId.Tony ? "tony_blur" : Cast.Key(kid.id) + "_snow";
-                yield return kid.SayAndWait(id);
+                yield return ReactToPicture(kid, photo);
             }
             else if (Solved.Contains(clue) && OwnerOf(clue) == kid.id)
             {
@@ -213,6 +212,46 @@ namespace FrostAndFound
             }
             kid.Busy = false;
             Reacting = false;
+        }
+
+        // ------------------------------------------------------------------ a photo that isn't evidence
+        readonly Dictionary<CastId, int> m_SelfShows = new Dictionary<CastId, int>();
+
+        /// <summary>They react to what's actually in the picture: themselves (a delighted double-take and their
+        /// photo pose), another kid (a jab, pointing them out), Frosty, the sled, the toys, the trees, plain snow,
+        /// or nothing much at all.</summary>
+        IEnumerator ReactToPicture(Kid kid, PhotoData photo)
+        {
+            string me = Cast.Key(kid.id);
+            Line line = null;
+            if (photo.Blurred) line = Lines.Get(kid.id == CastId.Tony ? "tony_blur" : me + "_blur");
+            else if (photo.KidsFeatured.Contains(kid.id))
+            {
+                m_SelfShows.TryGetValue(kid.id, out int n);
+                m_SelfShows[kid.id] = n + 1;
+                line = Lines.Get(me + "_self_" + (n % 2 + 1));
+                if (kid.Faces) kid.Faces.Show(FaceExpression.Wide, 0.5f);
+                if (kid.Anim && !kid.Anim.CalmArms) kid.Anim.StrikePose(kid.SignaturePose, 1.4f);
+            }
+            else
+            {
+                switch (photo.Subject)
+                {
+                    case SubjectKind.Kid:
+                        line = Lines.Get(me + "_about_" + Cast.Key(photo.SubjectKid));
+                        var other = Kid.Find(photo.SubjectKid);
+                        if (line != null && other && other != kid && kid.Anim && !kid.Anim.CalmArms) kid.Anim.Point(other.HeadPoint, 2f);
+                        break;
+                    case SubjectKind.Frosty: line = Lines.Get(me + "_frosty"); break;
+                    case SubjectKind.Sled: line = Lines.Get(me + "_sled"); break;
+                    case SubjectKind.Toys: line = Lines.Get(me + "_toys"); break;
+                    case SubjectKind.Tree: line = Lines.Get(me + "_tree"); break;
+                    case SubjectKind.Nature: line = Lines.Get(me + "_nature"); break;
+                    case SubjectKind.Snow: line = Lines.Get(me + "_snow"); break;
+                }
+            }
+            line ??= Lines.Get(me + "_nothing") ?? Lines.Get(me + "_snow");
+            if (line != null) yield return DialogueRunner.SayAndWait(line, kid);
         }
 
         static string ClueKey(ClueId c) => c switch

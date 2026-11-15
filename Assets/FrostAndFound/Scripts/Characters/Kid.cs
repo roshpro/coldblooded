@@ -387,6 +387,8 @@ namespace FrostAndFound
         }
 
         protected virtual Pose PoseFor() => Pose.Cheer;
+        /// <summary>Their photo pose (Sherman's peace signs, Serena's hair flip...), e.g. on seeing themselves in a picture.</summary>
+        public Pose SignaturePose => PoseFor();
 
         // ------------------------------------------------------------------ snowballs (just for fun, required only in the finale)
         public virtual void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot)
@@ -434,7 +436,7 @@ namespace FrostAndFound
             var dir = d.normalized;
             float yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
             var side = Vector3.Cross(Vector3.up, dir) * (m_Left ? -0.07f : 0.07f);
-            snow.Stamp(p + side, yaw, m_Left ? StampShape.KidBootLeft : StampShape.KidBootRight, 0.19f, 0.8f);
+            snow.Stamp(p + side, yaw, m_Left ? StampShape.KidBootLeft : StampShape.KidBootRight, 0.19f, 0.45f);
             if (Random.value < 0.35f) AudioDirector.PlayAt(Sfx.Footstep, p, 0.25f, Random.Range(1.15f, 1.35f));
             m_Left = !m_Left;
             m_Last = p;

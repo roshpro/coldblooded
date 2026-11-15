@@ -40,6 +40,7 @@ namespace FrostAndFound
             center.y = room.FloorY;
             var frostyFacing = FrostUtil.FlatLookRotation(center, feet);
             res.Frosty = Frosty.Create(center, frostyFacing);
+            PhotoSubject.Tag(res.Frosty.gameObject, SubjectKind.Frosty, 1.1f);   // so a photo of him gets a reaction
 
             // ---------------- things left in the snow: Tony's sled planted upright somewhere (not obviously his) and a
             // sand bucket with a little spade, each by a wall where the drifts are, clear of Frosty, you and each other
@@ -156,7 +157,10 @@ namespace FrostAndFound
             }
 
             if (res.Kids.TryGetValue(CastId.Tony, out var tonyKid) && tonyKid is TonyKid tk && tk.Sled)
+            {
                 tk.Sled.Plant(sledSpot, (center - sledSpot).Flat());
+                PhotoSubject.Tag(tk.Sled.gameObject, SubjectKind.Sled);
+            }
 
             // ---------------- clue 2 lives on Sherman: bits on the carrot (+ orange stains glint with it)
             if (res.Kids.TryGetValue(CastId.Sherman, out var sherman))
@@ -220,6 +224,7 @@ namespace FrostAndFound
             col.center = new Vector3(0.08f, 0.1f, 0.02f);
             col.size = new Vector3(0.36f, 0.22f, 0.22f);
             MeshMerger.Merge(t);
+            PhotoSubject.Tag(root, SubjectKind.Toys);
             return root;
         }
     }

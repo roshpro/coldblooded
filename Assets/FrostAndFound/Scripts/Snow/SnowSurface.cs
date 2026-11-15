@@ -21,7 +21,21 @@ namespace FrostAndFound
         public float moundHeight = 0.035f;
         [Tooltip("Average floor area (m²) per mound.")]
         public float areaPerMound = 1.8f;
+        [Tooltip("Tallest of the big drifts the scenery heaps up in bigger rooms, around trees and in corners (m).")]
+        public float bigDriftHeight = 0.34f;
         float[] m_Relief;   // mound + drift height per mask texel (m), for SurfaceHeightAt
+        Color32[] m_MaskPx; // R = snow alpha, G = wall drift, B = mound, A = big drift (kept for later edits)
+        bool m_MaskDirty;
+
+        // prints fill back in: every trail texel remembers when it starts to fade (in quarter seconds since the
+        // snow was laid); only 16×16 tiles that still hold a print are visited
+        const int FadeTile = 16;
+        const float FadeTick = 0.25f;
+        ushort[] m_FadeAt;
+        bool[] m_TileLive;
+        readonly List<int> m_LiveTiles = new List<int>();
+        int m_TilesX, m_TilesY;
+        float m_T0, m_NextFade;
 
         RoomInfo m_Room;
         Rect m_Rect;
@@ -111,8 +125,9 @@ namespace FrostAndFound
                     }
                     mound *= Smooth(Mathf.Clamp01(edges[i] / 0.3f));
                     m_Relief[i] = mound * moundHeight + drifts[i] * driftHeight;
-                    px[i] = new Color32(m_MaskAlpha[i], (byte)(drifts[i] * 255), (byte)(mound * 255), 255);
+                    px[i] = new Color32(m_MaskAlpha[i], (byte)(drifts[i] * 255), (byte)(mound * 255), 0);
                 }
+            m_MaskPx = px;
             m_Mask.SetPixels32(px);
             m_Mask.Apply(false, false);
 
@@ -124,13 +139,18 @@ namespace FrostAndFound
             var data = m_Trail.GetPixelData<byte>(0);
             for (int i = 0; i < data.Length; i++) data[i] = 0;
             m_Trail.Apply(false, false);
+            m_FadeAt = new ushort[m_TrailW * m_TrailH];
+            m_TilesX = (m_TrailW + FadeTile - 1) / FadeTile;
+            m_TilesY = (m_TrailH + FadeTile - 1) / FadeTile;
+            m_TileLive = new bool[m_TilesX * m_TilesY];
+            m_T0 = Time.time;
 
             // ---- mesh + material
             float vertSpacing = Mathf.Max(0.035f, Mathf.Max(m_Rect.width, m_Rect.height) / 170f);
             int gx = Mathf.Clamp(Mathf.CeilToInt(m_Rect.width / vertSpacing), 8, 220);
             int gz = Mathf.Clamp(Mathf.CeilToInt(m_Rect.height / vertSpacing), 8, 220);
             var mesh = ProcMesh.Grid(gx, gz);
-            mesh.bounds = new Bounds(new Vector3(0.5f, 0.1f, 0.5f), new Vector3(1f, 0.3f, 1f));
+            mesh.bounds = new Bounds(new Vector3(0.5f, 0.25f, 0.5f), new Vector3(1f, 0.6f, 1f));   // room for the big drifts
             gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
             var mr = gameObject.AddComponent<MeshRenderer>();
             m_Mat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Snow)) { name = "Snow" };
@@ -142,6 +162,7 @@ namespace FrostAndFound
             m_Mat.SetFloat("_Thickness", thickness);
             m_Mat.SetFloat("_DriftHeight", driftHeight);
             m_Mat.SetFloat("_MoundHeight", moundHeight);
+            m_Mat.SetFloat("_BigDriftHeight", bigDriftHeight);
             m_Mat.SetFloat("_TexelSize", 1f / Mathf.Max(m_TrailW, m_TrailH));
             mr.sharedMaterial = m_Mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -155,6 +176,17 @@ namespace FrostAndFound
 
         void LateUpdate()
         {
+            if (Time.time >= m_NextFade)
+            {
+                m_NextFade = Time.time + FadeTick;
+                FadePrints();
+            }
+            if (m_MaskDirty)
+            {
+                m_Mask.SetPixels32(m_MaskPx);
+                m_Mask.Apply(false, false);
+                m_MaskDirty = false;
+            }
             // batch texture uploads (at most ~30/s)
             if (m_TrailDirty && Time.unscaledTime - m_LastApply > 0.033f)
             {
@@ -177,10 +209,15 @@ namespace FrostAndFound
             return m_MaskAlpha[y * m_MaskW + x] > 140;
         }
 
-        /// <summary>Stamps a depression into the snow. size in metres (length of the shape), depth 0..1.</summary>
+        /// <summary>Stamps a depression into the snow. size in metres (length of the shape), depth 0..1. It holds
+        /// for a while (boots and sled runners ~40 s, scoops and craters longer) and then fills back in, as if
+        /// fresh snow were settling into it.</summary>
         public void Stamp(Vector3 world, float yawDegrees, StampShape shape, float size, float depth = 1f)
         {
             if (m_Trail == null || !HasSnowAt(world)) return;
+            var tune = FrostTuning.I;
+            float hold = shape == StampShape.Scoop || shape == StampShape.Crater ? tune.divotHoldSeconds : tune.printHoldSeconds;
+            ushort fadeAt = Ticks(Time.time + hold);
             var data = m_Trail.GetPixelData<byte>(0);
             float texelM = m_Rect.width / m_TrailW;
             int radius = Mathf.CeilToInt(size * 0.75f / texelM) + 1;
@@ -202,9 +239,93 @@ namespace FrostAndFound
                     int i = y * m_TrailW + x;
                     byte nb = (byte)Mathf.Clamp(v * 255f, 0, 255);
                     if (nb > data[i]) data[i] = nb;
+                    if (fadeAt > m_FadeAt[i]) m_FadeAt[i] = fadeAt;
+                    int tile = (y / FadeTile) * m_TilesX + x / FadeTile;
+                    if (!m_TileLive[tile]) { m_TileLive[tile] = true; m_LiveTiles.Add(tile); }
                 }
             }
             m_TrailDirty = true;
+        }
+
+        ushort Ticks(float time) => (ushort)Mathf.Clamp(Mathf.CeilToInt((time - m_T0) / FadeTick), 0, ushort.MaxValue);
+
+        /// <summary>Old prints get shallower a step at a time until they're gone (fully over printFadeSeconds).</summary>
+        void FadePrints()
+        {
+            if (m_Trail == null || m_LiveTiles.Count == 0) return;
+            var data = m_Trail.GetPixelData<byte>(0);
+            ushort now = Ticks(Time.time);
+            int step = Mathf.Max(1, Mathf.RoundToInt(255f * FadeTick / Mathf.Max(1f, FrostTuning.I.printFadeSeconds)));
+            bool changed = false;
+            for (int k = m_LiveTiles.Count - 1; k >= 0; k--)
+            {
+                int tile = m_LiveTiles[k];
+                int x0 = (tile % m_TilesX) * FadeTile, y0 = (tile / m_TilesX) * FadeTile;
+                int x1 = Mathf.Min(x0 + FadeTile, m_TrailW), y1 = Mathf.Min(y0 + FadeTile, m_TrailH);
+                bool any = false;
+                for (int y = y0; y < y1; y++)
+                {
+                    int row = y * m_TrailW;
+                    for (int x = x0; x < x1; x++)
+                    {
+                        int i = row + x;
+                        byte v = data[i];
+                        if (v == 0) continue;
+                        if (now >= m_FadeAt[i])
+                        {
+                            v = (byte)Mathf.Max(0, v - step);
+                            data[i] = v;
+                            changed = true;
+                        }
+                        if (v > 0) any = true;
+                    }
+                }
+                if (!any)
+                {
+                    m_TileLive[tile] = false;
+                    m_LiveTiles[k] = m_LiveTiles[m_LiveTiles.Count - 1];
+                    m_LiveTiles.RemoveAt(m_LiveTiles.Count - 1);
+                }
+            }
+            if (changed) m_TrailDirty = true;
+        }
+
+        /// <summary>Heaps a big soft drift into the snow (the scenery's mounds and the snow banked around tree trunks).
+        /// radius in metres along its long axis; squash shortens the other axis; height01 is 0..1 of bigDriftHeight.</summary>
+        public void AddDrift(Vector3 world, float radius, float height01, float squash = 1f, float yawDegrees = 0f, int seed = 0)
+        {
+            if (m_MaskPx == null || radius <= 0.01f) return;
+            float texX = m_Rect.width / m_MaskW, texZ = m_Rect.height / m_MaskH;
+            int rx = Mathf.CeilToInt(radius / texX) + 1, rz = Mathf.CeilToInt(radius / texZ) + 1;
+            var uv = WorldToUV(world);
+            int cx = Mathf.RoundToInt(uv.x * m_MaskW - 0.5f), cy = Mathf.RoundToInt(uv.y * m_MaskH - 0.5f);
+            float rad = yawDegrees * Mathf.Deg2Rad, cs = Mathf.Cos(rad), sn = Mathf.Sin(rad);
+            float sq = Mathf.Clamp(squash, 0.3f, 1f);
+            float ox = seed * 3.17f, oz = seed * 7.31f;
+            for (int y = cy - rz; y <= cy + rz; y++)
+            {
+                if (y < 0 || y >= m_MaskH) continue;
+                for (int x = cx - rx; x <= cx + rx; x++)
+                {
+                    if (x < 0 || x >= m_MaskW) continue;
+                    int i = y * m_MaskW + x;
+                    if (m_MaskAlpha[i] < 40) continue;
+                    var p = TexelToWorld(x, y);
+                    float dx = p.x - world.x, dz = p.y - world.z;
+                    float lx = dx * cs - dz * sn, lz = (dx * sn + dz * cs) / sq;
+                    // a lumpy outline so it reads as wind-heaped snow, not a dome
+                    float wobble = 0.82f + 0.3f * Mathf.PerlinNoise(p.x * 2.3f + ox, p.y * 2.3f + oz);
+                    float t = Mathf.Sqrt(lx * lx + lz * lz) / (radius * wobble);
+                    if (t >= 1f) continue;
+                    float h = Smooth(Smooth(1f - t)) * height01 * (0.9f + 0.2f * Mathf.PerlinNoise(p.x * 5.1f + oz, p.y * 5.1f + ox));
+                    h *= m_MaskAlpha[i] / 255f;
+                    byte nb = (byte)Mathf.Clamp(h * 255f, 0f, 255f);
+                    if (nb <= m_MaskPx[i].a) continue;
+                    m_MaskPx[i].a = nb;
+                    m_Relief[i] = m_MaskPx[i].b / 255f * moundHeight + m_MaskPx[i].g / 255f * driftHeight + nb / 255f * bigDriftHeight;
+                }
+            }
+            m_MaskDirty = true;
         }
 
         /// <summary>Normalised shape in a 1×1 box centred on the origin (x across, z along).</summary>

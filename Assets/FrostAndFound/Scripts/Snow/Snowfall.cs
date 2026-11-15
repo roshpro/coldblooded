@@ -168,7 +168,7 @@ namespace FrostAndFound
             float yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
             var side = Vector3.Cross(Vector3.up, dir) * (m_LeftNext ? -footSpacing : footSpacing);
             var pos = feet + side;
-            snow.Stamp(pos, yaw, m_LeftNext ? StampShape.BootLeft : StampShape.BootRight, bootLength, 0.95f);
+            snow.Stamp(pos, yaw, m_LeftNext ? StampShape.BootLeft : StampShape.BootRight, bootLength, 0.6f);   // soft prints that fill back in
             if (snow.HasSnowAt(pos))
             {
                 AudioDirector.PlayAt(Sfx.Footstep, pos + Vector3.up * 0.05f, 0.55f, Random.Range(0.9f, 1.1f));
