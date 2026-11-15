@@ -173,7 +173,8 @@ namespace FrostAndFound
     public class HButton : HControl
     {
         /// <summary>Round: a big circular accent button with just an icon (the title screen's Play).</summary>
-        public enum Variant { Primary, Secondary, Icon, Ghost, Round }
+        /// <summary>Note: a yellow sticky note with a handwritten label (the case journal).</summary>
+        public enum Variant { Primary, Secondary, Icon, Ghost, Round, Note }
         Variant m_Variant;
         Material m_Fill;
         Transform m_Content, m_Ring;
@@ -204,14 +205,44 @@ namespace FrostAndFound
             bool round = variant == Variant.Round;
             bool primary = IsAccent;
             int seg = round ? 24 : 7;   // a smooth circle, not an octagon
-            m_Fill = HUI.Glass(size, r, IdleColor, false, primary ? 0.2f : 0.12f, 0f, primary ? 0.25f : 0f, primary ? 0.7f : 0.35f);
-            m_Fill.SetColor("_BaseColor", IdleColor);
-            UIKit.Quad(m_Content, "Fill", UIKit.RoundedRect(size.x, size.y, r, seg), m_Fill, 0f);
+            float ringPad = 0.008f;
+            bool note = variant == Variant.Note;
+            if (note)
+            {
+                r = 0.004f;
+                m_Fill = Palette.UnlitTextured(Texture2D.whiteTexture, IdleColor, false, "Note Fill");
+                UIKit.Quad(m_Content, "Fill", UIKit.RoundedRect(size.x, size.y, r, 2), m_Fill, 0f);
+                var sh = UIKit.Quad(m_Content, "Shadow", UIKit.RoundedRect(size.x, size.y, r, 2), Palette.Unlit(Palette.Ink.WithAlpha(0.25f), true), 0.0015f);
+                sh.localPosition = new Vector3(0.004f, -0.006f, 0.0015f);
+                sh.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Shadow;
+                // a darker fold along the top where it's stuck down
+                var glue = UIKit.Quad(m_Content, "Glue", ProcMesh.Quad(), Palette.Unlit(new Color(0.9f, 0.78f, 0.3f), false), -0.0004f);
+                glue.localScale = new Vector3(size.x, size.y * 0.16f, 1f);
+                glue.localPosition = new Vector3(0f, size.y * 0.42f, -0.0004f);
+            }
+            else if (round)
+            {
+                // the title logo's look: flat ice-blue fill, a thick navy outline and a navy drop shadow down-right
+                m_Fill = Palette.UnlitTextured(Texture2D.whiteTexture, IdleColor, false, "Round Fill");
+                UIKit.Quad(m_Content, "Fill", UIKit.RoundedRect(size.x, size.y, r, seg), m_Fill, 0f);
+                float o = size.y * LogoOutline, d = size.y * LogoShadow;
+                var navy = Palette.UnlitTextured(Texture2D.whiteTexture, LogoNavy, false, "Round Outline");
+                UIKit.Quad(m_Content, "Outline", UIKit.RoundedRect(size.x + 2 * o, size.y + 2 * o, r + o, seg), navy, 0.0008f);
+                var shadow = UIKit.Quad(m_Content, "Shadow", UIKit.RoundedRect(size.x + 2 * o, size.y + 2 * o, r + o, seg), navy, 0.0016f);
+                shadow.localPosition = new Vector3(d, -d, 0.0016f);
+                ringPad = 2 * (o + d) + 0.01f;
+            }
+            else
+            {
+                m_Fill = HUI.Glass(size, r, IdleColor, false, primary ? 0.2f : 0.12f, 0f, primary ? 0.25f : 0f, primary ? 0.7f : 0.35f);
+                m_Fill.SetColor("_BaseColor", IdleColor);
+                UIKit.Quad(m_Content, "Fill", UIKit.RoundedRect(size.x, size.y, r, seg), m_Fill, 0f);
+            }
             m_RingMat = Palette.UnlitTextured(Texture2D.whiteTexture, Color.white.WithAlpha(0f), true, "HoverRing");
             float ringT = round ? 0.005f : 0.0028f;
-            m_Ring = UIKit.Quad(m_Content, "Hover Ring", UIKit.RoundedFrame(size.x + 0.008f, size.y + 0.008f, r + 0.004f, ringT, seg), m_RingMat, 0.0005f);
+            m_Ring = UIKit.Quad(m_Content, "Hover Ring", UIKit.RoundedFrame(size.x + ringPad, size.y + ringPad, r + ringPad * 0.5f, ringT, seg), m_RingMat, 0.0005f);
             m_Ring.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Overlay;
-            var textColor = primary ? Color.white : Palette.UiText;
+            var textColor = note ? Palette.Ink : round ? LogoNavy : primary ? Color.white : Palette.UiText;
             float iconSize = Mathf.Min(size.y * 0.46f, 0.03f);
             if (round)
             {
@@ -232,6 +263,7 @@ namespace FrostAndFound
                 m_Label = UIKit.Text(m_Content, "Label", label, UIKit.Face.Body, Mathf.Clamp(size.y * 3.6f, 0.17f, 0.24f), textColor, new Vector2(size.x, size.y), TextAlignmentOptions.Center, 1f, false);
                 m_Label.fontStyle = FontStyles.Normal;
                 m_Label.transform.localPosition = new Vector3(0, 0, -0.002f);
+                if (note) { m_Label.font = UIKit.ScriptFont(); m_Label.fontSize = size.y * 5.2f; m_Label.fontStyle = FontStyles.Bold; }
                 if (icon.HasValue)
                 {
                     float w = UIKit.Measure(m_Label, label, 2f).x;
@@ -246,9 +278,15 @@ namespace FrostAndFound
         }
 
         bool IsAccent => m_Variant == Variant.Primary || m_Variant == Variant.Round;
-        Color IdleColor => IsAccent ? Palette.UiAccent : m_Variant == Variant.Ghost ? Palette.UiPanelSolid : Palette.UiSurface;
-        Color HoverColor => IsAccent ? Palette.UiAccentHover : Palette.UiSurfaceHover;
-        Color PressColor => IsAccent ? Palette.UiAccentPressed : Palette.UiSurfacePressed;
+        bool IsRound => m_Variant == Variant.Round;
+        // colours and proportions taken from the "cold blooded" title logo
+        static readonly Color LogoIce = new Color32(176, 224, 245, 255), LogoIceHover = new Color32(206, 238, 252, 255), LogoIcePressed = new Color32(140, 196, 222, 255);
+        static readonly Color LogoNavy = new Color32(18, 38, 48, 255);
+        const float LogoOutline = 0.045f, LogoShadow = 0.05f;   // × button height
+        static readonly Color NoteYellow = new Color32(255, 229, 120, 255), NoteHover = new Color32(255, 238, 160, 255), NotePressed = new Color32(240, 205, 90, 255);
+        Color IdleColor => m_Variant == Variant.Note ? NoteYellow : IsRound ? LogoIce : IsAccent ? Palette.UiAccent : m_Variant == Variant.Ghost ? Palette.UiPanelSolid : Palette.UiSurface;
+        Color HoverColor => m_Variant == Variant.Note ? NoteHover : IsRound ? LogoIceHover : IsAccent ? Palette.UiAccentHover : Palette.UiSurfaceHover;
+        Color PressColor => m_Variant == Variant.Note ? NotePressed : IsRound ? LogoIcePressed : IsAccent ? Palette.UiAccentPressed : Palette.UiSurfacePressed;
 
         public void SetLabel(string text) { if (m_Label) m_Label.text = text; tooltip = text; }
 
@@ -257,7 +295,7 @@ namespace FrostAndFound
             var c = Color.Lerp(Color.Lerp(IdleColor, HoverColor, hover), PressColor, press);
             if (!interactable) c = Color.Lerp(IdleColor, Palette.UiPanelSolid, 0.5f);
             m_Fill.SetColor("_BaseColor", c);
-            m_RingMat.SetColor("_BaseColor", Palette.UiIce.WithAlpha(0.5f * hover));
+            m_RingMat.SetColor("_BaseColor", (m_Variant == Variant.Note ? Palette.Ink : IsRound ? Color.white : Palette.UiIce).WithAlpha((IsRound ? 0.8f : 0.5f) * hover));
             m_Content.localScale = Vector3.one * (1f + 0.035f * hover - 0.05f * press);
             m_Content.localPosition = new Vector3(0, 0, 0.004f * press);
             if (m_Variant == Variant.Icon) UpdateTooltip(hover);

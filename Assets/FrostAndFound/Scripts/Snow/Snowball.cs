@@ -102,7 +102,7 @@ namespace FrostAndFound
             ThrowOrigin = transform.position;
             ThrowSpeed = velocity.magnitude;
             m_Vel = velocity;
-            if (ThrowSpeed > 2f) AudioDirector.PlayAt(Sfx.Whoosh, transform.position, Mathf.Clamp01(ThrowSpeed / 12f), Random.Range(0.95f, 1.15f));
+            if (ThrowSpeed > 2f && !SatieSound.Fire("throw", transform.position)) AudioDirector.PlayAt(Sfx.Whoosh, transform.position, Mathf.Clamp01(ThrowSpeed / 12f), Random.Range(0.95f, 1.15f));
             Thrown?.Invoke(this);
         }
 
@@ -159,7 +159,7 @@ namespace FrostAndFound
             if (m_Done) return;
             m_Done = true;
             Fx.SnowImpact(point, normal, m_Vel, onSnow, target != null ? 0.85f : 1f);
-            AudioDirector.PlayAt(Sfx.Splat, point, 0.8f, Random.Range(0.9f, 1.1f));
+            if (!SatieSound.Fire("snowball_hit", point)) AudioDirector.PlayAt(Sfx.Splat, point, 0.8f, Random.Range(0.9f, 1.1f));
             var snow = SnowSurface.Instance;
             if (onSnow && snow) snow.Stamp(point, Random.Range(0f, 360f), StampShape.Crater, 0.16f, 0.8f);
             Landed?.Invoke(this, point, target);

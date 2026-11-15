@@ -113,14 +113,15 @@ namespace FrostAndFound
             bool big = area > 30f;
 
             // the best of every open spot (jittered off the grid); false when nothing fits
-            bool Place(float clear, float wallMin, System.Func<Vector3, float> score, out Vector3 spot)
+            // jitter: how loosely it follows its preferences (trees stay true to the walls; the rest wander more)
+            bool Place(float clear, float wallMin, System.Func<Vector3, float> score, out Vector3 spot, float jitter = 0.35f)
             {
                 spot = default; float best = float.MinValue;
                 for (int i = 0; i < open.Count; i++)
                 {
                     var p = open[i] + new Vector3(k.Range(-0.12f, 0.12f), 0f, k.Range(-0.12f, 0.12f));
                     if (!room.IsFree(p, clear, wallMin) || InPlay(p, clear)) continue;
-                    float s = score(p) + k.Range(0f, 0.35f);
+                    float s = score(p) + k.Range(0f, jitter);
                     if (s > best) { best = s; spot = p; }
                 }
                 return best > float.MinValue;
@@ -197,7 +198,7 @@ namespace FrostAndFound
             {
                 float size = k.Range(0.75f, 1.2f) * (big ? 1.15f : 1f);
                 float r = 0.32f * size;
-                if (!Place(r, r + 0.05f, p => WallScore(p, r + 0.12f) * 0.8f + Enclosure(p, 0.7f) + NearTrees(p) + Spread(p, shrubSpots, 2.5f) * 0.35f, out var spot)) continue;
+                if (!Place(r, r + 0.05f, p => WallScore(p, r + 0.12f) * 0.8f + Enclosure(p, 0.7f) + NearTrees(p) + Spread(p, shrubSpots, 2.5f) * 0.35f, out var spot, 1.6f)) continue;
                 Shrub(k, spot, size, i);
                 shrubSpots.Add(spot);
                 placed[1]++;
@@ -210,7 +211,7 @@ namespace FrostAndFound
             {
                 float size = k.Range(0.65f, 1.35f) * (big ? 1.2f : 1f);
                 float r = 0.22f * size;
-                if (!Place(r, r, p => WallScore(p, 0.6f) * 0.4f + NearTrees(p) * 0.6f + Spread(p, rockSpots, 2.5f) * 0.4f, out var spot)) continue;
+                if (!Place(r, r, p => WallScore(p, 0.6f) * 0.4f + NearTrees(p) * 0.6f + Spread(p, rockSpots, 2.5f) * 0.4f, out var spot, 1.6f)) continue;
                 Rock(k, spot, size, i);
                 rockSpots.Add(spot);
                 placed[2]++;
@@ -221,7 +222,7 @@ namespace FrostAndFound
             // ---- fallen logs, along the walls
             for (int i = 0; i < logs; i++)
             {
-                if (!Place(0.55f, 0.3f, p => WallScore(p, 0.45f) + NearTrees(p) * 0.5f, out var spot)) continue;
+                if (!Place(0.55f, 0.3f, p => WallScore(p, 0.45f) + NearTrees(p) * 0.5f, out var spot, 1.4f)) continue;
                 room.ClosestOnEdge(new Vector2(spot.x, spot.z), out var inward);
                 float yaw = Mathf.Atan2(inward.x, inward.y) * Mathf.Rad2Deg + k.Range(-15f, 15f);   // its length runs along the wall
                 Log(k, spot, yaw, i);
@@ -234,7 +235,7 @@ namespace FrostAndFound
             {
                 float radius = k.Range(0.5f, 0.95f) * (big ? 1.25f : 1f);
                 bool inOpen = big && k.rng.NextDouble() < 0.35;
-                if (!Place(radius * 0.5f, 0.05f, p => inOpen ? 0f : WallScore(p, radius * 0.35f) + Enclosure(p, 1f) * 2f, out var spot)) continue;
+                if (!Place(radius * 0.5f, 0.05f, p => inOpen ? 0f : WallScore(p, radius * 0.35f) + Enclosure(p, 1f) * 2f, out var spot, 1.6f)) continue;
                 room.ClosestOnEdge(new Vector2(spot.x, spot.z), out var inward);
                 float squash = k.Range(0.55f, 0.85f);
                 float h01 = k.Range(0.55f, 1f);

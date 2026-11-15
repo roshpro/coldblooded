@@ -337,11 +337,15 @@ namespace FrostAndFound
             m_Planted = true;
             if (m_Rope) m_Rope.enabled = false;
             faceDir = faceDir.Flat().sqrMagnitude > 1e-4f ? faceDir.Flat().normalized : Vector3.forward;
-            float snowY = SnowSurface.Instance ? SnowSurface.Instance.SurfaceHeightAt(pos) : pos.y;
-            // nose up, tail sunk into the snow, leaning back a little as if it was jammed in
+            var snow = SnowSurface.Instance;
+            float snowY = snow ? snow.SurfaceHeightAt(pos) : pos.y;
+            // nose up, the back half buried, leaning back a little as if it was jammed in; only the curl (with the
+            // dent) and the top of the deck show, so it takes a look to spot
             transform.rotation = Quaternion.AngleAxis(-12f, Vector3.Cross(Vector3.up, faceDir)) * Quaternion.LookRotation(Vector3.up, faceDir);
             transform.localScale = Vector3.one * Size;
-            transform.position = new Vector3(pos.x, snowY + (0.43f - 0.12f) * Size, pos.z);
+            transform.position = new Vector3(pos.x, snowY + (0.43f - 0.4f) * Size, pos.z);
+            // and snow heaped up round it
+            snow?.AddDrift(pos, 0.34f, 0.55f, 0.8f, Vector3.SignedAngle(Vector3.forward, faceDir, Vector3.up), 77);
             m_Last = transform.position;
         }
         TonyKid m_Tony;

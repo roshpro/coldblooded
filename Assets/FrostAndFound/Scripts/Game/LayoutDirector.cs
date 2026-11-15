@@ -22,16 +22,21 @@ namespace FrostAndFound
             var res = new Result();
             var feet = player.FeetPosition;
             var fwd = player.FlatForward;
+            var rng = new System.Random(Random.Range(1, int.MaxValue));   // a different arrangement every game
+            float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
 
-            // ---------------- Frosty: centre of the floor, nudged off the player and off furniture
+            // ---------------- Frosty: near the centre of the floor (somewhere a little different each time), nudged
+            // off the player and off furniture
             var center = room.Center;
+            float wander = Mathf.Min(0.5f, Mathf.Min(room.Width, room.Depth) * 0.12f);
+            float wa = R(0f, Mathf.PI * 2f), wr = wander * Mathf.Sqrt(R(0f, 1f));
+            center += new Vector3(Mathf.Cos(wa), 0f, Mathf.Sin(wa)) * wr;
             float dPlayer = FrostUtil.FlatDistance(center, feet);
             if (dPlayer < 1.3f) center += fwd * (1.3f - dPlayer);
             center = room.ClampInside(center, 0.8f);
             float fr = Frosty.FootprintRadius * 0.7f;
             if (!room.IsFree(center, fr, 0.7f))
             {
-                var rng = new System.Random(3);
                 for (int i = 0; i < 40; i++)
                 {
                     var c = room.RandomFreePoint(fr, 0.7f, rng, 1);
@@ -39,13 +44,13 @@ namespace FrostAndFound
                 }
             }
             center.y = room.FloorY;
-            var frostyFacing = FrostUtil.FlatLookRotation(center, feet);
+            var frostyFacing = FrostUtil.FlatLookRotation(center, feet) * Quaternion.Euler(0f, R(-20f, 20f), 0f);
             res.Frosty = Frosty.Create(center, frostyFacing);
             PhotoSubject.Tag(res.Frosty.gameObject, SubjectKind.Frosty, 1.1f);   // so a photo of him gets a reaction
 
             // ---------------- things left in the snow: Tony's sled planted upright somewhere (not obviously his) and a
             // sand bucket with a little spade, each by a wall where the drifts are, clear of Frosty, you and each other
-            var rngP = new System.Random(7);
+            var rngP = rng;
             Vector3 PropSpot(float minFrom, params Vector3[] avoid)
             {
                 Vector3 best = default; float bestScore = float.MinValue;
@@ -57,7 +62,7 @@ namespace FrostAndFound
                     bool near = false;
                     foreach (var a in avoid) if (FrostUtil.FlatDistance(p, a) < minFrom) near = true;
                     if (near) continue;
-                    float score = -Mathf.Abs(edge - 0.5f) + (float)rngP.NextDouble() * 0.3f;
+                    float score = -Mathf.Abs(edge - 0.5f) + (float)rngP.NextDouble() * 1.2f;
                     foreach (var a in avoid) score += Mathf.Min(FrostUtil.FlatDistance(p, a), 3f) * 0.6f;   // well apart, for variety
                     if (score > bestScore) { bestScore = score; best = p; }
                 }
@@ -69,7 +74,7 @@ namespace FrostAndFound
             var furniture = room.IsBlocked;
             room.IsBlocked = (p, r) => (furniture != null && furniture(p, r))
                 || FrostUtil.FlatDistance(p, sledSpot) < 0.3f + r || FrostUtil.FlatDistance(p, toysSpot) < 0.25f + r;
-            SnowToys.Create(toysSpot, (center - toysSpot).Flat());
+            SnowToys.Create(toysSpot, Quaternion.Euler(0f, R(-70f, 70f), 0f) * (center - toysSpot).Flat());
 
             // ---------------- kid spots: every free bit of floor is a candidate (not just a ring by the walls), so
             // even in a small room the five of them spread out instead of bunching in whatever corner is left
@@ -112,7 +117,7 @@ namespace FrostAndFound
                     {
                         float gap = MinToPlaced(s);
                         if (gap < spacing) continue;
-                        float sc = score(s) + Mathf.Min(gap, 2.6f) * 2f;   // spreading out matters most
+                        float sc = score(s) + Mathf.Min(gap, 2.6f) * 2f + R(0f, 1.6f);   // spreading out matters most; a dash of chance
                         if (sc > bestScore) { bestScore = sc; best = s; any = true; }
                     }
                     if (any) return best;
@@ -145,7 +150,7 @@ namespace FrostAndFound
                 var pos = kv.Value; pos.y = room.FloorY;
                 // face the room (between Frosty and you)
                 var look = Vector3.Lerp(center, feet, 0.4f);
-                var rot = FrostUtil.FlatLookRotation(pos, look);
+                var rot = FrostUtil.FlatLookRotation(pos, look) * Quaternion.Euler(0f, R(-25f, 25f), 0f);
                 Kid kid = kv.Key switch
                 {
                     CastId.Dexter => Kid.Spawn<DexterKid>(kv.Key, pos, rot),
@@ -159,7 +164,7 @@ namespace FrostAndFound
 
             if (res.Kids.TryGetValue(CastId.Tony, out var tonyKid) && tonyKid is TonyKid tk && tk.Sled)
             {
-                tk.Sled.Plant(sledSpot, (center - sledSpot).Flat());
+                tk.Sled.Plant(sledSpot, Quaternion.Euler(0f, R(-35f, 35f), 0f) * (center - sledSpot).Flat());
                 PhotoSubject.Tag(tk.Sled.gameObject, SubjectKind.Sled);
             }
 

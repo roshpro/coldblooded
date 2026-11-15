@@ -91,7 +91,7 @@ namespace FrostAndFound
             // the world: snow on the floor, light snowfall, your footprints
             SnowSurface.Create(r);
             Snowfall.Create(r);
-            Scenery.Create(r, Player);   // snowy redwoods, shrubs, rocks and drifts — more of them in bigger rooms
+            Scenery.Create(r, Player, Random.Range(1, int.MaxValue));   // a fresh arrangement every game: snowy redwoods, shrubs, rocks and drifts — more of them in bigger rooms
             gameObject.AddComponent<FootprintTracker>();
             PhotoBackdrop.Create(r);
 
@@ -106,6 +106,7 @@ namespace FrostAndFound
             m_Director = gameObject.AddComponent<CaseDirector>();
 
             gameObject.AddComponent<TipsDirector>();
+            gameObject.AddComponent<SatieStateDriver>();   // the snowy-day soundscape, when the Satie package is installed
             gameObject.AddComponent<GestureDirector>();
             gameObject.AddComponent<SnowballFight>();   // hit the same kid four times and it's war
             yield return null;

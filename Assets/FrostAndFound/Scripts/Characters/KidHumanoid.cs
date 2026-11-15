@@ -382,7 +382,7 @@ namespace FrostAndFound
             yield return Ease.Tween(0.42f, k => m_Scoop = k, Ease.InOutCubic, false);
             if (snow && snow.HasSnowAt(m_ScoopTarget)) snow.Stamp(m_ScoopTarget, Random.Range(0f, 360f), StampShape.Scoop, 0.11f, 0.8f);
             Fx.SnowPuff(m_ScoopTarget + Vector3.up * 0.02f, Vector3.up, 10, 0.6f);
-            AudioDirector.PlayAt(Sfx.ScoopCrunch, m_ScoopTarget, 0.7f, Random.Range(1.05f, 1.2f));
+            if (!SatieSound.Fire("kid_scoop", m_ScoopTarget, SatieSound.Snow)) AudioDirector.PlayAt(Sfx.ScoopCrunch, m_ScoopTarget, 0.7f, Random.Range(1.05f, 1.2f));
             m_Carry = Snowball.Create(Rig.HandR ? Rig.HandR.position : m_ScoopTarget, FrostTuning.I.snowballRadius * 0.85f);
             m_Carry.Thrower = kid;
             m_Carry.gameObject.SetLayerRecursive(Layers.Kid);

@@ -95,9 +95,9 @@ namespace FrostAndFound
             labelGo.transform.localPosition = new Vector3(0, 0, 0.0016f);
             labelGo.transform.localRotation = Quaternion.Euler(0, 180f, 0);
             m_Label = labelGo.AddComponent<TextMeshPro>();
-            m_Label.text = data.Guilty ? "GOT HIM!" : (data.IsEvidence ? "EXHIBIT " + data.Number : "#" + data.Number);
+            m_Label.text = data.Guilty ? "GOT HIM!" : "#" + data.Number;
             UIStyle.Apply(m_Label, UIStyle.Role.Marker);
-            m_Label.fontSize = 0.11f;
+            m_Label.fontSize = data.Guilty ? 0.11f : 0.075f;
             m_Label.rectTransform.sizeDelta = new Vector2(Width * 0.9f, Height * 0.5f);
             m_Label.alignment = TextAlignmentOptions.Center;
         }
@@ -299,7 +299,7 @@ namespace FrostAndFound
             FaceTarget = null;
             p.Drop(hand.ReleaseVelocity() * 0.5f);
             Dropped.Add(p);
-            AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.2f, 1.9f);
+            if (!SatieSound.Fire("photo_drop", p.transform.position)) AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.2f, 1.9f);
             hand.Haptic(0.15f, 0.03f);
         }
 

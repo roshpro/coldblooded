@@ -171,7 +171,7 @@ namespace FrostAndFound
             snow.Stamp(pos, yaw, m_LeftNext ? StampShape.BootLeft : StampShape.BootRight, bootLength, 0.6f);   // soft prints that fill back in
             if (snow.HasSnowAt(pos))
             {
-                AudioDirector.PlayAt(Sfx.Footstep, pos + Vector3.up * 0.05f, 0.55f, Random.Range(0.9f, 1.1f));
+                if (!SatieSound.Fire("step", pos + Vector3.up * 0.05f, SatieSound.Snow)) AudioDirector.PlayAt(Sfx.Footstep, pos + Vector3.up * 0.05f, 0.55f, Random.Range(0.9f, 1.1f));
                 if (Random.value < 0.5f) Fx.SnowPuff(pos + Vector3.up * 0.04f, Vector3.up, 4, 0.9f);
             }
             m_LeftNext = !m_LeftNext;

@@ -611,6 +611,54 @@ namespace FrostAndFound
             return d;
         }
 
+        /// <summary>Speeds speech up (tempo &gt; 1) or slows it down without changing its pitch (WSOLA: overlapping
+        /// 40 ms windows taken at a faster stride, each nudged to where it lines up best with the last). Mono out.</summary>
+        public static float[] TimeStretch(float[] interleaved, int channels, int rate, float tempo)
+        {
+            channels = Mathf.Max(1, channels);
+            int n = interleaved.Length / channels;
+            var x = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float s = 0f;
+                for (int c = 0; c < channels; c++) s += interleaved[i * channels + c];
+                x[i] = s / channels;
+            }
+            int N = Mathf.Max(64, (int)(0.04f * rate)) & ~1, Hs = N / 2, delta = (int)(0.012f * rate);
+            float Ha = Hs * tempo;
+            var win = new float[N];
+            for (int j = 0; j < N; j++) win[j] = 0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * j / N);
+            int outLen = (int)(n / tempo) + N;
+            var y = new float[outLen];
+            var w = new float[outLen];
+            int prev = 0, written = 0;
+            for (int k = 0; ; k++)
+            {
+                int outPos = k * Hs, nominal = (int)(k * Ha), best = nominal;
+                if (nominal + N + delta >= n || outPos + N >= outLen) break;
+                if (k > 0)
+                {
+                    int natural = prev + Hs;   // how the last window would have carried on
+                    if (natural + N >= n) break;
+                    float bestC = float.MinValue;
+                    for (int off = -delta; off <= delta; off += 2)
+                    {
+                        int c = nominal + off;
+                        if (c < 0) continue;
+                        float s = 0f;
+                        for (int j = 0; j < N; j += 4) s += x[natural + j] * x[c + j];
+                        if (s > bestC) { bestC = s; best = c; }
+                    }
+                }
+                for (int j = 0; j < N; j++) { y[outPos + j] += x[best + j] * win[j]; w[outPos + j] += win[j]; }
+                prev = best;
+                written = outPos + N;
+            }
+            var o = new float[Mathf.Max(1, written)];
+            for (int i = 0; i < o.Length; i++) o[i] = w[i] > 1e-3f ? y[i] / w[i] : 0f;
+            return o;
+        }
+
         public static AudioClip ToClip(string name, float[] data, bool loop = false)
         {
             var clip = AudioClip.Create(name, data.Length, 1, SR, false);

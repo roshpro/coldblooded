@@ -212,7 +212,8 @@ namespace FrostAndFound
             if (!ball || !ball.Thrower) return;
             if (m_Active) m_Taken++;
             FaceSplat.Show();
-            AudioDirector.Play2D(Sfx.Splat, 0.9f, Random.Range(0.9f, 1.05f));
+            var rig = PlayerRig.Active;
+            if (!(rig && SatieSound.Fire("snowball_hit_player", rig.Head.position))) AudioDirector.Play2D(Sfx.Splat, 0.9f, Random.Range(0.9f, 1.05f));
         }
     }
 

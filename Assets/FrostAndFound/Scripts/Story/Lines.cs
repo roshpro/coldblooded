@@ -11,6 +11,8 @@ namespace FrostAndFound
         /// <summary>The recorded clip's file name in Resources/Voice (the voice_lines.csv id), when it isn't the line id.</summary>
         public string Voice;
         public string Clip => Voice ?? Id;
+        /// <summary>Plays the recording this much faster (pitch kept), e.g. 1.15 = 15% quicker.</summary>
+        public float Tempo = 1f;
         public Line(string id, CastId speaker, string text) { Id = id; Speaker = speaker; Text = text; }
     }
 
@@ -27,6 +29,7 @@ namespace FrostAndFound
 
         static void L(string id, CastId who, string text) => s_Lines[id] = new Line(id, who, text);
         static void Clip(string id, string clip) { if (s_Lines.TryGetValue(id, out var l)) l.Voice = clip; }
+        static void Tempo(string id, float tempo) { if (s_Lines.TryGetValue(id, out var l)) l.Tempo = tempo; }
 
         public static Line Get(string id) => s_Lines.TryGetValue(id, out var l) ? l : null;
 
@@ -302,6 +305,7 @@ namespace FrostAndFound
 
             // ---------------------------------------------------------------- recorded clips named differently from their line
             Clip("dexter_excuse", "dexter_step1_excuse");
+            Tempo("dexter_excuse", 1.18f);   // his clue: a touch quicker
             Clip("dexter_point", "dexter_step1_point");
             Clip("sherman_excuse", "sherman_step2_excuse");
             Clip("sherman_point", "sherman_step2_point");

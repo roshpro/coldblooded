@@ -42,6 +42,19 @@ namespace FrostAndFound
             return fa ? fa : TMP_Settings.defaultFontAsset;
         }
 
+        static TMP_FontAsset s_Script;
+        /// <summary>Real handwriting (Caveat, Resources/Fonts/Caveat.ttf) for the case journal, built at runtime as a
+        /// dynamic TMP font; falls back to the Hand face.</summary>
+        public static TMP_FontAsset ScriptFont()
+        {
+            if (s_Script) return s_Script;
+            var f = Resources.Load<Font>("Fonts/Caveat");
+            if (f) s_Script = TMP_FontAsset.CreateFontAsset(f);
+            if (s_Script) s_Script.name = "Caveat (dynamic)";
+            else Debug.LogWarning("[Frost] Handwriting font missing; using the Hand face");
+            return s_Script ? s_Script : Font(Face.Hand);
+        }
+
         public static TextMeshPro Text(Transform parent, string name, string text, Face face, float size, Color color,
             Vector2 box, TextAlignmentOptions align = TextAlignmentOptions.Center, float spacing = 0f, bool wrap = true)
         {

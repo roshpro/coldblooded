@@ -91,11 +91,27 @@ namespace FrostAndFound
             m_Content.gameObject.layer = Layers.UI3D;
             m_Play = HButton.Create(m_Content, "Play", HButton.Variant.Round, new Vector2(ButtonSize, ButtonSize), UIKit.Icon.Play, () => Begin(null));
             m_Play.transform.localPosition = new Vector3(0, 0, -0.004f);
-            // the game's name over the button (a soft dark outline so it reads against any room)
-            var title = HUI.Label(m_Content, "Cold Blooded", UIKit.Face.Display, 0.62f, Palette.UiText, new Vector2(0.6f, 0.09f), TextAlignmentOptions.Center, 0f, false);
-            title.transform.localPosition = new Vector3(0, ButtonSize * 0.5f + 0.075f, -0.004f);
-            title.outlineWidth = 0.14f;
-            title.outlineColor = new Color32(18, 28, 58, 190);
+            // the game's logo over the button (falls back to plain text if the image is missing)
+            var logo = Resources.Load<Texture2D>("Title/title_logo");
+            if (logo)
+            {
+                logo.wrapMode = TextureWrapMode.Clamp;
+                const float LogoWidth = 0.4f;
+                float h = LogoWidth * logo.height / logo.width;
+                var quad = UIKit.Quad(m_Content, "Logo", ProcMesh.Quad(), Palette.UnlitTextured(logo, Color.white, true, "Title Logo"), -0.004f);
+                quad.localScale = new Vector3(LogoWidth, h, 1f);
+                quad.localPosition = new Vector3(0, ButtonSize * 0.5f + 0.01f + h * 0.5f, -0.004f);
+                var mr = quad.GetComponent<MeshRenderer>();
+                mr.sortingOrder = UIKit.Order.Overlay;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            else
+            {
+                var title = HUI.Label(m_Content, "Cold Blooded", UIKit.Face.Display, 0.62f, Palette.UiText, new Vector2(0.6f, 0.09f), TextAlignmentOptions.Center, 0f, false);
+                title.transform.localPosition = new Vector3(0, ButtonSize * 0.5f + 0.075f, -0.004f);
+                title.outlineWidth = 0.14f;
+                title.outlineColor = new Color32(18, 28, 58, 190);
+            }
             // how to start: scoop snow and throw it at the button
             m_Gesture = GestureCard.Create(m_Content, GestureKind.ScoopThrow, 0.15f);
             m_Gesture.transform.localPosition = new Vector3(0, -ButtonSize * 0.5f - 0.03f - 0.075f, -0.002f);
@@ -180,110 +196,173 @@ namespace FrostAndFound
     /// </summary>
     public class ResultsScreen : MonoBehaviour
     {
+        // the journal's colours: leather cover, cream pages, blue-black pen, red marker
+        static readonly Color Leather = new Color32(110, 70, 44, 255), Page = new Color32(244, 235, 211, 255), PageEdge = new Color32(222, 208, 176, 255);
+        static readonly Color Rule = new Color(0.45f, 0.62f, 0.85f, 0.35f), Margin = new Color(0.86f, 0.25f, 0.25f, 0.45f), Tape = new Color(0.95f, 0.9f, 0.74f, 0.82f);
+        static Color Pen => Palette.Ink;
+        static Color Marker => Palette.EvidenceRed;
+
+        /// <summary>Case closed: an open scrapbook detective journal. Left page: the case number, the photo of Tony
+        /// taped in, the CASE CLOSED stamp and a sticky note to play again. Right page: "It was TONY!" in red
+        /// handwriting, the story, your stats in pen, and the evidence trail taped along the bottom.</summary>
         public static ResultsScreen Show(PolaroidPhoto guilty, List<PolaroidPhoto> evidence, string time, int photos, int shows, int wrong, int throws, System.Action again)
         {
             var go = new GameObject("Case File");
             go.layer = Layers.UI3D;
             var r = go.AddComponent<ResultsScreen>();
-            const float W = 1.1f, H = 0.66f;
+            const float P = 0.55f, H = 0.68f;   // one page
             var c = new GameObject("Content").transform;
             c.SetParent(go.transform, false);
             c.gameObject.layer = Layers.UI3D;
-            var glass = HUI.Panel(c, "Panel", new Vector2(W, H));
-            HUI.Winterize(glass.Root, new Vector2(W, H), HUI.PanelRadius, 17);
 
-            // hero: the GUILTY photo on a dark stage
-            const float heroW = 0.36f, heroH = H - 0.03f;
-            var stage = HUI.Card(c, "Stage", new Vector2(heroW, heroH), 0.024f, Palette.UiDeep);
-            stage.Root.localPosition = new Vector3(-W * 0.5f + 0.015f + heroW * 0.5f, 0, -0.001f);
-            var over = HUI.Overline(stage.Root, "Exhibit A", Palette.UiTextDim, 0.12f);
-            over.rectTransform.sizeDelta = new Vector2(heroW - 0.04f, 0.03f);
-            over.transform.localPosition = new Vector3(0, heroH * 0.5f - 0.03f, -0.002f);
-
-            // right side
-            float rx = -W * 0.5f + 0.015f + heroW + 0.035f, rw = W - heroW - 0.08f;
-            float cxr = rx + rw * 0.5f;
-            var ov = HUI.Overline(c, "Case #0001 · closed", Palette.UiAccentHover, 0.13f);
-            ov.rectTransform.sizeDelta = new Vector2(rw, 0.03f);
-            ov.transform.localPosition = new Vector3(cxr, H * 0.5f - 0.05f, -0.002f);
-            var head = HUI.Label(c, "It was Tony.", UIKit.Face.Display, 0.6f, Palette.UiText, new Vector2(rw, 0.08f), TextAlignmentOptions.Left, -1f, false);
-            head.transform.localPosition = new Vector3(cxr, H * 0.5f - 0.1f, -0.002f);
-            var sub = HUI.Label(c, "Tony \"Turbo\" Ramirez used Frosty as a ramp for the sickest jump in Maple Street history. It failed, obviously.",
-                UIKit.Face.Regular, 0.17f, Palette.UiTextDim, new Vector2(rw, 0.06f), TextAlignmentOptions.TopLeft);
-            sub.transform.localPosition = new Vector3(cxr, H * 0.5f - 0.175f, -0.002f);
-
-            // stats chips
-            float sx = rx;
-            foreach (var (icon, val, label) in new[] { (UIKit.Icon.Clock, time, "time"), (UIKit.Icon.Camera, photos.ToString(), photos == 1 ? "photo" : "photos"),
-                         (UIKit.Icon.Hand, shows.ToString(), "shown"), (UIKit.Icon.Snowball, throws.ToString(), throws == 1 ? "snowball" : "snowballs") })
+            // the book: cover, two pages, a shadow down the spine
+            var cover = UIKit.Panel(c, "Cover", new Vector2(P * 2f + 0.05f, H + 0.05f), 0.02f, Leather, null, 0f, true, null, 0.3f);
+            cover.Root.localPosition = new Vector3(0f, 0f, 0.004f);
+            for (int side = -1; side <= 1; side += 2)
             {
-                var chip = Stat(c, icon, val, label, out float w);
-                chip.localPosition = new Vector3(sx + w * 0.5f, H * 0.5f - 0.255f, -0.002f);
-                sx += w + 0.012f;
+                var edge = UIKit.Panel(c, "Page Edge", new Vector2(P, H), 0.006f, PageEdge, null, 0f, false);
+                edge.Root.localPosition = new Vector3(side * (P * 0.5f + 0.004f), -0.004f, 0.002f);
+                var page = UIKit.Panel(c, side < 0 ? "Left Page" : "Right Page", new Vector2(P, H), 0.006f, Page, null, 0f, false);
+                page.Root.localPosition = new Vector3(side * P * 0.5f, 0f, 0f);
+            }
+            Strip(c, "Spine", new Vector2(0.05f, H), new Color(0.25f, 0.16f, 0.08f, 0.22f), new Vector3(0f, 0f, -0.0005f), 0f);
+            Strip(c, "Spine Crease", new Vector2(0.008f, H), new Color(0.25f, 0.16f, 0.08f, 0.35f), new Vector3(0f, 0f, -0.0006f), 0f);
+
+            // right page: ruled lines and a red margin
+            float rx0 = 0.02f, rx1 = P - 0.02f, mx = rx0 + 0.055f;
+            for (float y = H * 0.5f - 0.11f; y > -H * 0.5f + 0.03f; y -= 0.034f)
+                Strip(c, "Rule", new Vector2(rx1 - rx0, 0.0014f), Rule, new Vector3((rx0 + rx1) * 0.5f, y, -0.0008f), 0f);
+            Strip(c, "Margin", new Vector2(0.0018f, H - 0.02f), Margin, new Vector3(mx, 0f, -0.0009f), 0f);
+
+            // ---------------- left page
+            float lc = -P * 0.5f;
+            var file = Script(c, "Case #0001", 0.42f, Pen, new Vector2(P - 0.1f, 0.06f), TextAlignmentOptions.Left);
+            file.transform.localPosition = new Vector3(lc, H * 0.5f - 0.06f, -0.003f);
+            var date = Script(c, "Maple Street, the morning after the snow", 0.26f, Pen.WithAlpha(0.75f), new Vector2(P - 0.1f, 0.04f), TextAlignmentOptions.Left);
+            date.transform.localPosition = new Vector3(lc, H * 0.5f - 0.105f, -0.003f);
+
+            // the culprit's photo, taped in at an angle
+            var hero = new GameObject("Culprit Photo").transform;
+            hero.SetParent(c, false);
+            hero.localPosition = new Vector3(lc + 0.015f, 0.015f, -0.004f);
+            hero.localRotation = Quaternion.Euler(0f, 0f, -4f);
+            const float heroScale = 2.3f;
+            float hw = PolaroidPhoto.Width * heroScale, hh = PolaroidPhoto.Height * heroScale;
+            TapeOn(hero, new Vector3(-hw * 0.45f, hh * 0.47f, 0f), 35f, 0.075f);
+            TapeOn(hero, new Vector3(hw * 0.45f, hh * 0.47f, 0f), -35f, 0.075f);
+            var caught = Script(c, "caught red-handed!", 0.3f, Marker, new Vector2(P - 0.1f, 0.04f), TextAlignmentOptions.Center);
+            caught.transform.localPosition = new Vector3(lc + 0.02f, 0.015f - hh * 0.5f - 0.035f, -0.003f);
+            caught.transform.localRotation = Quaternion.Euler(0f, 0f, 2f);
+
+            // the stamp
+            var stamp = new GameObject("Stamp").transform;
+            stamp.SetParent(c, false);
+            stamp.localPosition = new Vector3(lc + 0.12f, -H * 0.5f + 0.085f, -0.012f);
+            stamp.localRotation = Quaternion.Euler(0f, 0f, 9f);
+            var stampText = UIKit.Text(stamp, "Stamp Text", "CASE CLOSED", UIKit.Face.Display, 0.36f, Palette.StampRed.WithAlpha(0.85f), new Vector2(0.3f, 0.06f), TextAlignmentOptions.Center, 4f, false);
+            stampText.transform.localPosition = new Vector3(0f, 0f, -0.001f);
+            UIKit.Quad(stamp, "Stamp Frame", UIKit.RoundedFrame(0.27f, 0.07f, 0.008f, 0.0045f, 3), Palette.Unlit(Palette.StampRed.WithAlpha(0.8f), true), 0f)
+                .GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Text;
+
+            // play again: a sticky note in the corner
+            var againB = HButton.Create(c, "Play again", HButton.Variant.Note, new Vector2(0.15f, 0.085f), null, again);
+            againB.transform.localPosition = new Vector3(-P + 0.11f, -H * 0.5f + 0.08f, -0.014f);
+            againB.transform.localRotation = Quaternion.Euler(0f, 0f, -5f);
+
+            // ---------------- right page
+            float tx = mx + 0.02f, tw = rx1 - tx;
+            float tcx = tx + tw * 0.5f;
+            var head = Script(c, "It was TONY!", 0.95f, Marker, new Vector2(tw, 0.12f), TextAlignmentOptions.Left);
+            head.fontStyle = FontStyles.Bold;
+            head.transform.localPosition = new Vector3(tcx, H * 0.5f - 0.075f, -0.003f);
+            head.transform.localRotation = Quaternion.Euler(0f, 0f, 2.5f);
+            // underlined twice, quickly
+            Strip(c, "Underline", new Vector2(tw * 0.78f, 0.005f), Marker, new Vector3(tx + tw * 0.4f, H * 0.5f - 0.128f, -0.003f), 1.5f);
+            Strip(c, "Underline 2", new Vector2(tw * 0.6f, 0.004f), Marker.WithAlpha(0.85f), new Vector3(tx + tw * 0.34f, H * 0.5f - 0.139f, -0.003f), -1f);
+
+            var story = Script(c, "Tony \"Turbo\" Ramirez used Frosty as a ramp for the sickest jump in Maple Street history. It failed, obviously.",
+                0.27f, Pen, new Vector2(tw, 0.1f), TextAlignmentOptions.TopLeft, true);
+            story.transform.localPosition = new Vector3(tcx, H * 0.5f - 0.2f, -0.003f);
+
+            string wrongLine = wrong == 0 ? "No wrong suspects - flawless!" : $"Wrong kid shown a photo: {wrong}";
+            var lines = new[]
+            {
+                $"Time on the case:  {time}",
+                $"Photos snapped:  {photos}",
+                $"Photos shown:  {shows}",
+                $"Snowballs thrown:  {throws}",
+                wrongLine,
+            };
+            float ly = H * 0.5f - 0.285f;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var t = Script(c, "- " + lines[i], 0.27f, i == lines.Length - 1 && wrong == 0 ? Marker : Pen, new Vector2(tw, 0.034f), TextAlignmentOptions.Left);
+                t.transform.localPosition = new Vector3(tcx, ly - i * 0.034f, -0.003f);
             }
 
-            // the evidence chain
-            var ev = HUI.Overline(c, "The evidence chain", Palette.UiTextDim, 0.12f);
-            ev.rectTransform.sizeDelta = new Vector2(rw, 0.03f);
-            ev.transform.localPosition = new Vector3(cxr, H * 0.5f - 0.315f, -0.002f);
-            string[] labels = { "Cocoa splash", "Carrot bits", "Purple glitter", "Red scrape", "Dented sled" };
-            float slotW = rw / 5f;
+            // the evidence trail, taped along the bottom
+            var trail = Script(c, "The evidence trail:", 0.27f, Pen, new Vector2(tw, 0.034f), TextAlignmentOptions.Left);
+            trail.fontStyle = FontStyles.Bold | FontStyles.Underline;
+            trail.transform.localPosition = new Vector3(tcx, -H * 0.5f + 0.2f, -0.003f);
+            string[] labels = { "cocoa splash", "carrot bits", "purple glitter", "red scrape", "dented sled" };
+            float span = rx1 - rx0 - 0.01f, slotW = span / 5f;
             var slots = new List<Transform>();
             for (int i = 0; i < 5; i++)
             {
                 var slot = new GameObject("Slot " + i).transform;
                 slot.SetParent(c, false);
-                slot.gameObject.layer = Layers.UI3D;
-                slot.localPosition = new Vector3(rx + slotW * (i + 0.5f), H * 0.5f - 0.415f, -0.004f);
-                var cap = HUI.Label(slot, labels[i], UIKit.Face.Body, 0.12f, Palette.UiTextDim, new Vector2(slotW, 0.025f), TextAlignmentOptions.Center, 0f, false);
-                cap.transform.localPosition = new Vector3(0, -0.085f, -0.002f);
-                if (i < 4)
-                {
-                    var arrow = UIKit.IconQuad(c, UIKit.Icon.ArrowRight, 0.014f, Palette.UiTextFaint, -0.003f);
-                    arrow.localPosition = new Vector3(rx + slotW * (i + 1), H * 0.5f - 0.415f, -0.003f);
-                }
+                float sx = rx0 + 0.005f + slotW * (i + 0.5f);
+                slot.localPosition = new Vector3(sx, -H * 0.5f + 0.105f + (i % 2 == 0 ? 0.004f : -0.004f), -0.004f);
+                slot.localRotation = Quaternion.Euler(0f, 0f, (i % 2 == 0 ? -1f : 1f) * 3f);
+                TapeOn(slot, new Vector3(0f, PolaroidPhoto.Height * 0.52f, 0f), (i % 2 == 0 ? 8f : -8f), 0.045f);
+                var cap = Script(c, labels[i], 0.2f, Pen, new Vector2(slotW, 0.025f), TextAlignmentOptions.Center);
+                cap.transform.localPosition = new Vector3(sx, -H * 0.5f + 0.03f, -0.003f);
                 slots.Add(slot);
             }
-
-            var againB = HButton.Create(c, "Play again", HButton.Variant.Primary, new Vector2(0.26f, 0.062f), UIKit.Icon.Restart, again);
-            againB.transform.localPosition = new Vector3(rx + 0.13f, -H * 0.5f + 0.055f, -0.004f);
-            var wrongL = HUI.Label(c, wrong == 0 ? "Flawless: no wrong suspects." : $"{wrong} photo{(wrong == 1 ? "" : "s")} shown to the wrong kid.", UIKit.Face.Regular, 0.15f, Palette.UiTextFaint,
-                new Vector2(rw - 0.3f, 0.03f), TextAlignmentOptions.Left, 0f, false);
-            wrongL.transform.localPosition = new Vector3(rx + 0.28f + (rw - 0.3f) * 0.5f, -H * 0.5f + 0.055f, -0.002f);
 
             c.gameObject.SetLayerRecursive(Layers.UI3D);
             var f = go.AddComponent<HFollow>();
             f.distance = 1.15f; f.drop = 0.1f; f.maxAngle = 45f;
             f.SnapNow();
-            r.StartCoroutine(r.Animate(c, stage.Root, guilty, evidence, slots));
+            r.StartCoroutine(r.Animate(c, hero, guilty, evidence, slots));
             return r;
         }
 
-        static Transform Stat(Transform parent, UIKit.Icon icon, string value, string label, out float width)
+        static TextMeshPro Script(Transform parent, string text, float size, Color color, Vector2 box, TextAlignmentOptions align, bool wrap = false)
         {
-            var root = new GameObject("Stat · " + label).transform;
-            root.SetParent(parent, false);
-            root.gameObject.layer = Layers.UI3D;
-            var v = HUI.Label(root, value, UIKit.Face.Body, 0.2f, Palette.UiText, new Vector2(0.2f, 0.03f), TextAlignmentOptions.Left, 0f, false);
-            var l = HUI.Label(root, label, UIKit.Face.Regular, 0.15f, Palette.UiTextDim, new Vector2(0.2f, 0.03f), TextAlignmentOptions.Left, 0f, false);
-            float vw = UIKit.Measure(v, value, 1f).x, lw = UIKit.Measure(l, label, 1f).x;
-            float h = 0.046f, iconS = 0.02f;
-            width = 0.014f + iconS + 0.01f + vw + 0.008f + lw + 0.016f;
-            UIKit.Panel(root, "Shape", new Vector2(width, h), h * 0.5f, Palette.UiSurface, null, 0f, false);
-            float x = -width * 0.5f + 0.014f;
-            var ic = UIKit.IconQuad(root, icon, iconS, Palette.UiAccentHover, -0.002f);
-            ic.localPosition = new Vector3(x + iconS * 0.5f, 0, -0.002f); x += iconS + 0.01f;
-            v.rectTransform.sizeDelta = new Vector2(vw + 0.004f, h); v.transform.localPosition = new Vector3(x + vw * 0.5f, 0, -0.003f); x += vw + 0.008f;
-            l.rectTransform.sizeDelta = new Vector2(lw + 0.004f, h); l.transform.localPosition = new Vector3(x + lw * 0.5f, 0, -0.003f);
-            return root;
+            var t = UIKit.Text(parent, "Handwriting", text, UIKit.Face.Hand, size, color, box, align, 0f, wrap);
+            t.font = UIKit.ScriptFont();
+            t.fontStyle = FontStyles.Normal;
+            return t;
         }
 
-        IEnumerator Animate(Transform content, Transform stage, PolaroidPhoto guilty, List<PolaroidPhoto> evidence, List<Transform> slots)
+        /// <summary>A flat strip of colour (ruled lines, underlines, the spine shadow).</summary>
+        static Transform Strip(Transform parent, string name, Vector2 size, Color color, Vector3 pos, float angle)
+        {
+            var q = UIKit.Quad(parent, name, ProcMesh.Quad(), Palette.Unlit(color, color.a < 0.999f), pos.z);
+            q.localPosition = pos;
+            q.localRotation = Quaternion.Euler(0f, 0f, angle);
+            q.localScale = new Vector3(size.x, size.y, 1f);
+            q.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Decor;
+            return q;
+        }
+
+        /// <summary>A strip of masking tape over whatever gets stuck here (drawn in front of the photo).</summary>
+        static void TapeOn(Transform holder, Vector3 at, float angle, float length)
+        {
+            var q = UIKit.Quad(holder, "Tape", ProcMesh.Quad(), Palette.Unlit(Tape, true), -0.012f);
+            q.localPosition = new Vector3(at.x, at.y, -0.012f);
+            q.localRotation = Quaternion.Euler(0f, 0f, angle);
+            q.localScale = new Vector3(length, length * 0.32f, 1f);
+            q.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Overlay;
+        }
+
+        IEnumerator Animate(Transform content, Transform hero, PolaroidPhoto guilty, List<PolaroidPhoto> evidence, List<Transform> slots)
         {
             yield return Ease.Tween(0.3f, k => content.localScale = Vector3.one * Mathf.Lerp(0.9f, 1f, Ease.OutCubic(k)), Ease.Linear, true);
-            if (guilty) StartCoroutine(FlyTo(guilty.transform, stage, new Vector3(0, -0.02f, -0.006f), Quaternion.Euler(0, 0, -3f), 3.0f, 0f));
+            if (guilty) StartCoroutine(FlyTo(guilty.transform, hero, new Vector3(0, 0, -0.004f), Quaternion.identity, 2.3f, 0f));
             for (int i = 0; i < evidence.Count && i < slots.Count; i++)
-                if (evidence[i]) StartCoroutine(FlyTo(evidence[i].transform, slots[i], new Vector3(0, 0, -0.004f), Quaternion.Euler(0, 0, (i % 2 == 0 ? -1 : 1) * 3f), 1.18f, 0.15f + i * 0.1f));
+                if (evidence[i]) StartCoroutine(FlyTo(evidence[i].transform, slots[i], new Vector3(0, 0, -0.004f), Quaternion.identity, 1f, 0.15f + i * 0.1f));
         }
 
         IEnumerator FlyTo(Transform t, Transform parent, Vector3 localPos, Quaternion localRot, float scale, float delay)

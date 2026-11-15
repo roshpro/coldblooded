@@ -83,14 +83,8 @@ namespace FrostAndFound
             snowfall?.Flurry(260);
             yield return new WaitForSeconds(0.6f);
             if (frosty) yield return frosty.Reveal();
-            AudioDirector.Play2D(Sfx.Sting, 0.85f);
             yield return new WaitForSeconds(0.4f);
-            if (lucy)
-            {
-                var player = PlayerRig.Active;
-                lucy.Face(player.Head.position);
-                yield return lucy.SayAndWait("lucy_intro");
-            }
+            if (lucy) lucy.Face(PlayerRig.Active.Head.position);
             // the cocoa splash sparkles; the drip trail leads to Dexter
             SetSparkling(ClueId.CocoaStain);
             StepStartedAt = Time.time;
@@ -335,7 +329,6 @@ namespace FrostAndFound
             Step++;
             StepStartedAt = Time.time;
             SetSparkling(step.next);
-            AudioDirector.Play2D(Sfx.Sting, 0.8f);
             Progress();
             StartCoroutine(GuideLine(Step));
         }

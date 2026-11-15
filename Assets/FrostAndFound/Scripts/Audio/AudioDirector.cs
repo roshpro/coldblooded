@@ -20,6 +20,8 @@ namespace FrostAndFound
 
         readonly Dictionary<Sfx, List<AudioClip>> m_Sfx = new Dictionary<Sfx, List<AudioClip>>();
         readonly Dictionary<string, AudioClip> m_Voice = new Dictionary<string, AudioClip>();
+        readonly Dictionary<string, AudioClip> m_Stretched = new Dictionary<string, AudioClip>();   // sped-up recordings, by line id
+        readonly Dictionary<string, int> m_StretchFreq = new Dictionary<string, int>();
         readonly Dictionary<CastId, (AudioSource src, AudioClip clip)> m_Talking = new Dictionary<CastId, (AudioSource, AudioClip)>();
         static readonly Dictionary<string, bool> s_Recorded = new Dictionary<string, bool>();
         readonly ConcurrentQueue<(string key, float[] data, int kind)> m_Pending = new ConcurrentQueue<(string, float[], int)>();
@@ -96,6 +98,20 @@ namespace FrostAndFound
                     m_Pending.Enqueue((l.Id, Synth.Babble(l.Text, l.Speaker, l.Id.GetHashCode()), 1));
             });
 
+            // recordings to speed up (pitch kept): decoded here, stretched on a worker thread
+            foreach (var l in lines)
+            {
+                if (Mathf.Approximately(l.Tempo, 1f)) continue;
+                var rec = Resources.Load<AudioClip>("Voice/" + l.Clip);
+                if (!rec) continue;
+                if (rec.loadState != AudioDataLoadState.Loaded) rec.LoadAudioData();
+                var raw = new float[rec.samples * rec.channels];
+                if (!rec.GetData(raw, 0)) { Debug.LogWarning("[Frost] Can't read " + l.Clip + " to speed it up (import it as Decompress On Load)"); continue; }
+                int ch = rec.channels, freq = rec.frequency; float tempo = l.Tempo; string key = l.Id;
+                m_StretchFreq[key] = freq;
+                Task.Run(() => m_Pending.Enqueue((key, Synth.TimeStretch(raw, ch, freq, tempo), 3)));
+            }
+
             if (!synthMusic) StartMusic(music);
             m_Room.clip = null;
             float waited = 0f;
@@ -117,6 +133,12 @@ namespace FrostAndFound
                         if (!m_Voice.ContainsKey(item.key)) m_Voice[item.key] = Synth.ToClip("babble_" + item.key, item.data);
                     }
                     else if (item.kind == 2) StartMusic(Synth.ToClip("NoirScore", item.data, true));
+                    else if (item.kind == 3)
+                    {
+                        var c = AudioClip.Create("fast_" + item.key, item.data.Length, 1, m_StretchFreq[item.key], false);
+                        c.SetData(item.data, 0);
+                        m_Stretched[item.key] = c;
+                    }
                 }
                 if (m_Sfx.Count >= System.Enum.GetValues(typeof(Sfx)).Length) Ready = true;
                 waited += Time.unscaledDeltaTime;
@@ -137,8 +159,11 @@ namespace FrostAndFound
             m_DuckTarget = m_Speaking > 0 ? 0.45f : 1f;
             m_Duck = Ease.Damp(m_Duck, m_DuckTarget, 4f, Time.unscaledDeltaTime);
             if (m_Music.clip) m_Music.volume = Ease.Damp(m_Music.volume, MusicVolume * m_Duck * MusicBoost, 2f, Time.unscaledDeltaTime);
-            m_Room.volume = 0.1f * SfxVolume;
+            m_Room.volume = RoomToneMuted ? 0f : 0.1f * SfxVolume;
         }
+
+        /// <summary>Silences the plain room tone (Satie's wind and snowfall beds take its place).</summary>
+        public static bool RoomToneMuted;
 
         public static float MusicBoost = 1f;
 
@@ -179,12 +204,17 @@ namespace FrostAndFound
             src.volume = volume;
             src.pitch = pitch;
             src.loop = false;
+            var lp = src.GetComponent<AudioLowPassFilter>();
+            if (lp) { lp.enabled = voice && spatial; lp.cutoffFrequency = 22000f; }
             if (voice)
             {
-                // voices carry across the room: full volume within 3 m and a gentle fall-off after, a fifth of the line
-                // always heard straight, and Unity's own panning for direction (the headset's spatialiser attenuated
-                // them so hard you had to stand right next to a kid to hear them)
-                src.spatialBlend = spatial ? 0.8f : 0f;
+                // voices carry across the room: full volume within 3 m and a gentle fall-off after, and Unity's own
+                // panning for direction (the headset's spatialiser attenuated them so hard you had to stand right next
+                // to a kid to hear them). A little stays straight so a line across the room is never lost; how the
+                // speaker is facing is applied while they talk (TrackSpeaking)
+                src.spatialBlend = spatial ? 0.92f : 0f;
+                if (spatial && !lp) lp = src.gameObject.AddComponent<AudioLowPassFilter>();
+                if (lp) { lp.enabled = spatial; lp.cutoffFrequency = 22000f; lp.lowpassResonanceQ = 1f; }
                 src.spatialize = false;
                 src.rolloffMode = AudioRolloffMode.Logarithmic;
                 src.minDistance = 3f;
@@ -240,7 +270,7 @@ namespace FrostAndFound
             }
             var src = s_I.PlayClip(clip, Vector3.zero, 1f, pitch, false);
             float len = clip.length / pitch;
-            s_I.StartCoroutine(s_I.TrackSpeaking(len, src, null));
+            s_I.StartCoroutine(s_I.TrackSpeaking(len, src, null, 1f));
             return len;
         }
 
@@ -257,7 +287,7 @@ namespace FrostAndFound
         public static float PlayVoice(Line line, Transform speaker)
         {
             if (!s_I || line == null) return 2f;
-            var clip = Resources.Load<AudioClip>("Voice/" + line.Clip);
+            var clip = s_I.m_Stretched.TryGetValue(line.Id, out var fast) && fast ? fast : Resources.Load<AudioClip>("Voice/" + line.Clip);
             if (!clip) s_I.m_Voice.TryGetValue(line.Id, out clip);
             if (!clip)
             {
@@ -268,17 +298,37 @@ namespace FrostAndFound
             var src = s_I.PlayClip(clip, speaker ? speaker.position : Vector3.zero, VoiceVolume, 1f, speaker, true);
             if (speaker && src) src.transform.position = speaker.position;
             if (src) s_I.m_Talking[line.Speaker] = (src, clip);
-            s_I.StartCoroutine(s_I.TrackSpeaking(clip.length, src, speaker));
+            s_I.StartCoroutine(s_I.TrackSpeaking(clip.length, src, speaker, VoiceVolume));
             return clip.length;
         }
 
-        IEnumerator TrackSpeaking(float seconds, AudioSource src, Transform follow)
+        /// <summary>The voice rides the speaker's head, and sounds the way they're facing: straight at you it's full and
+        /// bright; turned away it's quieter and duller (the mouth points away, so the highs go first).</summary>
+        IEnumerator TrackSpeaking(float seconds, AudioSource src, Transform follow, float volume)
         {
             m_Speaking++;
+            var body = follow ? follow.GetComponentInParent<Kid>() : null;
+            var facing = body ? body.transform : follow;
+            var lp = src ? src.GetComponent<AudioLowPassFilter>() : null;
+            float away = -1f;
             float t = 0f;
             while (t < seconds)
             {
-                if (follow && src) src.transform.position = follow.position;
+                if (follow && src)
+                {
+                    src.transform.position = follow.position;
+                    var rig = PlayerRig.Active;
+                    if (rig && facing)
+                    {
+                        var to = (rig.Head.position - follow.position).Flat();
+                        var fwd = facing.forward.Flat();
+                        // 0 = facing you, 1 = their back to you
+                        float target = to.sqrMagnitude > 1e-4f && fwd.sqrMagnitude > 1e-4f ? (1f - Vector3.Dot(to.normalized, fwd.normalized)) * 0.5f : 0f;
+                        away = away < 0f ? target : Mathf.MoveTowards(away, target, Time.deltaTime * 3f);   // smooth as they turn
+                        src.volume = volume * Mathf.Lerp(1f, 0.55f, away);
+                        if (lp) lp.cutoffFrequency = Mathf.Lerp(22000f, 2800f, away * away);
+                    }
+                }
                 t += Time.deltaTime;
                 yield return null;
             }

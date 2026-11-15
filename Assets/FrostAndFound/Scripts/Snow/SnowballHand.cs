@@ -96,7 +96,7 @@ namespace FrostAndFound
             var ground = new Vector3(palm.x, snow.SurfaceHeightAt(palm), palm.z);
             snow.Stamp(ground, Random.Range(0f, 360f), StampShape.Scoop, 0.15f, 1f);
             Fx.SnowPuff(ground + Vector3.up * 0.02f, Vector3.up, 16, 0.8f);
-            AudioDirector.PlayAt(Sfx.ScoopCrunch, ground, 0.9f, Random.Range(0.93f, 1.07f));
+            if (!SatieSound.Fire("scoop", ground, SatieSound.Snow)) AudioDirector.PlayAt(Sfx.ScoopCrunch, ground, 0.9f, Random.Range(0.93f, 1.07f));
             hand.Haptic(0.5f, 0.08f);
             st.Ball = Snowball.Create(hand.Palm.position, tune.snowballRadius);
             st.Ball.transform.localScale = Vector3.zero;

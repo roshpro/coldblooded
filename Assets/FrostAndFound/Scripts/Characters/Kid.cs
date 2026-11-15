@@ -81,10 +81,13 @@ namespace FrostAndFound
 
         Vector3 m_LastPos;
         Coroutine m_Move;
-        float m_LastPoseTime = -10f, m_LastHitLine = -10f, m_NextBark, m_NextWander;
-        /// <summary>Idle kids stroll to a free spot near home now and then (only where there's room).</summary>
+        float m_LastPoseTime = -10f, m_LastHitLine = -10f, m_NextBark;
+        /// <summary>Kids get on with their own thing while you investigate (see <see cref="KidBrain"/>).</summary>
         protected virtual bool WandersWhenIdle => true;
-        public float wanderRadius = 1.6f, wanderSpeed = 0.65f;
+        public float wanderSpeed = 0.65f;
+        KidBrain m_Brain;
+        /// <summary>What the idle AI is up to (for debugging).</summary>
+        public string Doing => m_Brain != null ? m_Brain.Doing : "";
         float m_NextFidget, m_AttendUntil, m_NextSeparate;
         Vector3 m_MoveTarget;
         /// <summary>Where this kid is walking to (or standing, if not walking).</summary>
@@ -151,7 +154,7 @@ namespace FrostAndFound
             HomeRotation = transform.rotation;
             m_LastPos = transform.position;
             m_NextBark = Time.time + Random.Range(18f, 40f);
-            m_NextWander = Time.time + Random.Range(2f, 6f);
+            m_Brain = new KidBrain(this);
             m_NextFidget = Time.time + Random.Range(1.5f, 5f);
         }
 
@@ -185,21 +188,12 @@ namespace FrostAndFound
                 if (Anim && attending) Anim.LookOverride = m_Attend;
                 else if (Anim) Anim.LookOverride = null;
             }
-            // wander: every so often stroll to a free spot near home, if there's space for it
+            // their own little lives: wander the room, visit friends and Frosty, come and see you, poke about, run
             var gm = GameManager.I;
             bool calm = gm && !gm.IsPaused && !DialogueRunner.IsSpeaking(id) && !(Anim && Anim.IsThrowing) && !SnowballFight.Active
                         && (gm.State == GameState.Investigating || gm.State == GameState.Title);
-            if (WandersWhenIdle && player && m_Move == null && CanMove && !Busy && calm && gm.State == GameState.Investigating && Time.time > m_NextWander)
-            {
-                m_NextWander = Time.time + Random.Range(3.5f, 8f);
-                if (FrostUtil.FlatDistance(transform.position, player.Head.position) > 0.9f && TryWanderSpot(player, out var spot, out var attend))
-                    MoveTo(spot, wanderSpeed, () =>
-                    {
-                        if (attend == Vector3.zero) return;
-                        m_Attend = attend;
-                        m_AttendUntil = Time.time + Random.Range(3f, 6f);
-                    });
-            }
+            if (WandersWhenIdle && player && CanMove && !Busy && !IsStunned && calm && gm.State == GameState.Investigating) m_Brain?.Tick(player);
+            else m_Brain?.Reset();
             // personal space: if two of us have ended up shoulder to shoulder, one steps away
             if (player && m_Move == null && CanMove && !Busy && calm && Time.time > m_NextSeparate)
             {
@@ -262,6 +256,88 @@ namespace FrostAndFound
 
         public bool IsMoving => m_Move != null;
 
+        /// <summary>Look at something (a friend, Frosty, a tree) for a while when standing about.</summary>
+        public void Attend(Vector3 at, float seconds)
+        {
+            m_Attend = at;
+            m_AttendUntil = Time.time + seconds;
+        }
+
+        internal bool SpotOk(Vector3 p) => WanderSpotOk(p);
+
+        /// <summary>Walk somewhere by a planned route round the furniture, trees and props, easing in and out and
+        /// stepping round the others and you on the way. False if there's no way there.</summary>
+        public bool WalkTo(Vector3 target, float speed, System.Action arrived = null)
+        {
+            var path = KidNav.FindPath(transform.position, target);
+            if (path == null || path.Count == 0) return false;
+            if (m_Move != null) StopCoroutine(m_Move);
+            m_MoveTarget = path[path.Count - 1];
+            m_Move = StartCoroutine(PathRoutine(path, speed, arrived));
+            return true;
+        }
+
+        IEnumerator PathRoutine(List<Vector3> path, float speed, System.Action arrived)
+        {
+            var room = RoomService.Current;
+            float v = 0f, checkAt = Time.time + 1.2f;
+            var checkPos = transform.position;
+            int i = 0;
+            bool ok = false;
+            while (i < path.Count)
+            {
+                while (IsStunned) { v = 0f; checkAt = Time.time + 1.2f; yield return null; }
+                var target = path[i];
+                if (room != null) target.y = room.FloorY;
+                var to = (target - transform.position).Flat();
+                float dist = to.magnitude;
+                bool last = i == path.Count - 1;
+                if (!last && dist < 0.25f) { i++; continue; }
+                if (last && dist < 0.05f) { ok = true; break; }
+                var want = to / dist;
+                var right = Vector3.Cross(Vector3.up, want);
+
+                // step round the others and you: sidestep (keeping right) anyone just ahead; slow down if they're right in the way
+                Vector3 avoid = Vector3.zero; float slow = 1f;
+                void Around(Vector3 other, float radius)
+                {
+                    var rel = (other - transform.position).Flat();
+                    float d = rel.magnitude;
+                    if (d > radius || d < 1e-3f) return;
+                    float ahead = Vector3.Dot(rel / d, want);
+                    if (ahead < 0.15f) return;
+                    float side = Vector3.Dot(rel, right) >= 0f ? -1f : 1f;
+                    avoid += right * side * (1f - d / radius) * ahead * 1.6f;
+                    if (ahead > 0.7f && d < radius * 0.6f) slow = Mathf.Min(slow, Mathf.Clamp01((d - 0.3f) / (radius * 0.3f)) + 0.15f);
+                }
+                foreach (var k in All) if (k && k != this) Around(k.transform.position, 0.85f);
+                var player = PlayerRig.Active;
+                if (player) Around(player.Head.position, 0.9f);
+                var dir = (want + avoid).Flat();
+                dir = dir.sqrMagnitude > 1e-4f ? dir.normalized : want;
+                if (!KidNav.Walkable(transform.position + dir * 0.25f) && KidNav.Walkable(transform.position + want * 0.25f)) dir = want;   // don't sidestep into a tree
+
+                // turn on the spot first if it's well behind us, then set off; ease in, ease to a stop at the end
+                float angle = Vector3.Angle(transform.forward.Flat(), dir);
+                transform.rotation = Ease.Damp(transform.rotation, Quaternion.LookRotation(dir, Vector3.up), 8f, Time.deltaTime);
+                float targetV = speed * slow * (angle > 75f ? 0.1f : Mathf.Lerp(1f, 0.5f, angle / 75f));
+                if (last) targetV *= Mathf.Clamp01(dist / 0.45f) * 0.8f + 0.2f;
+                v = Mathf.MoveTowards(v, targetV, (targetV > v ? 1.8f : 3.5f) * Time.deltaTime);
+                transform.position += dir * Mathf.Min(v * Time.deltaTime, dist);
+
+                // stuck behind someone for too long: give up and think again
+                if (Time.time > checkAt)
+                {
+                    if (FrostUtil.FlatDistance(transform.position, checkPos) < 0.08f) break;
+                    checkPos = transform.position;
+                    checkAt = Time.time + 1.2f;
+                }
+                yield return null;
+            }
+            m_Move = null;
+            if (ok) arrived?.Invoke();
+        }
+
         IEnumerator MoveRoutine(Vector3 target, float speed, System.Action done)
         {
             var room = RoomService.Current;
@@ -281,71 +357,6 @@ namespace FrostAndFound
             }
             m_Move = null;
             done?.Invoke();
-        }
-
-        /// <summary>Somewhere to stroll: a free spot in our part of the room, over to stand with a friend, or round to
-        /// have a look at Frosty. Only where there's room: inside the walls, off the furniture, clear of you, Frosty and
-        /// the others, and with a clear straight walk there.</summary>
-        bool TryWanderSpot(PlayerRig player, out Vector3 spot, out Vector3 attend)
-        {
-            spot = default; attend = Vector3.zero;
-            var room = RoomService.Current;
-            if (room == null) return false;
-            var frosty = Frosty.Instance ? Frosty.Instance.transform.position : new Vector3(1e4f, 0f, 1e4f);
-            float kind = Random.value;
-            float bestGap = -1f;
-            for (int i = 0; i < 16; i++)
-            {
-                Vector3 p, look = Vector3.zero;
-                if (kind < 0.12f && All.Count > 1)
-                {
-                    var other = All[Random.Range(0, All.Count)];
-                    if (!other || other == this) continue;
-                    var away = (transform.position - other.transform.position).Flat();
-                    if (away.sqrMagnitude < 1e-4f) away = Vector3.forward;
-                    p = other.transform.position + Quaternion.Euler(0, Random.Range(-70f, 70f), 0) * away.normalized * 1.1f;
-                    look = other.HeadPoint;
-                }
-                else if (kind < 0.32f && Frosty.Instance)
-                {
-                    float a = Random.Range(0f, Mathf.PI * 2f);
-                    p = frosty + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (Frosty.FootprintRadius + Random.Range(0.3f, 0.55f));
-                    look = frosty + Vector3.up * 0.1f;
-                }
-                else
-                {
-                    var c = Random.insideUnitCircle * wanderRadius;
-                    p = new Vector3(HomePosition.x + c.x, 0f, HomePosition.z + c.y);
-                }
-                p.y = room.FloorY;
-                if (FrostUtil.FlatDistance(p, HomePosition) > wanderRadius + 0.6f) continue;   // stay in our part of the room
-                if (FrostUtil.FlatDistance(p, transform.position) < 0.4f) continue;
-                if (room.EdgeDistance(new Vector2(p.x, p.z)) < 0.3f) continue;
-                if (room.IsBlocked != null && room.IsBlocked(p, 0.22f)) continue;
-                if (FrostUtil.FlatDistance(p, player.Head.position) < 0.8f) continue;
-                if (FrostUtil.FlatDistance(p, frosty) < Frosty.FootprintRadius + 0.15f) continue;
-                float gap = 10f;   // from where the others stand and where they're walking to
-                foreach (var k in All) if (k && k != this) gap = Mathf.Min(gap, Mathf.Min(FrostUtil.FlatDistance(p, k.transform.position), FrostUtil.FlatDistance(p, k.Destination)));
-                if (gap < (look != Vector3.zero ? 1.0f : 0.95f)) continue;   // keep our distance from the others
-                if (!WanderSpotOk(p) || !PathClear(room, transform.position, p, frosty, player)) continue;
-                // of the spots that work, take the roomiest (friends and Frosty visits take the first that fits)
-                if (look != Vector3.zero) { spot = p; attend = look; return true; }
-                if (gap > bestGap) { bestGap = gap; spot = p; attend = Vector3.zero; }
-            }
-            return bestGap > 0f;
-        }
-
-        bool PathClear(RoomInfo room, Vector3 from, Vector3 to, Vector3 frosty, PlayerRig player)
-        {
-            float len = FrostUtil.FlatDistance(from, to);
-            for (float d = 0.2f; d < len; d += 0.2f)
-            {
-                var q = Vector3.Lerp(from, to, d / len);
-                if (room.IsBlocked != null && room.IsBlocked(q, 0.2f)) return false;
-                if (FrostUtil.FlatDistance(q, frosty) < Frosty.FootprintRadius - 0.05f || FrostUtil.FlatDistance(q, player.Head.position) < 0.45f) return false;
-                foreach (var k in All) if (k && k != this && FrostUtil.FlatDistance(q, k.transform.position) < 0.5f) return false;
-            }
-            return true;
         }
 
         protected virtual bool WanderSpotOk(Vector3 p) => true;
@@ -421,13 +432,15 @@ namespace FrostAndFound
             if (Faces) Faces.Dizzy(StunSeconds);
             m_StunnedUntil = Time.time + StunSeconds;
             if (m_Throw != null) { StopCoroutine(m_Throw); m_Throw = null; Busy = false; Anim.CancelThrow(); }
+            SatieSound.Fire("kid_stunned", HeadPoint);
             if (snowball)
             {
-                AudioDirector.PlayAt(headshot ? Sfx.Bonk : Sfx.Splat, point, headshot ? 0.7f : 0.9f, Random.Range(0.95f, 1.08f));
+                // (with Satie the snowball's own burst is the sound)
+                if (!SatieSound.On) AudioDirector.PlayAt(headshot ? Sfx.Bonk : Sfx.Splat, point, headshot ? 0.7f : 0.9f, Random.Range(0.95f, 1.08f));
             }
             else
             {
-                AudioDirector.PlayAt(Sfx.Bonk, point, headshot ? 0.85f : 0.65f, Random.Range(1.02f, 1.15f));
+                if (!SatieSound.Fire("punch_hit", point)) AudioDirector.PlayAt(Sfx.Bonk, point, headshot ? 0.85f : 0.65f, Random.Range(1.02f, 1.15f));
                 Fx.SnowPuff(point, velocity.sqrMagnitude > 1e-6f ? -velocity.normalized : Vector3.up, 8, 0.45f);   // frost knocked off the coat
             }
             HitLine(playerSnowball);
@@ -480,7 +493,7 @@ namespace FrostAndFound
             float yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
             var side = Vector3.Cross(Vector3.up, dir) * (m_Left ? -0.07f : 0.07f);
             snow.Stamp(p + side, yaw, m_Left ? StampShape.KidBootLeft : StampShape.KidBootRight, 0.19f, 0.45f);
-            if (Random.value < 0.35f) AudioDirector.PlayAt(Sfx.Footstep, p, 0.25f, Random.Range(1.15f, 1.35f));
+            if (!SatieSound.Fire("kid_step", p, SatieSound.Snow) && Random.value < 0.35f) AudioDirector.PlayAt(Sfx.Footstep, p, 0.25f, Random.Range(1.15f, 1.35f));
             m_Left = !m_Left;
             m_Last = p;
         }

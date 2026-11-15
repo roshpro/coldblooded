@@ -5,6 +5,7 @@
 | Roboto-Black.ttf, Roboto-Bold.ttf | Roboto (Google) | Apache License 2.0 |
 | RobotoMono-Bold.ttf | Roboto Mono (Google) | Apache License 2.0 |
 | Inter-Regular.ttf, Inter-SemiBold.ttf, Inter-SemiBoldItalic.ttf | Inter (Rasmus Andersson) | SIL Open Font License 1.1 |
+| ../Resources/Fonts/Caveat.ttf | Caveat (Impallari Type, Google Fonts) | SIL Open Font License 1.1 |
 
 All are free to embed and redistribute in applications under their licenses
 (https://www.apache.org/licenses/LICENSE-2.0, https://openfontlicense.org).

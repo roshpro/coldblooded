@@ -9,7 +9,8 @@
         "Unity.XR.Management",
         "Oculus.VR",
         "meta.xr.mrutilitykit",
-        "Meta.XR.EnvironmentDepth"
+        "Meta.XR.EnvironmentDepth",
+        "Satie.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -22,7 +23,8 @@
         { "name": "com.meta.xr.sdk.core", "expression": "1.0.0", "define": "FROST_META" },
         { "name": "com.meta.xr.mrutilitykit", "expression": "1.0.0", "define": "FROST_MRUK" },
         { "name": "com.unity.xr.meta-openxr", "expression": "0.0.1", "define": "FROST_META_OPENXR" },
-        { "name": "com.unity.xr.oculus", "expression": "0.0.1", "define": "FROST_OCULUS_XR" }
+        { "name": "com.unity.xr.oculus", "expression": "0.0.1", "define": "FROST_OCULUS_XR" },
+        { "name": "world.satie.unity", "expression": "0.0.1", "define": "FROST_SATIE" }
     ],
     "noEngineReferences": false
 }

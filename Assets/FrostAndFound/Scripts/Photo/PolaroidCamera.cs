@@ -30,8 +30,9 @@ namespace FrostAndFound
         /// <summary>A print is sticking out of the slot, waiting for your other hand.</summary>
         public bool PrintWaiting => m_Waiting != null;
 
-        const float UpAtHand = 0.85f;       // camera-gesture progress where it's fully there (hand tracking: ~5 cm)
+        const float UpAtHand = 0.25f;       // camera-gesture progress that summons it (hand tracking: thumb–index gap ≈ 8 cm)
         const float UpAtController = 0.3f;  // the same for a controller's trigger travel
+        const float GrowTime = 0.18f;       // how long it takes to grow in once summoned
         const float StayAbove = 0.02f;      // once there, it stays while the gesture is held at least this much
         const float LowerDelay = 0.6f;      // the camera lingers this long after you relax your fingers
         const float EjectSeconds = 0.9f;
@@ -198,7 +199,7 @@ namespace FrostAndFound
             // ---- raise: the camera fades in as you go into the camera gesture, and settles once you're there
             float target;
             bool gate = true;
-            // while it's coming in, it's sized to the pinch you're making; once it's settled it keeps that size
+            // sized to the pinch you're making when it's summoned; once it's up it keeps that size
             if (!m_Up) GripScale = rig.IsXR && hand.IsOpticalHand && hand.HasJoints ? Mathf.Clamp(hand.PinchGap / ContactSpan, 0.8f, 1.1f) : 1f;
             if (!rig.IsXR) { target = 1f; m_Up = true; }   // desktop stand-in: always in hand
             else
@@ -216,13 +217,14 @@ namespace FrostAndFound
                 if (!m_Up && pose >= upAt) Settle(hand);
                 if (m_Up && pose > StayAbove) m_LastPose = Time.time;
                 if (m_Up && Time.time - m_LastPose >= LowerDelay && !m_Busy && !m_QueuedShot) m_Up = false;
-                target = m_Up ? 1f : Mathf.Clamp01(pose / upAt) * 0.9f;
+                // no half-way camera: below the threshold it's away, past it it grows all the way in and is usable
+                target = m_Up ? 1f : 0f;
             }
             if (m_Busy) { target = 1f; m_Up = true; }    // mid-shot
             if (m_Hidden || !hand.IsTracked) { target = 0f; m_Up = false; m_QueuedShot = false; }
             // put away with a print still hanging out of it: the print falls to the snow
             if (!m_Up && m_Waiting && (!rig.IsXR || target < 0.9f)) DropWaiting();
-            m_Raise = Mathf.MoveTowards(m_Raise, target, dt / (target > m_Raise ? 0.12f : 0.2f));
+            m_Raise = Mathf.MoveTowards(m_Raise, target, dt / (target > m_Raise ? GrowTime : 0.2f));
             // a little bump as it settles into your hand
             m_Pop = Mathf.Min(1f, m_Pop + dt / 0.2f);
             float scale = Mathf.SmoothStep(0f, 1f, m_Raise) * (1f + 0.07f * Mathf.Sin(m_Pop * Mathf.PI));
@@ -427,7 +429,7 @@ namespace FrostAndFound
             p.transform.localScale = Vector3.one * BodyScale;
             p.Drop(Vector3.down * 0.3f + (Slot ? -Slot.forward * 0.15f : Vector3.zero));
             PhotoHolder.Instance?.Dropped.Add(p);
-            AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.2f, 1.9f);
+            if (!SatieSound.Fire("photo_drop", p.transform.position)) AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.2f, 1.9f);
         }
 
         public void TakePhoto()
@@ -443,7 +445,7 @@ namespace FrostAndFound
         {
             m_Busy = true;
             m_ForceRender = true;
-            AudioDirector.PlayAt(Sfx.Shutter, transform.position, 1f, Random.Range(0.97f, 1.03f));
+            if (!SatieSound.Fire("shutter", transform.position)) AudioDirector.PlayAt(Sfx.Shutter, transform.position, 1f, Random.Range(0.97f, 1.03f));
             PlayerRig.Active?.CameraHand.Haptic(0.7f, 0.07f);
             StartCoroutine(FlashBulb());
             // let the lens render this frame so the photo matches what the viewfinder shows
@@ -487,7 +489,7 @@ namespace FrostAndFound
             m_Waiting = photo;
             m_Busy = false;
             var p = photo.transform;
-            AudioDirector.PlayAt(Sfx.Whirr, transform.position, 0.6f, 1f);
+            if (!SatieSound.Fire("print_eject", transform.position)) AudioDirector.PlayAt(Sfx.Whirr, transform.position, 0.6f, 1f);
             bool fastDev = CaseDirector.I != null && CaseDirector.I.CaseClosed;
             StartCoroutine(photo.Develop(fastDev ? 0.6f : DevelopSeconds));
             for (float t = 0; t < 1f && m_Waiting == photo; t += Time.deltaTime / EjectSeconds)
