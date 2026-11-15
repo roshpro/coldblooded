@@ -115,7 +115,7 @@ namespace FrostAndFound
             gameObject.AddComponent<TipsDirector>();
             gameObject.AddComponent<SatieStateDriver>();   // the snowy-day soundscape, when the Satie package is installed
             gameObject.AddComponent<GestureDirector>();
-            gameObject.AddComponent<SnowballFight>();   // hit the same kid four times and it's war
+            gameObject.AddComponent<SnowballFight>();   // hit the same kid three times and it's war
             yield return null;
             EnterTitle();
             if (autopilot && !Player.IsXR) gameObject.AddComponent<Autopilot>();

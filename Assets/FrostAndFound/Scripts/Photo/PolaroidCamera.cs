@@ -456,6 +456,9 @@ namespace FrostAndFound
         {
             m_Busy = true;
             m_ForceRender = true;
+            // the viewfinder only renders every third frame on the headset: make sure it renders this one, from where the
+            // camera is now, so the picture and the red circle (worked out from this same pose below) line up
+            if (Lens) Lens.enabled = true;
             if (!SatieSound.Fire("shutter", transform.position)) AudioDirector.PlayAt(Sfx.Shutter, transform.position, 1f, Random.Range(0.97f, 1.03f));
             PlayerRig.Active?.CameraHand.Haptic(0.7f, 0.07f);
             StartCoroutine(FlashBulb());

@@ -37,7 +37,7 @@ namespace FrostAndFound
 
         [Header("Show a photo")]
         [Tooltip("Kid must be within this distance of your hand (doc: about 1.5 m).")]
-        public float showRange = 1.8f;
+        public float showRange = 1.2f;
         [Tooltip("Hand must be at least this far from your head (arm extended toward the kid) to count as held out.")]
         public float armExtendedDistance = 0.32f;
         [Tooltip("Max angle between your outstretched hand and the kid.")]
@@ -123,7 +123,8 @@ namespace FrostAndFound
         [Range(0f, 2f)] public float sceneryDensity = 1f;
         [Tooltip("How much darker the real room looks through passthrough (0.15 = 15% darker), so the game world pops.")]
         [Range(0f, 0.8f)] public float passthroughDim = 0.15f;
-        [Tooltip("MR: Space Setup furniture (tables, sofas, chairs…) hides the virtual snow, kids and snowballs behind it.")]
+        [Tooltip("MR: use Space Setup's furniture boxes to hide snow, kids and snowballs behind furniture and to keep the floor " +
+                 "snow out of their footprints. Off: the Depth API alone does the hiding (it follows the real shapes).")]
         public bool furnitureOccludes = true;
 
         [Header("Audio")]

@@ -91,6 +91,9 @@ namespace FrostAndFound
             var edges = new float[px.Length];
             var drifts = new float[px.Length];
             int open = 0;
+            // furniture footprints: by default the snow carpets the whole floor and the Depth API hides it behind your real
+            // furniture (following its real shape); the Space Setup boxes only cut it out when that's switched on
+            bool maskFurniture = FrostTuning.I && FrostTuning.I.furnitureOccludes;
             for (int y = 0; y < m_MaskH; y++)
                 for (int x = 0; x < m_MaskW; x++)
                 {
@@ -98,7 +101,7 @@ namespace FrostAndFound
                     var p = TexelToWorld(x, y);
                     float edge = room.EdgeDistance(p);
                     float alpha = Mathf.Clamp01((edge + 0.01f) / 0.05f);
-                    if (alpha > 0f && room.IsBlocked != null && room.IsBlocked(new Vector3(p.x, room.FloorY, p.y), 0.0f)) alpha = 0f;
+                    if (maskFurniture && alpha > 0f && room.IsBlocked != null && room.IsBlocked(new Vector3(p.x, room.FloorY, p.y), 0.0f)) alpha = 0f;
                     float drift = edge > 0f ? Mathf.Pow(Mathf.Clamp01(1f - edge / 0.38f), 2f) : 0f;
                     drift *= 0.75f + 0.25f * Mathf.PerlinNoise(p.x * 3.1f, p.y * 3.1f);
                     m_MaskAlpha[i] = (byte)(alpha * 255);
@@ -117,7 +120,7 @@ namespace FrostAndFound
             {
                 var c = new Vector2(Mathf.Lerp(m_Rect.xMin, m_Rect.xMax, (float)rng.NextDouble()), Mathf.Lerp(m_Rect.yMin, m_Rect.yMax, (float)rng.NextDouble()));
                 if (room.EdgeDistance(c) < 0.25f) continue;
-                if (room.IsBlocked != null && room.IsBlocked(new Vector3(c.x, room.FloorY, c.y), 0f)) continue;
+                if (maskFurniture && room.IsBlocked != null && room.IsBlocked(new Vector3(c.x, room.FloorY, c.y), 0f)) continue;
                 mounds.Add(new Vector4(c.x, c.y, Mathf.Lerp(0.5f, 1.3f, (float)rng.NextDouble()), Mathf.Lerp(0.43f, 1f, (float)rng.NextDouble())));
             }
             for (int y = 0; y < m_MaskH; y++)
@@ -393,7 +396,32 @@ namespace FrostAndFound
             var uv = WorldToUV(world);
             if (uv.x < 0 || uv.y < 0 || uv.x >= 1 || uv.y >= 1) return floor;
             int i = Mathf.Clamp((int)(uv.y * m_MaskH), 0, m_MaskH - 1) * m_MaskW + Mathf.Clamp((int)(uv.x * m_MaskW), 0, m_MaskW - 1);
-            return m_MaskAlpha[i] > 140 ? floor + 0.002f + thickness + m_Relief[i] : floor;
+            return m_MaskAlpha[i] > 140 ? floor + 0.002f + thickness + m_Relief[i] + DuneAt(world.x, world.z) : floor;
+        }
+
+        // the shader's wind-blown dunes (Snow.shader Dunes/VNoise), so things resting on the snow sit on what's drawn
+        float DuneAt(float x, float z)
+        {
+            float h = m_Mat ? m_Mat.GetFloat("_DuneHeight") : 0.022f;
+            return ((VNoise(x * 1.7f, z * 1.7f) - 0.5f) + (VNoise(x * 4.6f + 7.1f, z * 4.6f + 7.1f) - 0.5f) * 0.4f) * h;
+        }
+
+        static float Frac(float v) => v - Mathf.Floor(v);
+
+        static float Hash21(float x, float y)
+        {
+            x = Frac(x * 123.34f); y = Frac(y * 456.21f);
+            float d = x * (x + 45.32f) + y * (y + 45.32f);
+            x += d; y += d;
+            return Frac(x * y);
+        }
+
+        static float VNoise(float x, float y)
+        {
+            float ix = Mathf.Floor(x), iy = Mathf.Floor(y), fx = x - ix, fy = y - iy;
+            float ux = fx * fx * (3f - 2f * fx), uy = fy * fy * (3f - 2f * fy);
+            float a = Hash21(ix, iy), b = Hash21(ix + 1f, iy), c = Hash21(ix, iy + 1f), d = Hash21(ix + 1f, iy + 1f);
+            return Mathf.Lerp(Mathf.Lerp(a, b, ux), Mathf.Lerp(c, d, ux), uy);
         }
 
         Vector2 TexelToWorld(int x, int y) =>

@@ -170,6 +170,21 @@ namespace FrostAndFound
             gameObject.layer = Layers.PlayerHands;
         }
 
+        // the highest the snow comes anywhere under the photo (it's 9 × 11 cm: a dune crest under one corner would
+        // otherwise poke through it), plus a few millimetres
+        float GroundUnder(SnowSurface snow, RoomInfo room, Vector3 c)
+        {
+            if (!snow) return (room != null ? room.FloorY : float.MinValue) + 0.006f;
+            float r = Mathf.Max(Width, Height) * 0.55f;
+            float top = snow.SurfaceHeightAt(c);
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI * 0.25f;
+                top = Mathf.Max(top, snow.SurfaceHeightAt(c + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r));
+            }
+            return top + 0.006f;
+        }
+
         // ---- the "this is the one you'll pick up" glow
         Transform m_Glow;
         Material m_GlowMat;
@@ -231,7 +246,27 @@ namespace FrostAndFound
 
         void FixedUpdate()
         {
-            if (m_Rb && !m_Rb.isKinematic && Time.time - m_DroppedAt > 1.5f && m_Rb.IsSleeping()) m_Rb.isKinematic = true;
+            if (!m_Rb) return;
+            // the snow has no collider (it's a surface drawn over the floor): land on top of it wherever it lies, and
+            // settle there flat, picture up or down as it fell, instead of sinking through to the floor and beyond
+            var snow = SnowSurface.Instance;
+            var room = RoomService.Current;
+            var p = m_Rb.position;
+            float ground = GroundUnder(snow, room, p);
+            if (p.y <= ground)
+            {
+                p.y = ground;
+                var up = Vector3.Dot(m_Rb.rotation * Vector3.forward, Vector3.up) <= 0f ? Vector3.down : Vector3.up;   // which face lands up
+                var flat = Quaternion.LookRotation(up, Vector3.ProjectOnPlane(m_Rb.rotation * Vector3.up, Vector3.up).sqrMagnitude > 1e-4f
+                    ? Vector3.ProjectOnPlane(m_Rb.rotation * Vector3.up, Vector3.up) : Vector3.forward);
+                if (!m_Rb.isKinematic) { m_Rb.linearVelocity = Vector3.zero; m_Rb.angularVelocity = Vector3.zero; }
+                m_Rb.isKinematic = true;
+                m_Rb.position = p;
+                m_Rb.rotation = flat;
+                transform.SetPositionAndRotation(p, flat);
+                return;
+            }
+            if (!m_Rb.isKinematic && Time.time - m_DroppedAt > 1.5f && m_Rb.IsSleeping()) m_Rb.isKinematic = true;
         }
 
         void OnDestroy()

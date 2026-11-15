@@ -52,9 +52,12 @@ namespace FrostAndFound
             return null;
         }
 
+        /// <summary>Hit the same kid this many times running and it's war.</summary>
+        public const int HitsToFight = 3;
+
         /// <summary>Your snowball hit a kid. Returns how many times running you've got them (1 = the usual yelp,
-        /// 2 = complaining, 3 = "don't you dare", 4 = war), or 0 when it doesn't count (a fight's on, it's the
-        /// finale or the case is closed).</summary>
+        /// 2 = "don't you dare", 3 = war), or 0 when it doesn't count (a fight's on, it's the finale or the case is
+        /// closed).</summary>
         public int RegisterHit(Kid kid)
         {
             if (!kid) return 0;
@@ -69,7 +72,7 @@ namespace FrostAndFound
             n++;
             m_Count[kid.id] = n;
             m_Last[kid.id] = Time.time;
-            if (n >= 4) StartCoroutine(Fight());
+            if (n >= HitsToFight) StartCoroutine(Fight());
             return n;
         }
 

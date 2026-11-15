@@ -18,7 +18,7 @@ MonoBehaviour:
   photoFov: 52
   photoResolution: 512
   developFadeSeconds: 0.3
-  showRange: 1.8
+  showRange: 1.2
   armExtendedDistance: 0.32
   showConeDegrees: 50
   showDwellSeconds: 0.3
@@ -33,6 +33,9 @@ MonoBehaviour:
   printHoldSeconds: 40
   divotHoldSeconds: 75
   printFadeSeconds: 20
+  punchSpeed: 1.5
+  punchRadius: 0.05
+  punchCooldown: 0.45
   aimAssistConeDegrees: 11
   aimAssistStrength: 0.35
   aimAssistMaxDegrees: 4.5
@@ -42,13 +45,23 @@ MonoBehaviour:
   tonyTripAfterSeconds: 25
   tonyDodgeCooldown: 0.35
   idleNudgeSeconds: 25
+  lucyHintDelay: 4
   cameraPromptDelay: 0
   cameraGestureIdleSeconds: 20
   throwGestureIdleSeconds: 10
+  showGestureFirstSeconds: 4
+  showGestureIdleSeconds: 12
+  cameraAppearGap: 0.09
+  cameraFullGap: 0.06
+  quickPinchFraction: 0.35
+  quickPinchMin: 0.015
+  quickPinchWindow: 0.3
+  cameraViewCone: 55
   kidWallInset: 0.55
   minKidSpacing: 0.9
   fallbackRoomSize: {x: 4, y: 4}
   sceneryDensity: 1
+  passthroughDim: 0.15
   furnitureOccludes: 1
   musicVolume: 0.256
   sfxVolume: 0.9

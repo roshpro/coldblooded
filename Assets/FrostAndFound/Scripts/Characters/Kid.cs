@@ -556,8 +556,8 @@ namespace FrostAndFound
             CaseDirector.I?.NotifyActivity();
         }
 
-        /// <summary>The line for a hit: their usual yelp, or, if you keep hitting the same kid with snowballs, a
-        /// complaint, then "don't you DARE", then "that's IT!" and a snowball fight (see SnowballFight).</summary>
+        /// <summary>The line for a hit: their usual yelp, or, if you keep hitting the same kid with snowballs,
+        /// "don't you DARE" (the last warning), then "that's IT!" and a snowball fight (see SnowballFight).</summary>
         void HitLine(bool playerSnowball)
         {
             int n = playerSnowball && SnowballFight.I ? SnowballFight.I.RegisterHit(this) : 0;
@@ -566,7 +566,8 @@ namespace FrostAndFound
             {
                 m_LastHitLine = Time.time;
                 if (n <= 1) HitGag();   // the gag (books dropped, hat hop...) is the first hit's
-                string lineId = n == 2 ? key + "_complain" : n == 3 ? key + "_warn" : n >= 4 ? key + "_fight_start" : key + "_hit";
+                int war = SnowballFight.HitsToFight;
+                string lineId = n >= war ? key + "_fight_start" : n == war - 1 ? key + "_warn" : n >= 2 ? key + "_complain" : key + "_hit";
                 var line = Lines.Get(lineId) ?? Lines.Get(key + "_hit");
                 if (line != null) DialogueRunner.Say(line, this, true);
             }

@@ -15,7 +15,7 @@ Your real room fills with snow, snowy redwoods and a toppled snowman. You photog
 3. **The finale.** Tony refuses to be photographed. He bolts, zig-zags, dodges your viewfinder and ducks behind your real sofa or table. Bonk him with a snowball, and while he's dazed, take the **GUILTY** photo.
 4. **CASE CLOSED.** The colour floods back into your room, the northern lights blaze overhead, and your photos are taped into a scrapbook detective journal with your stats.
 
-Throw snowballs at the kids for fun, but hit the same kid four times and it's a **SNOWBALL FIGHT**: an alarm, an announcer, and everyone pelting you (and each other).
+Throw snowballs at the kids for fun, but hit the same kid three times and it's a **SNOWBALL FIGHT**: an alarm, an announcer, and everyone pelting you (and each other).
 
 ---
 
@@ -84,7 +84,7 @@ Lefty mode in the pause menu swaps which hand holds the camera.
 | Snowballs, scooping, aim assist, wall splats | `Scripts/Snow/` |
 | The kids: rigged Meshy models with IK, faces, poses, stun; personalities and an AI that picks what to do next; A* walking round furniture with personal space | `Scripts/Characters/` (`Kid.cs`, `KidBrain.cs`, `KidHumanoid.cs`, `Suspects.cs`, `TonyKid.cs`) |
 | A new layout every round: Frosty behind you, the kids, sled and toys placed fresh; trees always along the walls | `Scripts/Game/LayoutDirector.cs`, `Scenery.cs` |
-| Snowball fights (four hits on one kid starts one) | `Scripts/Game/SnowballFight.cs` |
+| Snowball fights (three hits on one kid starts one) | `Scripts/Game/SnowballFight.cs` |
 | Case-closed journal | `ResultsScreen` in `Scripts/UI/Screens.cs` |
 | Audio: synthesized SFX and music, the Satie soundscape when installed, and 3D voices that follow each kid's head | `Scripts/Audio/` |
 | UI (Horizon-style menus, gesture hint cards, world-space text); your hands draw over the UI | `Scripts/UI/` |

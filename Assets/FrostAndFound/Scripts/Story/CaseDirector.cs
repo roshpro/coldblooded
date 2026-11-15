@@ -338,6 +338,15 @@ namespace FrostAndFound
             var line = Lines.Get("lucy_pic" + (step + 1));
             var lucy = Kid.Find(CastId.Lucy) as LucyKid;
             if (line == null || !lucy) yield break;
+            // the carrot (after Dexter's lead): give them 12 s to spot it themselves; no nagging if they already have
+            if (step < Chain.Length && Chain[step].clue == ClueId.CarrotBits)
+            {
+                for (float t = 0f; t < 12f; t += Time.deltaTime)
+                {
+                    if (Step != step || FinaleStarted || CaseClosed || HasPhotoOf(ClueId.CarrotBits)) yield break;
+                    yield return null;
+                }
+            }
             // a request for a picture is instant: only wait for Lucy herself to finish (briefly)
             float waited = 0f;
             while ((DialogueRunner.IsSpeaking(CastId.Lucy) || lucy.Busy) && waited < 4f) { waited += Time.deltaTime; yield return null; }
@@ -347,6 +356,12 @@ namespace FrostAndFound
             var at = GuideTarget(step);
             if (at.HasValue) lucy.JabAt(at.Value);
             DialogueRunner.Say(line, lucy, false);
+        }
+
+        bool HasPhotoOf(ClueId clue)
+        {
+            foreach (var p in Photos) if (p != null && !p.Blurred && p.Clue == clue) return true;
+            return false;
         }
 
         public static Vector3? GuideTarget(int step)

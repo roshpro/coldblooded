@@ -4,7 +4,7 @@ namespace FrostAndFound
 {
     /// <summary>
     /// Show a photo (doc §5.2): look at a kid and push the photo out toward them. A photo just held up never counts:
-    /// it takes a forward push (slow is fine) while you're facing them. The kid your photo's clue points to is easier to
+    /// it takes a forward push (slow is fine) while you're facing them, from close by (about arm's length plus a step). The kid your photo's clue points to is easier to
     /// show (a wider aim, a little further away) than everyone else, and it's always one kid at a time: after a show
     /// you pull the photo back in before you can push it at anyone again. You always show your newest photo.
     /// </summary>
@@ -60,7 +60,7 @@ namespace FrostAndFound
                 bool isNeeded = kid == needed;
                 var toKid = (kid.HeadPoint - head).Flat();
                 float dist = toKid.magnitude;
-                if (dist < 0.25f || dist > tune.showRange + (isNeeded ? 0.4f : 0f)) continue;
+                if (dist < 0.25f || dist > tune.showRange + (isNeeded ? 0.2f : 0f)) continue;   // close enough to hand it over
                 float face = Vector3.Angle(gaze, toKid);
                 if (face > (isNeeded ? FaceDegreesNeeded : FaceDegrees)) continue;
                 if (reachDir.sqrMagnitude > 1e-4f && Vector3.Angle(reachDir, toKid) > HandDegrees) continue;
