@@ -106,6 +106,7 @@ namespace FrostAndFound
             m_Director = gameObject.AddComponent<CaseDirector>();
 
             gameObject.AddComponent<TipsDirector>();
+            gameObject.AddComponent<GestureDirector>();
             yield return null;
             EnterTitle();
             if (autopilot && !Player.IsXR) gameObject.AddComponent<Autopilot>();
@@ -148,7 +149,8 @@ namespace FrostAndFound
             if (!Player) return;
             if (Player.MenuDown && State != GameState.Boot && State != GameState.Title) TogglePause();
             if (m_Camera) m_Camera.Enabled = AllowsGameplay && !HPointer.ConsumedThisFrame && !HPointer.IsOverUI;
-            if (SnowballHand.Instance) SnowballHand.Instance.Enabled = State == GameState.Investigating && !IsPaused;
+            // snowballs work on the title too: you start the case by throwing one at the Play button
+            if (SnowballHand.Instance) SnowballHand.Instance.Enabled = (State == GameState.Investigating || State == GameState.Title) && !IsPaused;
         }
 
         public void StartCaseNow() { if (State == GameState.Title) StartCoroutine(BeginCase()); }

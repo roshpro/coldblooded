@@ -5,15 +5,72 @@ using UnityEngine;
 
 namespace FrostAndFound
 {
-    /// <summary>The home screen: nothing but one big round Play button floating in front of you.</summary>
-    public class TitleScreen : MonoBehaviour
+    /// <summary>
+    /// The home screen: one big round Play button floating in front of you, with the scoop &amp; throw gesture
+    /// looping under it. Throw a snowball at the button to open the case (pressing it works too).
+    /// </summary>
+    public class TitleScreen : MonoBehaviour, ISnowballTarget
     {
         const float ButtonSize = 0.24f;
+        const float HitRadius = ButtonSize * 0.5f * 1.3f;   // a little forgiving around the rim
 
         public System.Action OnStart;
         Transform m_Content;
         HButton m_Play;
-        bool m_Dismissing;
+        GestureCard m_Gesture;
+        bool m_Dismissing, m_Started;
+        readonly Dictionary<Snowball, Vector3> m_Balls = new Dictionary<Snowball, Vector3>();
+        readonly List<Snowball> m_Scratch = new List<Snowball>();
+
+        // ---- ISnowballTarget (also gives throws the usual light aim assist toward the button)
+        public Vector3 AimPoint => m_Play ? m_Play.transform.position : transform.position;
+        public Vector3 Velocity => Vector3.zero;
+        public bool AssistEligible => !m_Started;
+
+        public void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot) => Begin(point);
+
+        void OnEnable() { SnowballTargets.Register(this); Snowball.Thrown += OnThrown; }
+        void OnDisable() { SnowballTargets.Unregister(this); Snowball.Thrown -= OnThrown; }
+
+        void OnThrown(Snowball ball) { if (!ball.Thrower) m_Balls[ball] = ball.transform.position; }
+
+        void Begin(Vector3? hitPoint)
+        {
+            if (m_Started) return;
+            m_Started = true;
+            if (hitPoint.HasValue)
+            {
+                Fx.SnowPuff(hitPoint.Value, -m_Play.transform.forward, 26, 1f);
+                PlayerRig.Active?.FreeHand.Haptic(0.6f, 0.1f);
+                Debug.Log("[Frost] Title: Play hit by a snowball");
+            }
+            OnStart?.Invoke();
+        }
+
+        /// <summary>Snowballs pass straight through UI colliders (triggers), so check each flight segment against the button's disc.</summary>
+        void CheckBalls()
+        {
+            if (m_Balls.Count == 0 || !m_Play) return;
+            var center = m_Play.transform.position;
+            var n = m_Play.transform.forward;
+            m_Scratch.Clear();
+            m_Scratch.AddRange(m_Balls.Keys);
+            foreach (var ball in m_Scratch)
+            {
+                if (!ball || !ball.IsFlying) { m_Balls.Remove(ball); continue; }
+                var from = m_Balls[ball];
+                var to = ball.transform.position;
+                m_Balls[ball] = to;
+                float d0 = Vector3.Dot(from - center, n), d1 = Vector3.Dot(to - center, n);
+                bool crossed = Mathf.Sign(d0) != Mathf.Sign(d1);
+                if (!crossed && Mathf.Abs(d1) > 0.05f) continue;   // hasn't reached the button's plane
+                var hit = crossed ? Vector3.Lerp(from, to, d0 / (d0 - d1)) : to;
+                if (Vector3.Distance(hit, center) > HitRadius) continue;
+                m_Balls.Clear();
+                ball.HitTarget(this, hit, -n);
+                return;
+            }
+        }
 
         public static TitleScreen Create(System.Action onStart)
         {
@@ -32,8 +89,12 @@ namespace FrostAndFound
             m_Content = new GameObject("Content").transform;
             m_Content.SetParent(transform, false);
             m_Content.gameObject.layer = Layers.UI3D;
-            m_Play = HButton.Create(m_Content, "Play", HButton.Variant.Round, new Vector2(ButtonSize, ButtonSize), UIKit.Icon.Play, () => OnStart?.Invoke());
+            m_Play = HButton.Create(m_Content, "Play", HButton.Variant.Round, new Vector2(ButtonSize, ButtonSize), UIKit.Icon.Play, () => Begin(null));
             m_Play.transform.localPosition = new Vector3(0, 0, -0.004f);
+            // how to start: scoop snow and throw it at the button
+            m_Gesture = GestureCard.Create(m_Content, GestureKind.ScoopThrow, 0.15f);
+            m_Gesture.transform.localPosition = new Vector3(0, -ButtonSize * 0.5f - 0.03f - 0.075f, -0.002f);
+            m_Gesture.Show();
             m_Content.gameObject.SetLayerRecursive(Layers.UI3D);
             m_Content.localScale = Vector3.one * 0.9f;
             StartCoroutine(Ease.Tween(0.35f, k => m_Content.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, Ease.OutCubic(k)), Ease.Linear, true));
@@ -41,7 +102,8 @@ namespace FrostAndFound
 
         void Update()
         {
-            // a slow "breathing" pulse that invites a press
+            if (!m_Started) CheckBalls();
+            // a slow "breathing" pulse that invites a throw
             if (m_Dismissing || !m_Play) return;
             m_Play.transform.localScale = Vector3.one * (1f + 0.03f * Mathf.Sin(Time.unscaledTime * (2f * Mathf.PI / 1.6f)));
         }

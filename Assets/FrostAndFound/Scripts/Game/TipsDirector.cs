@@ -4,7 +4,7 @@ namespace FrostAndFound
 {
     /// <summary>
     /// A few short control tips (toggle "Tips" in the menu). They teach controls, never answers — the doc's
-    /// safety nets for the mystery itself are Lucy's nudges, and the finale's snowball is left for you to work out.
+    /// safety nets for the mystery itself are Lucy's nudges. The looping gesture animations live in GestureDirector.
     /// </summary>
     public class TipsDirector : MonoBehaviour
     {
@@ -34,9 +34,9 @@ namespace FrostAndFound
                 var rig = PlayerRig.Active;
                 string side = rig ? (rig.CameraHand.Side == HandSide.Left ? "left" : "right") : "left";
                 string tip = !(rig && rig.IsXR) ? "Take a photo: left click (WASD to walk, C to crouch)"
-                    : rig.CameraHand.IsOpticalHand ? $"Pinch your {side} fingers slightly to raise the camera, then pinch to shoot"
+                    : rig.CameraHand.IsOpticalHand ? null   // hand tracking: the pinch gesture animation teaches it (GestureDirector)
                     : $"Squeeze the {side} trigger lightly to raise the camera, pull it to shoot";
-                HToast.Show(tip, UIKit.Icon.Camera, 5f);
+                if (tip != null) HToast.Show(tip, UIKit.Icon.Camera, 5f);
             }
             if (!m_ShowTip && m_EvidenceAt > 0f && Time.time - m_EvidenceAt > 7f && d.Shows == 0 && !DialogueRunner.AnyoneSpeaking)
             {

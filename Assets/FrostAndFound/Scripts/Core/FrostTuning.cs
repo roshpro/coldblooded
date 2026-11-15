@@ -72,6 +72,14 @@ namespace FrostAndFound
         [Tooltip("Seconds of no progress before Lucy gives a vague nudge (doc: about 15 s).")]
         public float idleNudgeSeconds = 15f;
 
+        [Header("Gesture tutorials")]
+        [Tooltip("Seconds into the case before Lucy tells you to take a picture (then the pinch gesture plays).")]
+        public float cameraPromptDelay = 1.5f;
+        [Tooltip("Seconds without taking a photo, while the current clue still needs one, before the pinch gesture replays.")]
+        public float cameraGestureIdleSeconds = 20f;
+        [Tooltip("Seconds into Tony's run without a throw before the scoop & throw gesture plays.")]
+        public float throwGestureIdleSeconds = 10f;
+
         [Header("Layout")]
         public float kidWallInset = 0.55f;
         public float minKidSpacing = 0.9f;

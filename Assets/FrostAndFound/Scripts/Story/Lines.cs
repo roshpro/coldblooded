@@ -112,6 +112,7 @@ namespace FrostAndFound
             L("lucy_wrong_sled", CastId.Lucy, "Why are you showing ME? Show HIM.");
 
             // ---------------------------------------------------------------- Lucy's safety-net nudges (vague, not answers)
+            L("lucy_snap", CastId.Lucy, "Well? Don't just stand there. Take a picture, rookie. It'll last longer.");
             L("lucy_nudge_guilty", CastId.Lucy, "Hmph. Some people look awfully guilty.");
             L("lucy_nudge_worst", CastId.Lucy, "You're the worst detective I've ever seen. And I've seen ME on a bad day.");
             L("lucy_nudge_sparkle", CastId.Lucy, "Hmph. Some things around here are awfully... sparkly.");

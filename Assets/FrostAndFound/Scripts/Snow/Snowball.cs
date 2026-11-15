@@ -141,6 +141,16 @@ namespace FrostAndFound
             Splat(contact.point, contact.normal, target, c.collider.gameObject.layer == Layers.Snow || c.collider.GetComponentInParent<SnowSurface>());
         }
 
+        public bool IsFlying => m_Flying && !m_Done;
+
+        /// <summary>For targets without a physics collider (world-space UI): hit them and burst here.</summary>
+        public void HitTarget(ISnowballTarget target, Vector3 point, Vector3 normal)
+        {
+            if (!IsFlying) return;
+            target?.OnSnowballHit(this, point, m_Rb.linearVelocity, false);
+            Splat(point, normal, target, false);
+        }
+
         void Splat(Vector3 point, Vector3 normal, ISnowballTarget target, bool onSnow)
         {
             if (m_Done) return;
