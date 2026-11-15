@@ -206,5 +206,12 @@ namespace FrostAndFound
 
         /// <summary>Puts the player at a pose (desktop only; XR players walk for real).</summary>
         public virtual void Teleport(Vector3 feet, Quaternion facing) { }
+
+        /// <summary>Dim the real room seen through passthrough (0 = as it is, 0.15 = 15% darker), fading over
+        /// `seconds`. Only the headset has passthrough; elsewhere this does nothing.</summary>
+        public virtual void SetPassthroughDim(float dim, float seconds = 0f) { }
+
+        /// <summary>Colour-grade the real room: blend grade `a` → `b` by `t` (see PassthroughMood). Headset only.</summary>
+        public virtual void SetPassthroughGrade(RoomGrade a, RoomGrade b, float t) { }
     }
 }

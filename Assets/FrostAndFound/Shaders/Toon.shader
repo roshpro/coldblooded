@@ -16,6 +16,7 @@ Shader "FrostAndFound/Toon"
         [HDR] _EmissionColor ("Emission", Color) = (0,0,0,1)
         _Sparkle ("Glitter Amount", Range(0,1)) = 0
         _SparkleScale ("Glitter Density", Float) = 90
+        _NoOcclusion ("No Depth Occlusion", Float) = 0
         _SparkleColor ("Glitter Colour", Color) = (1,1,1,1)
         _OutlineColor ("Outline Colour", Color) = (0.12,0.13,0.22,1)
         _OutlineWidth ("Outline Width", Range(0,4)) = 1
@@ -30,6 +31,7 @@ Shader "FrostAndFound/Toon"
             Tags { "LightMode" = "UniversalForward" }
             Cull Back
             ZWrite On
+            Blend One OneMinusSrcAlpha   // premultiplied, so real-world depth occlusion can fade it out
             HLSLPROGRAM
             #pragma target 3.5
             #pragma vertex ToonVert
@@ -37,6 +39,7 @@ Shader "FrostAndFound/Toon"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_instancing
+            #pragma multi_compile_fragment _ HARD_OCCLUSION SOFT_OCCLUSION
             #include "FrostToonCore.hlsl"
             half4 Frag(Varyings input) : SV_Target
             {

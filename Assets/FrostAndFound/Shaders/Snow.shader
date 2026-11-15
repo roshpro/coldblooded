@@ -49,7 +49,7 @@ Shader "FrostAndFound/Snow"
             #pragma multi_compile _ HARD_OCCLUSION SOFT_OCCLUSION
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-            #include "Packages/com.meta.xr.sdk.core/Shaders/EnvironmentDepth/URP/EnvironmentOcclusionURP.hlsl"
+            #include "FrostOcclusion.hlsl"
 
             TEXTURE2D(_MaskMap); SAMPLER(sampler_MaskMap);
             TEXTURE2D(_TrailMap); SAMPLER(sampler_TrailMap);
@@ -203,7 +203,7 @@ Shader "FrostAndFound/Snow"
                 half alpha = smoothstep(0.02h, 0.55h, mask.r);
                 // settling in: patchy at first, then a full blanket
                 alpha *= saturate((_Coverage * 1.5 - VNoise(wxz * 2.3) * 0.5) * 3.0);
-                alpha *= META_DEPTH_GET_OCCLUSION_VALUE_WORLDPOS(input.positionWS, _EnvironmentDepthBias);
+                alpha *= FrostOcclusionBiased(input.positionWS, 0, _EnvironmentDepthBias);
                 return half4(col, alpha);
             }
             ENDHLSL

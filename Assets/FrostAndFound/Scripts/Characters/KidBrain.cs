@@ -37,7 +37,7 @@ namespace FrostAndFound
     /// </summary>
     public class KidBrain
     {
-        enum Act { None, Idle, Roam, Chat, Frosty, Player, Explore, Dash, Retreat }
+        enum Act { None, Idle, Roam, Chat, Frosty, Player, Explore, Dash, Retreat, Furniture }
         enum Phase { Deciding, Walking, Lingering }
 
         readonly Kid m_Kid;
@@ -119,6 +119,8 @@ namespace FrostAndFound
                 [Act.Frosty] = Frosty.Instance ? 0.8f * m_P.frosty : 0f,
                 [Act.Player] = Time.time > m_NextPlayerVisit ? 0.9f * m_P.player : 0f,
                 [Act.Explore] = 0.6f * m_P.explore,
+                // your real sofa, table and cabinets (only when Space Setup marked some)
+                [Act.Furniture] = RoomService.Current != null && RoomService.Current.Furniture.Count > 0 ? 0.55f * m_P.explore + 0.15f : 0f,
             };
             // Lucy: drifting too far from you pulls her back
             if (m_P.leash > 0f && FrostUtil.FlatDistance(m_Kid.transform.position, player.Head.position) > m_P.leash) w[Act.Player] += 3f;
@@ -234,6 +236,26 @@ namespace FrostAndFound
                     return false;
                 }
 
+                case Act.Furniture:
+                {
+                    // go and stand by a piece of your real furniture and have a look at it (Dexter puts his cocoa down on a table)
+                    var list = room.Furniture;
+                    if (list.Count == 0) return false;
+                    for (int i = 0; i < 10; i++)
+                    {
+                        var f = list[Random.Range(0, list.Count)];
+                        if (f.Kind == FurnitureKind.Lamp || f.Kind == FurnitureKind.Plant) continue;
+                        var toward = (me - f.Center).Flat();
+                        if (toward.sqrMagnitude < 1e-3f) toward = f.Forward;
+                        var near = f.Center + Quaternion.Euler(0f, Random.Range(-70f, 70f), 0f) * toward.normalized * 3f;
+                        var p = f.EdgePoint(near, 0.32f, room.FloorY);
+                        if (FrostUtil.FlatDistance(p, me) < 0.6f || !SpotOk(p, player, 0.9f)) continue;
+                        m_LookAt = new Vector3(f.Center.x, Mathf.Min(f.TopY, room.FloorY + 1.1f), f.Center.z);
+                        return Go(a, p, Speed(a));
+                    }
+                    return false;
+                }
+
                 case Act.Explore:
                 {
                     // poke about by the walls, where the trees and drifts are, and have a look
@@ -279,6 +301,7 @@ namespace FrostAndFound
                 Act.Frosty => Random.Range(2.5f, 5.5f),
                 Act.Player => Random.Range(2.5f, 4.5f),
                 Act.Explore => Random.Range(2f, 4f),
+                Act.Furniture => Random.Range(4f, 8f),
                 Act.Retreat => Random.Range(0.8f, 1.6f),
                 Act.Dash => Random.Range(0.6f, 1.5f),
                 _ => Random.Range(0.4f, 2.2f) * (1.4f - m_P.energy),
@@ -291,6 +314,7 @@ namespace FrostAndFound
                 if (!m_Friend.IsMoving && !m_Friend.Busy) m_Friend.Attend(m_Kid.HeadPoint, t);
             }
             if (m_LookAt != Vector3.zero) m_Kid.Attend(m_LookAt, t);
+            m_Kid.OnLinger(t);
             var anim = m_Kid.Anim;
             if (anim && anim.IsHumanoid)
             {

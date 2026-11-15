@@ -100,6 +100,7 @@ namespace FrostAndFound
             m_Label.fontSize = data.Guilty ? 0.11f : 0.075f;
             m_Label.rectTransform.sizeDelta = new Vector2(Width * 0.9f, Height * 0.5f);
             m_Label.alignment = TextAlignmentOptions.Center;
+            DepthOcclusion.Exempt(gameObject);   // held in your hand: never cut out by it
         }
 
         /// <summary>Instant film developing in your hand: blank → the picture surfaces → colour → (circle draws on).</summary>

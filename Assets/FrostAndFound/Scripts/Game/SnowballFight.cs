@@ -26,8 +26,31 @@ namespace FrostAndFound
         float m_LastFightEnd = -999f;
         int m_Taken, m_Landed;
 
-        void OnEnable() { I = this; Snowball.HitPlayer += OnHitPlayer; }
-        void OnDisable() { if (I == this) I = null; Snowball.HitPlayer -= OnHitPlayer; }
+        void OnEnable() { I = this; Snowball.HitPlayer += OnHitPlayer; Snowball.Landed += OnLanded; }
+        void OnDisable() { if (I == this) I = null; Snowball.HitPlayer -= OnHitPlayer; Snowball.Landed -= OnLanded; }
+
+        // kid-on-kid: who got whom, so the one who was hit throws back
+        readonly Dictionary<CastId, (Kid by, float at)> m_Revenge = new Dictionary<CastId, (Kid, float)>();
+        int m_KidHits;
+
+        void OnLanded(Snowball ball, Vector3 point, ISnowballTarget target)
+        {
+            if (!m_Active || !ball || !ball.Thrower) return;
+            if (target is Kid hit && hit != ball.Thrower) { m_Revenge[hit.id] = (ball.Thrower, Time.time); m_KidHits++; }
+        }
+
+        /// <summary>Payback: whoever just got this kid with a snowball usually gets one straight back (the random
+        /// kid-on-kid throws are <see cref="TryKidTarget"/>'s, one in four).</summary>
+        Kid PickFoe(Kid k)
+        {
+            if (m_Revenge.TryGetValue(k.id, out var r) && r.by && !r.by.IsStunned && Time.time - r.at < 8f && Random.value < 0.75f)
+            {
+                m_Revenge.Remove(k.id);
+                float rd = FrostUtil.FlatDistance(k.transform.position, r.by.transform.position);
+                if (rd > 1.2f && rd < 7f) return r.by;
+            }
+            return null;
+        }
 
         /// <summary>Your snowball hit a kid. Returns how many times running you've got them (1 = the usual yelp,
         /// 2 = complaining, 3 = "don't you dare", 4 = war), or 0 when it doesn't count (a fight's on, it's the
@@ -50,13 +73,19 @@ namespace FrostAndFound
             return n;
         }
 
+        RoomGrade m_MoodBefore = RoomGrade.Noir;   // the room's grade before the fight turned it to ice
+
         IEnumerator Fight()
         {
             m_Active = true;
-            m_Taken = m_Landed = 0;
+            m_Taken = m_Landed = m_KidHits = 0;
+            m_Revenge.Clear();
+            m_MoodBefore = PassthroughMood.Base == RoomGrade.Icy ? RoomGrade.Noir : PassthroughMood.Base;
+            PassthroughMood.Set(RoomGrade.Icy, 0.8f);   // your real room freezes over
             // let "That's IT!" land, then the alarm, the stamp and the announcer
             yield return new WaitForSeconds(0.8f);
             AudioDirector.Play2D(Sfx.Alarm, 1f);
+            PassthroughMood.Alarm(3);   // and flashes red with the siren
             StartCoroutine(FightStamp.Slam());
             yield return new WaitForSeconds(0.6f);
             AudioDirector.PlayAnnouncer("snowball_fight", "SNOWBALL FIGHT!");
@@ -71,6 +100,7 @@ namespace FrostAndFound
             m_Count.Clear();
             m_Last.Clear();
             m_LastFightEnd = Time.time;
+            if (PassthroughMood.Base == RoomGrade.Icy) PassthroughMood.Set(m_MoodBefore, 2f);   // the room thaws back to how it was (noir)
             // everyone stops where they are (a throw already in the air still lands)
             foreach (var k in Kid.All) if (k && k.IsMoving && !(k is TonyKid t && t.State != TonyKid.TonyState.Idle)) k.StopMoving();
 
@@ -81,7 +111,8 @@ namespace FrostAndFound
             var lucy = Kid.Find(CastId.Lucy);
             var line = Lines.Get("lucy_truce");
             if (lucy && line != null) DialogueRunner.Say(line, lucy, true);
-            HToast.Show($"Truce! You took {m_Taken} hit{(m_Taken == 1 ? "" : "s")} and landed {m_Landed}.", UIKit.Icon.Snowball, 4.5f);
+            HToast.Show($"Truce! You took {m_Taken} hit{(m_Taken == 1 ? "" : "s")} and landed {m_Landed}" +
+                        (m_KidHits > 0 ? $" (and they got each other {m_KidHits} time{(m_KidHits == 1 ? "" : "s")})." : "."), UIKit.Icon.Snowball, 4.5f);
         }
 
         /// <summary>Still a normal moment of the case (not paused out, not the finale, not closed)?</summary>
@@ -148,8 +179,11 @@ namespace FrostAndFound
                     while (m_Active && k && k.IsMoving && t < 3.5f) { t += Time.deltaTime; yield return null; }
                     continue;
                 }
-                // aim at your face or chest, with enough scatter that about half of them miss
-                var aim = you + Vector3.down * Random.Range(0.05f, 0.4f) + Random.insideUnitSphere * Mathf.Lerp(0.38f, 0.8f, Mathf.Clamp01(d / 5.5f));
+                // mostly at your face or chest (with enough scatter that about half miss), sometimes at another kid
+                var foe = PickFoe(k);
+                var aim = foe
+                    ? foe.ChestPoint + Vector3.up * Random.Range(-0.12f, 0.15f) + Random.insideUnitSphere * 0.25f
+                    : you + Vector3.down * Random.Range(0.05f, 0.4f) + Random.insideUnitSphere * Mathf.Lerp(0.38f, 0.8f, Mathf.Clamp01(d / 5.5f));
                 if (k.ThrowSnowballAt(aim))
                 {
                     if (Random.value < 0.3f && !DialogueRunner.IsSpeaking(k.id))

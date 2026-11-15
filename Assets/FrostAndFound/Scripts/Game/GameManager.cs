@@ -89,6 +89,8 @@ namespace FrostAndFound
             var r = RoomService.Current;
             Player.FloorY = r.FloorY;
             UIOverlayCamera.Attach(Player.ViewCamera);   // messages and menus always draw on top
+            DepthOcclusion.Init();   // real-world occlusion only for the player's eyes, never the UI or the Polaroid lens
+            PassthroughMood.Create(gameObject);   // the real room's colour grade follows the story
 #if FROST_META && (FROST_META_OPENXR || FROST_OCULUS_XR)
             if (Player.IsXR) EnableDepthOcclusion();   // needs a Depth API provider (Meta OpenXR or Oculus XR plug-in)
 #endif
@@ -97,6 +99,7 @@ namespace FrostAndFound
             SnowSurface.Create(r);
             m_Snowfall = Snowfall.Create(r);
             m_Scenery = Scenery.Create(r, Player, Random.Range(1, int.MaxValue));   // a fresh arrangement every game: snowy redwoods, shrubs, rocks and drifts — more of them in bigger rooms
+            FurnitureSnow.Create(r);     // snow settles on your real table, cabinet, bed and TV too (with the floor's)
             gameObject.AddComponent<FootprintTracker>();
             PhotoBackdrop.Create(r);
 
@@ -182,18 +185,34 @@ namespace FrostAndFound
             if (State != GameState.Title) yield break;
             State = GameState.Intro;
             if (m_Title) yield return m_Title.Dismiss();
-            // "The Knock": a door ~2 m in front of you, Frosty's body ~2 m behind you, the kids around him (hidden)
+            // "The Knock": a door ~2 m in front of you, Frosty's body ~2 m behind you, the kids around him (hidden).
+            // When Space Setup marked a real door, the knocking comes from your actual door instead.
             var room = RoomService.Current;
             var feet = Player.FeetPosition;
             var fwd = Player.FlatForward;
-            float ahead = 2f;
-            var door = feet + fwd * ahead;
-            if (room.EdgeDistance(door.XZ()) < 0.6f)
-                for (ahead = 2f; ahead > 1.2f && room.EdgeDistance((feet + fwd * ahead).XZ()) < 0.6f; ahead -= 0.1f) { }
-            door = room.ClampInside(feet + fwd * ahead, 0.5f);
-            door.y = room.FloorY;
+            Vector3 door;
+            Vector3? doorFacing = null;
+            var realDoor = room.PickDoor(feet, fwd);
+            if (realDoor != null)
+            {
+                door = realDoor.Threshold + realDoor.Inward * 0.08f;   // just in front of it, so its frame never sinks into the wall
+                door.y = room.FloorY;
+                doorFacing = realDoor.Inward;
+                var toDoor = (door - feet).Flat();
+                if (toDoor.sqrMagnitude > 1e-3f) fwd = toDoor.normalized;   // "behind you" is away from the door
+                Debug.Log("[Frost] The Knock: at your real door");
+            }
+            else
+            {
+                float ahead = 2f;
+                door = feet + fwd * ahead;
+                if (room.EdgeDistance(door.XZ()) < 0.6f)
+                    for (ahead = 2f; ahead > 1.2f && room.EdgeDistance((feet + fwd * ahead).XZ()) < 0.6f; ahead -= 0.1f) { }
+                door = room.ClampInside(feet + fwd * ahead, 0.5f);
+                door.y = room.FloorY;
+            }
             Layout = LayoutDirector.Build(room, Player, feet - fwd * 2f);
-            m_Intro = OpeningSequence.Begin(this, Player, Layout, m_Scenery, m_Snowfall, door, () => State = GameState.Investigating);
+            m_Intro = OpeningSequence.Begin(this, Player, Layout, m_Scenery, m_Snowfall, door, () => State = GameState.Investigating, doorFacing);
             while (!m_Intro.Done) yield return null;
         }
 
@@ -271,6 +290,7 @@ namespace FrostAndFound
             StartCoroutine(ColourBack(1.4f));   // the room's colour comes back at CASE CLOSED
             yield return CaseClosedStamp.Slam();
             if (lucy) DialogueRunner.Say(Lines.Get("lucy_case_closed"), lucy, true);
+            NorthernLights.Begin();   // the sky lights up over the room, and stays up behind the Case File
             foreach (var kid in Kid.All) if (kid && kid.id != CastId.Tony) kid.Anim.StrikePose(Pose.Cheer, 1.5f);
 
             // your photos fan out as a Case File collage

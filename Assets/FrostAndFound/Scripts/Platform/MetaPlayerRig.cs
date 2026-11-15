@@ -52,6 +52,89 @@ namespace FrostAndFound
             if (rightHand) rightHand.m_showState = OVRInput.InputDeviceShowState.Always;
             // passthrough shows your real room, so the guardian lines aren't needed on top of it
             if (OVRManager.instance) OVRManager.instance.shouldBoundaryVisibilityBeSuppressed = true;
+            // and it's dimmed a touch, so the snowy world reads as the brighter, more immersive layer
+            SetPassthroughDim(FrostTuning.I.passthroughDim);
+        }
+
+        OVRPassthroughLayer m_Passthrough;
+        Coroutine m_DimFade;
+        float m_Dim;
+
+        public override void SetPassthroughDim(float dim, float seconds = 0f)
+        {
+            if (!m_Passthrough) m_Passthrough = FindAnyObjectByType<OVRPassthroughLayer>();
+            if (!m_Passthrough) return;
+            if (m_DimFade != null) StopCoroutine(m_DimFade);
+            m_DimFade = StartCoroutine(FadeDim(Mathf.Clamp(dim, 0f, 0.9f), seconds));
+        }
+
+        System.Collections.IEnumerator FadeDim(float to, float seconds)
+        {
+            // the layer is composited over a black clear, so lowering its opacity darkens the real room evenly
+            float from = m_Dim;
+            for (float t = 0f; t < seconds; t += Time.unscaledDeltaTime)
+            {
+                m_Dim = Mathf.Lerp(from, to, Ease.InOutCubic(t / seconds));
+                if (m_Passthrough) m_Passthrough.textureOpacity = 1f - m_Dim;
+                yield return null;
+            }
+            m_Dim = to;
+            if (m_Passthrough) m_Passthrough.textureOpacity = 1f - m_Dim;
+            m_DimFade = null;
+        }
+
+        // ---- the room's colour grade (PassthroughMood): runtime LUTs, blended by the passthrough compositor
+        readonly System.Collections.Generic.Dictionary<RoomGrade, OVRPassthroughColorLut> m_Luts =
+            new System.Collections.Generic.Dictionary<RoomGrade, OVRPassthroughColorLut>();
+        RoomGrade m_GradeA, m_GradeB;
+        float m_GradeT = -1f;
+        bool m_GradeOn, m_GradeFailed;
+
+        OVRPassthroughColorLut Lut(RoomGrade g)
+        {
+            if (m_Luts.TryGetValue(g, out var lut)) return lut;
+            lut = new OVRPassthroughColorLut(PassthroughMood.BakeLut(g), OVRPassthroughColorLut.ColorChannels.Rgb);
+            m_Luts[g] = lut;
+            return lut;
+        }
+
+        public override void SetPassthroughGrade(RoomGrade a, RoomGrade b, float t)
+        {
+            if (m_GradeFailed) return;
+            if (!m_Passthrough)
+            {
+                m_Passthrough = FindAnyObjectByType<OVRPassthroughLayer>();
+                if (!m_Passthrough) return;
+                // start from a known state: a layer that outlived a scene reload could still be wearing a grade
+                m_Passthrough.DisableColorMap();
+                m_GradeA = m_GradeB = RoomGrade.None; m_GradeT = 0f; m_GradeOn = false;
+            }
+            t = Mathf.Clamp01(t);
+            // fold every "the room as it is" case into one
+            bool plain = (a == RoomGrade.None && b == RoomGrade.None) || (a == RoomGrade.None && t < 0.002f)
+                         || (b == RoomGrade.None && t > 0.998f) || (a == b && a == RoomGrade.None);
+            if (plain) { a = b = RoomGrade.None; t = 0f; }
+            if (a == m_GradeA && b == m_GradeB && Mathf.Abs(t - m_GradeT) < 0.004f) return;
+            m_GradeA = a; m_GradeB = b; m_GradeT = t;
+            try
+            {
+                if (plain)
+                {
+                    if (m_GradeOn) m_Passthrough.DisableColorMap();
+                    m_GradeOn = false;
+                    return;
+                }
+                if (a == RoomGrade.None) m_Passthrough.SetColorLut(Lut(b), t);
+                else if (b == RoomGrade.None) m_Passthrough.SetColorLut(Lut(a), 1f - t);
+                else if (a == b) m_Passthrough.SetColorLut(Lut(a), 1f);
+                else m_Passthrough.SetColorLut(Lut(a), Lut(b), t);
+                m_GradeOn = true;
+            }
+            catch (System.Exception e)
+            {
+                m_GradeFailed = true;   // never let a missing passthrough feature break the game
+                Debug.LogWarning("[Frost] Passthrough colour grade unavailable: " + e.Message);
+            }
         }
 
         /// <summary>OVRCameraRig creates its anchors in its own Awake, so look the eye camera up lazily.</summary>
@@ -343,7 +426,12 @@ namespace FrostAndFound
             OVRInput.SetControllerVibration(0f, 0f, c);
         }
 
-        void OnDestroy() { if (m_GloveMat) Destroy(m_GloveMat); }
+        void OnDestroy()
+        {
+            if (m_GloveMat) Destroy(m_GloveMat);
+            foreach (var lut in m_Luts.Values) lut?.Dispose();
+            m_Luts.Clear();
+        }
 
         protected override void OnDisable()
         {

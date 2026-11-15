@@ -5,6 +5,7 @@ Shader "FrostAndFound/UnlitTransparent"
     {
         _BaseMap ("Texture", 2D) = "white" {}
         _BaseColor ("Colour", Color) = (1,1,1,1)
+        _NoOcclusion ("No Depth Occlusion", Float) = 0
         [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull", Float) = 2
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("ZTest", Float) = 4
     }
@@ -23,8 +24,9 @@ Shader "FrostAndFound/UnlitTransparent"
             #pragma vertex UnlitVert
             #pragma fragment Frag
             #pragma multi_compile_instancing
+            #pragma multi_compile_fragment _ HARD_OCCLUSION SOFT_OCCLUSION
             #include "FrostUnlitCore.hlsl"
-            half4 Frag(Varyings i) : SV_Target { return UnlitFragColor(i); }
+            half4 Frag(Varyings i) : SV_Target { half4 c = UnlitFragColor(i); c.a *= FrostOcclusion(i.positionWS, _NoOcclusion); return c; }
             ENDHLSL
         }
     }

@@ -145,6 +145,7 @@ namespace FrostAndFound
             screen.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             m_BlurMat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Blur)) { name = "PhotoBlur" };
+            DepthOcclusion.Exempt(m_Body.gameObject);   // in your hand: the real hand holding it mustn't cut it out
         }
 
         void BuildMock()
@@ -449,6 +450,7 @@ namespace FrostAndFound
             if (!SatieSound.Fire("shutter", transform.position)) AudioDirector.PlayAt(Sfx.Shutter, transform.position, 1f, Random.Range(0.97f, 1.03f));
             PlayerRig.Active?.CameraHand.Haptic(0.7f, 0.07f);
             StartCoroutine(FlashBulb());
+            PassthroughMood.Flash();   // the flash lights up your real room for a blink
             // let the lens render this frame so the photo matches what the viewfinder shows
             yield return new WaitForEndOfFrame();
 
@@ -509,11 +511,11 @@ namespace FrostAndFound
                 var rig = PlayerRig.Active;
                 bool closing = CaseDirector.I != null && CaseDirector.I.CaseClosed;
                 if (closing || (rig && !rig.IsXR && Time.time - waitStart > 0.7f)) break;   // finale / desktop: handed over
-                if (rig && TryGrab(rig)) break;
+                if (rig && TryGrab(rig)) { Hints.Done("pull-photo"); break; }
                 if (!tipped && Time.time - waitStart > 4f && rig && rig.IsXR)
                 {
                     tipped = true;
-                    HToast.Show("Pull the photo out of the camera with your other hand", UIKit.Icon.Camera, 3.5f);
+                    if (Hints.Allow("pull-photo")) HToast.Show("Pull the photo out of the camera with your other hand", UIKit.Icon.Camera, 3.5f);
                 }
                 yield return null;
             }

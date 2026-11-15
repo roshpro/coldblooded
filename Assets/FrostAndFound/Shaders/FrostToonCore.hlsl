@@ -3,6 +3,7 @@
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "FrostOcclusion.hlsl"
 
 TEXTURE2D(_BaseMap); SAMPLER(sampler_BaseMap);
 
@@ -24,6 +25,7 @@ CBUFFER_START(UnityPerMaterial)
     half _OutlineWidth;
     half _Sparkle;
     half _SparkleScale;
+    half _NoOcclusion;
 CBUFFER_END
 
 struct Attributes
@@ -128,7 +130,10 @@ half4 ToonShade(Varyings input)
     col += _SparkleColor.rgb * FrostSparkle(input.positionWS, N, V, _Sparkle, _SparkleScale);
 
     col += _EmissionColor.rgb;
-    return half4(col, 1.0h);
+    // premultiplied: where a real person or object stands in front, the pixel turns transparent and the
+    // passthrough shows them instead of the character pasted over them
+    half occ = FrostOcclusion(input.positionWS, _NoOcclusion);
+    return half4(col * occ, occ);
 }
 
 // ---------------------------------------------------------------- shadow caster / depth
@@ -205,7 +210,8 @@ Varyings ToonOutlineVert(Attributes input)
 half4 ToonOutlineFrag(Varyings input) : SV_Target
 {
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-    return half4(_OutlineColor.rgb, 1.0h);
+    half occ = FrostOcclusion(input.positionWS, _NoOcclusion);
+    return half4(_OutlineColor.rgb * occ, occ);
 }
 
 #endif

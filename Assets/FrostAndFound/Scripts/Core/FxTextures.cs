@@ -5,13 +5,21 @@ namespace FrostAndFound
     /// <summary>Small procedural textures: particle sprites, the hand-drawn evidence circle, stamps, icons.</summary>
     public static class FxTextures
     {
-        static Texture2D s_Dot, s_Flake, s_Star, s_Circle, s_Ring, s_Clump, s_Note, s_Heart;
+        static Texture2D s_Dot, s_Flake, s_Star, s_Circle, s_Ring, s_Clump, s_Note, s_Heart, s_WallSplat, s_Glow;
 
         public static Texture2D SoftDot => s_Dot ? s_Dot : (s_Dot = Make("SoftDot", 64, (u, v) =>
         {
             float d = Vector2.Distance(new Vector2(u, v), new Vector2(0.5f, 0.5f)) * 2f;
             float a = Mathf.Clamp01(1f - d);
             return new Color(1, 1, 1, a * a * (3f - 2f * a));
+        }));
+
+        /// <summary>A bright little core in a wide soft halo, for things that glow (the northern lights' motes and orbs).</summary>
+        public static Texture2D Glow => s_Glow ? s_Glow : (s_Glow = Make("Glow", 64, (u, v) =>
+        {
+            float d2 = ((u - 0.5f) * (u - 0.5f) + (v - 0.5f) * (v - 0.5f)) * 4f;   // 0 at the centre, 1 at the edge
+            float a = 0.8f * Mathf.Exp(-d2 * 22f) + 0.38f * Mathf.Exp(-d2 * 5f);
+            return new Color(1, 1, 1, Mathf.Clamp01(a * Mathf.Clamp01((1f - d2) * 4f)));
         }));
 
         public static Texture2D Flake => s_Flake ? s_Flake : (s_Flake = Make("Snowflake", 64, (u, v) =>
@@ -122,6 +130,28 @@ namespace FrostAndFound
             // a soft highlight up and to the left, a little crease of shadow down and to the right
             shade += 0.06f * Mathf.Clamp01(1f - Vector2.Distance(p, new Vector2(-0.3f, 0.35f)) * 2.2f);
             shade -= 0.05f * Mathf.Clamp01(1f - Vector2.Distance(p, new Vector2(0.35f, -0.3f)) * 2.5f);
+            return new Color(shade, shade, shade, a);
+        }));
+
+        /// <summary>Snow squashed flat against a wall: a lumpy blob (no spikes) with a few flecks thrown off round it,
+        /// shaded like the clump so it reads as packed snow rather than paint.</summary>
+        public static Texture2D WallSplat => s_WallSplat ? s_WallSplat : (s_WallSplat = Make("SnowWallSplat", 128, (u, v) =>
+        {
+            var p = new Vector2(u - 0.5f, v - 0.5f) * 2f;
+            float ang = Mathf.Atan2(p.y, p.x), r = p.magnitude;
+            float edge = 0.6f + 0.08f * Mathf.Sin(ang * 3f + 0.4f) + 0.05f * Mathf.Sin(ang * 5f + 1.7f) + 0.035f * Mathf.Sin(ang * 9f + 0.9f) + 0.02f * Mathf.Sin(ang * 17f);
+            float a = Mathf.Clamp01((edge - r) * 16f);
+            float shade = Mathf.Lerp(1f, 0.82f, Mathf.SmoothStep(0.3f, 1f, r / edge));
+            shade += 0.05f * Mathf.Clamp01(1f - Vector2.Distance(p, new Vector2(-0.22f, 0.25f)) * 2.4f);
+            // flecks of snow thrown off round the edge
+            for (int i = 0; i < 6; i++)
+            {
+                float da = i * 1.07f + 0.5f, dr = 0.76f + 0.1f * ((i * 37) % 3), rad = 0.045f + 0.02f * (i % 3);
+                var c = new Vector2(Mathf.Cos(da), Mathf.Sin(da)) * dr;
+                float d = Vector2.Distance(p, c);
+                float fa = Mathf.Clamp01((rad - d) * 40f);
+                if (fa > a) { a = fa; shade = Mathf.Lerp(0.95f, 0.85f, d / rad); }
+            }
             return new Color(shade, shade, shade, a);
         }));
 

@@ -84,6 +84,7 @@ namespace FrostAndFound
             L("tony_up", CastId.Tony, "Ha! Still got it. No cap.");
             L("tony_caught", CastId.Tony, "...It WAS a sick jump though.");
             L("lucy_case_closed", CastId.Lucy, "Case closed. You're welcome.");
+            L("lucy_aurora", CastId.Lucy, "Huh. Even the sky knows I solved it.");
 
             // ---------------------------------------------------------------- photo poses (when they're in frame)
             L("dexter_pose", CastId.Dexter, "Say cocoa! Twenty-five cents a cup!");

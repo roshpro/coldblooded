@@ -385,6 +385,10 @@ namespace FrostAndFound
 
         protected virtual bool WanderSpotOk(Vector3 p) => true;
 
+        /// <summary>The idle AI just arrived somewhere and will stand about for `seconds` (Dexter puts his cocoa down
+        /// if it's a table).</summary>
+        protected internal virtual void OnLinger(float seconds) { }
+
         /// <summary>Something to glance at: a friend, Frosty, you, or somewhere in the room.</summary>
         Vector3 FidgetLook(PlayerRig player)
         {

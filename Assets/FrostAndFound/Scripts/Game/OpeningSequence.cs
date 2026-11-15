@@ -27,16 +27,17 @@ namespace FrostAndFound
         AudioSource m_Jingle;
         LucyKid m_Lucy;
         Vector3 m_DoorPos, m_LucyStop;
+        Vector3? m_DoorFacing;   // set when the door stands on your real one: it faces into the room
         bool m_Investigating, m_Skipped;
         readonly Dictionary<Kid, Vector3> m_KidScale = new Dictionary<Kid, Vector3>();
         float m_SceneryY;
 
         public static OpeningSequence Begin(GameManager gm, PlayerRig player, LayoutDirector.Result layout, GameObject scenery, Snowfall snowfall,
-            Vector3 doorPos, System.Action onInvestigate)
+            Vector3 doorPos, System.Action onInvestigate, Vector3? doorFacing = null)
         {
             var s = gm.gameObject.AddComponent<OpeningSequence>();
             s.m_Gm = gm; s.m_Player = player; s.m_Layout = layout; s.m_Scenery = scenery; s.m_Snowfall = snowfall;
-            s.m_DoorPos = doorPos; s.m_OnInvestigate = onInvestigate;
+            s.m_DoorPos = doorPos; s.m_OnInvestigate = onInvestigate; s.m_DoorFacing = doorFacing;
             s.Stage();
             s.StartCoroutine(s.Run());
             return s;
@@ -63,9 +64,9 @@ namespace FrostAndFound
                 m_Scenery.SetActive(false);
             }
 
-            // the door, in its own freestanding frame, facing you
-            var toYou = (feet - m_DoorPos).Flat();
-            toYou = toYou.sqrMagnitude > 1e-4f ? toYou.normalized : -m_Player.FlatForward;
+            // the door, in its own freestanding frame, facing you (or laid over your real door, facing into the room)
+            var toYou = m_DoorFacing ?? (feet - m_DoorPos).Flat();
+            toYou = toYou.sqrMagnitude > 1e-4f ? toYou.Flat().normalized : -m_Player.FlatForward;
             m_Door = IntroDoor.Create(m_DoorPos, toYou);
 
             // Lucy waits behind it (muffled), and stops a stride inside when she bursts in
@@ -316,9 +317,9 @@ namespace FrostAndFound
         /// <summary>Back to the room's own colours.</summary>
         public static void Normal()
         {
-#if FROST_META
-            if (Layer) Layer.DisableColorMap();
-#endif
+            // on the headset the room's colour goes through PassthroughMood, which owns the passthrough grade, so the
+            // camera flash and a snowball fight's ice blend away from noir and back to it
+            PassthroughMood.Set(RoomGrade.None, 0f);
             Sim(c => c);
         }
 
@@ -326,13 +327,9 @@ namespace FrostAndFound
         public static void Noir(float k)
         {
             k = Mathf.Clamp01(k);
-#if FROST_META
-            if (Layer)
-            {
-                if (k <= 0.001f) Layer.DisableColorMap();
-                else Layer.SetBrightnessContrastSaturation(-0.06f * k, 0.12f * k, -k);
-            }
-#endif
+            if (k >= 0.999f) PassthroughMood.Set(RoomGrade.Noir, 0f);
+            else if (k <= 0.001f) PassthroughMood.Set(RoomGrade.None, 0f);
+            else PassthroughMood.Hold(RoomGrade.None, RoomGrade.Noir, k);   // part-way (the colour coming back at CASE CLOSED)
             Sim(c => { float l = Lum(c); return Color.Lerp(c, new Color(l, l, l, c.a) * (1f - 0.06f * k), k); });
         }
 

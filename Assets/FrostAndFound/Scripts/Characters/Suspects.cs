@@ -42,9 +42,97 @@ namespace FrostAndFound
         {
             base.Update();
             if (m_Whistle) m_Whistle.mute = !m_Whistling || DialogueRunner.IsSpeaking(id);
+            UpdateMug();
         }
 
         protected override Pose PoseFor() => Pose.HoldUpThermos;
+
+        // ---- putting his cocoa down on a real table (only when Space Setup marked one)
+        Transform m_Mug;
+        HeldByHandle m_MugHold;
+        bool m_MugDown;
+        Coroutine m_MugMove;
+        float m_PickUpAt;
+        Vector3? m_RestHand;
+
+        protected internal override void OnLinger(float seconds)
+        {
+            if (seconds < 3f) return;   // not worth putting it down
+            var room = RoomService.Current;
+            if (room == null || m_MugDown || Busy || SnowballFight.Active) return;
+            if (!m_Mug && Rig.HandR) { m_Mug = Rig.HandR.Find("Mug"); m_MugHold = m_Mug ? m_Mug.GetComponent<HeldByHandle>() : null; }
+            if (!m_Mug || !m_MugHold) return;
+            var table = room.FindFurniture(FurnitureKind.Table, transform.position);
+            if (table == null || table.TopY - room.FloorY < 0.3f || table.TopY - room.FloorY > 1.15f) return;
+            var edge = table.EdgePoint(transform.position, 0f, room.FloorY);
+            if (FrostUtil.FlatDistance(edge, transform.position) > 0.7f) return;   // not standing at it
+            // a spot on the top just in from the edge nearest him
+            var inward = (table.Center - edge).Flat();
+            var spot = edge + (inward.sqrMagnitude > 1e-4f ? inward.normalized : transform.forward) * 0.1f;
+            spot.y = table.TopY + 0.003f;
+            if (!table.Contains(spot, -0.02f)) return;
+            m_PickUpAt = Time.time + Mathf.Max(2f, seconds - 1.2f);   // and back in his hand before he moves on
+            if (m_MugMove != null) StopCoroutine(m_MugMove);
+            m_MugMove = StartCoroutine(SetMugDown(spot));
+        }
+
+        IEnumerator SetMugDown(Vector3 spot)
+        {
+            m_MugDown = true;
+            Face(spot + Vector3.up * 0.3f, 0.35f);
+            yield return new WaitForSeconds(0.35f);
+            m_MugHold.enabled = false;
+            m_Mug.SetParent(null, true);   // off the hand bone, or it would wiggle on the table with his idle hand
+            var from = m_Mug.position;
+            var rot = m_Mug.rotation;
+            var flatRot = Quaternion.LookRotation(Vector3.ProjectOnPlane(rot * Vector3.forward, Vector3.up).normalized + Vector3.forward * 1e-4f, Vector3.up);
+            float sink = MugBottom();
+            yield return Ease.Tween(0.45f, t =>
+            {
+                var p = Vector3.Lerp(from, spot + Vector3.up * sink, t) + Vector3.up * Mathf.Sin(t * Mathf.PI) * 0.05f;
+                m_Mug.SetPositionAndRotation(p, Quaternion.Slerp(rot, flatRot, t));
+            }, Ease.InOutCubic, false);
+            AudioDirector.PlayAt(Sfx.Plop, spot, 0.35f, 1.6f);
+            if (Anim) { m_RestHand = Anim.RestRightHand; Anim.RestRightHand = null; }   // hands free
+            Debug.Log("[Frost] Dexter puts his cocoa down on the table");
+            m_MugMove = null;
+        }
+
+        // how far the mug's pivot sits above its base, so it stands on the table rather than in it
+        float MugBottom()
+        {
+            float lowest = float.MaxValue;
+            foreach (var r in m_Mug.GetComponentsInChildren<Renderer>()) lowest = Mathf.Min(lowest, r.bounds.min.y);
+            return lowest < float.MaxValue ? m_Mug.position.y - lowest : 0.04f;
+        }
+
+        IEnumerator PickMugUp()
+        {
+            if (Anim && m_RestHand.HasValue) Anim.RestRightHand = m_RestHand;
+            var from = m_Mug.position;
+            var hand = Rig.HandR ? Rig.HandR.position : from;
+            yield return Ease.Tween(0.3f, t => m_Mug.position = Vector3.Lerp(from, Rig.HandR ? Rig.HandR.position : hand, t), Ease.InOutCubic, false);
+            if (Rig.HandR) m_Mug.SetParent(Rig.HandR, true);
+            m_MugHold.enabled = true;   // back in his fist by the handle
+            m_MugDown = false;
+            m_MugMove = null;
+        }
+
+        public override void OnPhotographed(PhotoData photo)
+        {
+            if (m_MugDown && m_MugMove == null) m_MugMove = StartCoroutine(PickMugUp());   // his pose holds the cocoa up
+            base.OnPhotographed(photo);
+        }
+
+        void OnDestroy() { if (m_Mug && m_MugDown) Destroy(m_Mug.gameObject); }
+
+        void UpdateMug()
+        {
+            if (!m_MugDown || m_MugMove != null) return;
+            // picks it up again before he wanders off, or the moment anything happens
+            if (Time.time > m_PickUpAt || IsMoving || Busy || SnowballFight.Active || (GameManager.I && GameManager.I.State != GameState.Investigating))
+                m_MugMove = StartCoroutine(PickMugUp());
+        }
 
         protected override void HitGag()
         {

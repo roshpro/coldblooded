@@ -15,6 +15,42 @@ namespace FrostAndFound
         public string Source = "fallback";
         /// <summary>Returns true when the world position (at floor level) is inside furniture/obstacles.</summary>
         public System.Func<Vector3, float, bool> IsBlocked;
+        /// <summary>Real doorways from Space Setup (empty when none were marked).</summary>
+        public readonly List<RoomDoor> Doors = new List<RoomDoor>();
+        /// <summary>Real furniture from Space Setup, by kind (empty when none was marked).</summary>
+        public readonly List<RoomFurniture> Furniture = new List<RoomFurniture>();
+
+        /// <summary>The real doorway for the opening's knock, or null: one with room just inside it, near you, ideally
+        /// in view (behind you works too: you turn round to it).</summary>
+        public RoomDoor PickDoor(Vector3 feet, Vector3 forward)
+        {
+            RoomDoor best = null;
+            float bestScore = float.MinValue;
+            foreach (var d in Doors)
+            {
+                var inside = d.Inside(0.5f);
+                if (!Contains(inside) || (IsBlocked != null && IsBlocked(inside, 0.22f))) continue;
+                var to = (d.Threshold - feet).Flat();
+                float dist = to.magnitude;
+                if (dist > 9f || dist < 0.8f) continue;
+                float facing = dist > 0.01f ? Vector3.Dot(to / dist, forward) : 0f;
+                float score = -dist * 0.3f + facing * 0.6f;
+                if (score > bestScore) { bestScore = score; best = d; }
+            }
+            return best;
+        }
+
+        public RoomFurniture FindFurniture(FurnitureKind kind, Vector3 near)
+        {
+            RoomFurniture best = null; float bestD = float.MaxValue;
+            foreach (var f in Furniture)
+            {
+                if (f.Kind != kind) continue;
+                float d = (f.Center - near).Flat().sqrMagnitude;
+                if (d < bestD) { bestD = d; best = f; }
+            }
+            return best;
+        }
 
         Rect m_Bounds;
         Vector2 m_Centroid;
@@ -173,6 +209,109 @@ namespace FrostAndFound
     }
 
     /// <summary>Global access to the current play space and an event when it changes.</summary>
+    /// <summary>A real doorway: its threshold on the floor and the flat direction into the room.</summary>
+    public class RoomDoor
+    {
+        public Vector3 Threshold;   // floor level, centre of the doorway
+        public Vector3 Inward;      // unit, horizontal, pointing into the room
+        public float Width = 0.9f, Height = 2.0f;
+        /// <summary>Where someone stepping in through it stands, just inside.</summary>
+        public Vector3 Inside(float depth = 0.45f) => Threshold + Inward * depth;
+    }
+
+    public enum FurnitureKind { Table, Couch, Bed, Storage, Screen, Lamp, Plant, Other }
+
+    /// <summary>A real piece of furniture as an oriented box: footprint axes, half extents and heights.</summary>
+    public class RoomFurniture
+    {
+        public FurnitureKind Kind;
+        public Vector3 Center;          // centre of the box (world)
+        public Vector3 Right, Forward;  // unit, horizontal footprint axes
+        public float HalfWidth, HalfDepth;   // along Right / Forward
+        public float BottomY, TopY;
+        public float Height => TopY - BottomY;
+        public Vector3 TopCenter => new Vector3(Center.x, TopY, Center.z);
+
+        /// <summary>Is the flat point within the footprint grown by `pad`?</summary>
+        public bool Contains(Vector3 p, float pad = 0f)
+        {
+            var d = p - Center;
+            return Mathf.Abs(Vector3.Dot(d, Right)) <= HalfWidth + pad && Mathf.Abs(Vector3.Dot(d, Forward)) <= HalfDepth + pad;
+        }
+
+        /// <summary>The point on the footprint's edge (grown by `pad`) nearest to `p`, at floor height `floorY`.</summary>
+        public Vector3 EdgePoint(Vector3 p, float pad, float floorY)
+        {
+            var d = (p - Center).Flat();
+            float x = Vector3.Dot(d, Right), z = Vector3.Dot(d, Forward);
+            float ex = HalfWidth + pad, ez = HalfDepth + pad;
+            x = Mathf.Clamp(x, -ex, ex); z = Mathf.Clamp(z, -ez, ez);
+            // push onto the nearer side so the point is on the edge, not inside
+            if (ex - Mathf.Abs(x) < ez - Mathf.Abs(z)) x = Mathf.Sign(x == 0f ? 1f : x) * ex; else z = Mathf.Sign(z == 0f ? 1f : z) * ez;
+            var q = Center + Right * x + Forward * z;
+            q.y = floorY;
+            return q;
+        }
+
+        /// <summary>A spot on the far side of the furniture from `from` (hiding behind it), at floor height.</summary>
+        public Vector3 BehindFrom(Vector3 from, float pad, float floorY)
+        {
+            var away = (Center - from).Flat();
+            if (away.sqrMagnitude < 1e-4f) away = Forward;
+            return EdgePoint(Center + away.normalized * 10f, pad, floorY);
+        }
+
+        /// <summary>Does the flat line from a to b pass through the footprint (so the furniture stands between them)?</summary>
+        public bool Blocks(Vector3 a, Vector3 b)
+        {
+            // Liang–Barsky against the box, in its own frame
+            var da = (a - Center).Flat(); var db = (b - Center).Flat();
+            float ax = Vector3.Dot(da, Right), az = Vector3.Dot(da, Forward);
+            float dx = Vector3.Dot(db, Right) - ax, dz = Vector3.Dot(db, Forward) - az;
+            float t0 = 0f, t1 = 1f;
+            bool Clip(float p, float q)
+            {
+                if (Mathf.Abs(p) < 1e-6f) return q >= 0f;
+                float r = q / p;
+                if (p < 0f) { if (r > t1) return false; if (r > t0) t0 = r; }
+                else { if (r < t0) return false; if (r < t1) t1 = r; }
+                return true;
+            }
+            return Clip(-dx, ax + HalfWidth) && Clip(dx, HalfWidth - ax) && Clip(-dz, az + HalfDepth) && Clip(dz, HalfDepth - az) && t0 < t1;
+        }
+
+        /// <summary>A random point on the top surface, inset from its edges.</summary>
+        public Vector3 RandomTopPoint(float inset)
+        {
+            float x = Random.Range(-1f, 1f) * Mathf.Max(0f, HalfWidth - inset), z = Random.Range(-1f, 1f) * Mathf.Max(0f, HalfDepth - inset);
+            var p = Center + Right * x + Forward * z;
+            p.y = TopY;
+            return p;
+        }
+
+        /// <summary>Builds one from a world-space oriented box (any rotation; the most vertical axis is "up").</summary>
+        public static RoomFurniture FromBox(FurnitureKind kind, Matrix4x4 localToWorld, Bounds local)
+        {
+            var axes = new[] { (Vector3)localToWorld.GetColumn(0), (Vector3)localToWorld.GetColumn(1), (Vector3)localToWorld.GetColumn(2) };
+            var ext = new[] { local.extents.x, local.extents.y, local.extents.z };
+            int up = 0;
+            for (int i = 1; i < 3; i++) if (Mathf.Abs(axes[i].normalized.y) > Mathf.Abs(axes[up].normalized.y)) up = i;
+            int a = (up + 1) % 3, b = (up + 2) % 3;
+            var f = new RoomFurniture { Kind = kind };
+            f.Center = localToWorld.MultiplyPoint3x4(local.center);
+            float halfUp = ext[up] * axes[up].magnitude * Mathf.Abs(axes[up].normalized.y);
+            f.BottomY = f.Center.y - halfUp;
+            f.TopY = f.Center.y + halfUp;
+            f.Right = axes[a].Flat().normalized;
+            f.Forward = axes[b].Flat().normalized;
+            f.HalfWidth = ext[a] * axes[a].Flat().magnitude;
+            f.HalfDepth = ext[b] * axes[b].Flat().magnitude;
+            if (f.Right.sqrMagnitude < 0.5f) f.Right = Vector3.right;
+            if (f.Forward.sqrMagnitude < 0.5f) f.Forward = Vector3.Cross(f.Right, Vector3.up);
+            return f;
+        }
+    }
+
     public static class RoomService
     {
         public static RoomInfo Current { get; private set; }

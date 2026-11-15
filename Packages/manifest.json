@@ -17,6 +17,7 @@
     "com.unity.ugui": "2.6.0",
     "com.unity.xr.hands": "1.10.0",
     "com.unity.xr.management": "4.7.0",
+    "com.unity.xr.meta-openxr": "2.7.0",
     "com.unity.xr.openxr": "1.19.0",
     "com.unity.modules.accessibility": "1.0.0",
     "com.unity.modules.adaptiveperformance": "1.0.0",

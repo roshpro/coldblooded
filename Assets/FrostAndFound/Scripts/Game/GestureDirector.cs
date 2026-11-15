@@ -74,6 +74,8 @@ namespace FrostAndFound
             if (m_InvestigatingSince < 0f) m_InvestigatingSince = Time.time;
             if (!FrostPrefs.Tips) { HideAll(); return; }
             var tune = FrostTuning.I;
+            // hints get rarer as the case goes on: by then the player knows the moves
+            float later = 1f + 0.6f * Mathf.Clamp(d.Step, 0, 4);
 
             if (d.FinaleStarted)
             {
@@ -101,14 +103,14 @@ namespace FrostAndFound
             if (held != m_HeldPhoto) { m_HeldPhoto = held; m_HeldSince = Time.time; }
             if (!held) GestureHint.Hide(GestureKind.ShowPhoto);
             else if (held != m_ShownPhoto && d.CanShow && !GestureHint.IsShowing(GestureKind.ShowPhoto) && !GestureHint.OtherShowing(GestureKind.ShowPhoto)
-                     && Time.time - m_HeldSince > (m_EverShown ? tune.showGestureIdleSeconds : tune.showGestureFirstSeconds))
+                     && Time.time - m_HeldSince > (m_EverShown ? tune.showGestureIdleSeconds * later : tune.showGestureFirstSeconds))
                 GestureHint.Show(GestureKind.ShowPhoto);
 
             // supposed to take a picture but hasn't for a long while: the current clue has no usable photo yet
             if (m_Prompted && !d.Reacting && !NeedsNoPhoto(d) && !GestureHint.IsShowing(GestureKind.Camera))
             {
                 float idle = Time.time - Mathf.Max(m_InvestigatingSince, m_LastPhoto, d.StepStartedAt);
-                if (idle > tune.cameraGestureIdleSeconds) GestureHint.Show(GestureKind.Camera);
+                if (idle > tune.cameraGestureIdleSeconds * later) GestureHint.Show(GestureKind.Camera);
             }
         }
 

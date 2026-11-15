@@ -7,7 +7,7 @@ namespace FrostAndFound
     public enum Sfx
     {
         Footstep, ScoopCrunch, Shutter, Whirr, Whoosh, Splat, Bonk, Tweet, Sting, Twinkle, Marker, StampSlam,
-        UiClick, Plop, Scribble, BookThud, Whistle, Fanfare, RoomTone, Boing, Gasp, UiHover, Alarm,
+        UiClick, Plop, Scribble, BookThud, Whistle, Fanfare, RoomTone, Boing, Gasp, UiHover, Alarm, Aurora,
         // the opening sequence
         Knock, Thud, DoorBang, RecordScratch, Siren, Jingle
     }
@@ -198,6 +198,7 @@ namespace FrostAndFound
                 case Sfx.Siren: return Siren();
                 case Sfx.Jingle: return Jingle(rng);
                 case Sfx.Alarm: return Alarm();
+                case Sfx.Aurora: return Aurora(rng);
                 case Sfx.Twinkle:
                 {
                     var d = Buf(0.6f);
@@ -360,6 +361,43 @@ namespace FrostAndFound
                 if (i % 64 == 0) lp = Biquad.LowPass(Mathf.Lerp(600f, 2400f * bright, Mathf.Clamp01(env)), 0.9f, SR);
                 d[start + i] += lp.Process((Saw(ph) + Saw(ph2)) * 0.5f) * env * amp;
             }
+        }
+
+        /// <summary>The northern lights: a glassy major-ninth pad swelling in over a few seconds, with slow
+        /// shimmering bell chimes drifting over it (about 11 s).</summary>
+        static float[] Aurora(System.Random rng)
+        {
+            var d = Buf(11f);
+            float[] chord = { 48, 55, 59, 62, 64 };   // C, G, B, D, E: wide and open
+            for (int n = 0; n < chord.Length; n++)
+            {
+                float f = Mtof(chord[n]);
+                double ph1 = 0, ph2 = 0;
+                for (int i = 0; i < d.Length; i++)
+                {
+                    float t = i / (float)SR;
+                    float vib = 1f + 0.003f * Mathf.Sin(2f * Mathf.PI * (0.27f + n * 0.06f) * t);
+                    ph1 += f * vib / SR;
+                    ph2 += f * 1.004f * vib / SR;   // a slow chorus between the two voices
+                    float env = Mathf.Clamp01(t / 3.5f) * Mathf.Clamp01((11f - t) / 4.5f);
+                    d[i] += (Sin(ph1) + Sin(ph2)) * 0.11f * env;
+                }
+            }
+            float[] bells = { 72, 74, 76, 79, 83, 84, 86, 88, 91 };
+            for (float tc = 1.4f; tc < 9.4f; tc += 0.38f + (float)rng.NextDouble() * 0.75f)
+            {
+                float f = Mtof(bells[rng.Next(bells.Length)]);
+                int start = (int)(tc * SR);
+                double ph = 0;
+                for (int i = 0; start + i < d.Length && i < 2.6f * SR; i++)
+                {
+                    float t = i / (float)SR;
+                    ph += f / SR;
+                    d[start + i] += (Sin(ph) + 0.3f * Sin(ph * 2.76)) * 0.1f * Mathf.Exp(-t * 2.1f) * Mathf.Clamp01(t / 0.006f);
+                }
+            }
+            Normalize(d, 0.7f); Fade(d, 0.05f, 1.5f);
+            return d;
         }
 
         /// <summary>The snowball-fight alarm: a buzzing two-tone siren that whoops up and down for about 2.6 s.</summary>

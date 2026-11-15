@@ -121,6 +121,8 @@ namespace FrostAndFound
         public Vector2 fallbackRoomSize = new Vector2(4f, 4f);
         [Tooltip("Trees, shrubs, rocks and big drifts per m² of open floor (0 = none). Big rooms get the most.")]
         [Range(0f, 2f)] public float sceneryDensity = 1f;
+        [Tooltip("How much darker the real room looks through passthrough (0.15 = 15% darker), so the game world pops.")]
+        [Range(0f, 0.8f)] public float passthroughDim = 0.15f;
         [Tooltip("MR: Space Setup furniture (tables, sofas, chairs…) hides the virtual snow, kids and snowballs behind it.")]
         public bool furnitureOccludes = true;
 

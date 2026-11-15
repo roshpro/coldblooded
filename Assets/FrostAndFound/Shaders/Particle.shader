@@ -5,6 +5,7 @@ Shader "FrostAndFound/Particle"
     {
         _BaseMap ("Texture", 2D) = "white" {}
         _BaseColor ("Tint", Color) = (1,1,1,1)
+        _NoOcclusion ("No Depth Occlusion", Float) = 0
         _Additive ("Additive", Float) = 0
         _NearFade ("Near Fade Distance (0 = off)", Float) = 0
         [HideInInspector] _SrcBlend ("Src", Float) = 5
@@ -24,12 +25,14 @@ Shader "FrostAndFound/Particle"
             #pragma vertex UnlitVert
             #pragma fragment Frag
             #pragma multi_compile_instancing
+            #pragma multi_compile_fragment _ HARD_OCCLUSION SOFT_OCCLUSION
             #include "FrostUnlitCore.hlsl"
             half4 Frag(Varyings i) : SV_Target
             {
                 half4 c = UnlitFragColor(i) * i.color;
                 // fade out flakes drifting right in front of your eyes (and in front of UI panels)
                 if (_NearFade > 0) c.a *= saturate((i.viewDist - _NearFade * 0.35) / (_NearFade * 0.65));
+                c.a *= FrostOcclusion(i.positionWS, _NoOcclusion);   // hidden behind real people and furniture
                 return c;
             }
             ENDHLSL

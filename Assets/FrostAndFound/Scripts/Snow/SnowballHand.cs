@@ -99,6 +99,7 @@ namespace FrostAndFound
             if (!SatieSound.Fire("scoop", ground, SatieSound.Snow)) AudioDirector.PlayAt(Sfx.ScoopCrunch, ground, 0.9f, Random.Range(0.93f, 1.07f));
             hand.Haptic(0.5f, 0.08f);
             st.Ball = Snowball.Create(hand.Palm.position, tune.snowballRadius);
+            DepthOcclusion.Exempt(st.Ball.gameObject);   // the hand holding it must not cut it out
             st.Ball.transform.localScale = Vector3.zero;
             st.FormTime = Time.time;
             if (hand == rig.FreeHand) PhotoHolder.Instance?.TuckAway();

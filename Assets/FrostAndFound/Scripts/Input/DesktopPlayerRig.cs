@@ -110,6 +110,33 @@ namespace FrostAndFound
             h.IsOpticalHand = false;
         }
 
+        /// <summary>The desktop stand-in for dimming passthrough: the sky goes towards night, and past halfway the
+        /// simulated room's ceiling lifts away so you can see up into it (for the northern lights).</summary>
+        public override void SetPassthroughDim(float dim, float seconds = 0f)
+        {
+            if (!m_Camera) return;
+            if (m_NightFade != null) StopCoroutine(m_NightFade);
+            m_NightFade = StartCoroutine(Night(Mathf.Clamp01(dim / 0.5f), seconds));
+        }
+
+        Coroutine m_NightFade;
+
+        System.Collections.IEnumerator Night(float to, float seconds)
+        {
+            var night = new Color(0.03f, 0.045f, 0.11f);
+            var from = m_Camera.backgroundColor;
+            var target = Color.Lerp(Palette.SkyHorizon, night, to);
+            if (to > 0.5f)
+                foreach (var t in FindObjectsByType<Transform>())
+                    if (t.name == "Ceiling" && t.GetComponentInParent<SimRoom>()) t.gameObject.SetActive(false);
+            for (float t = 0f; t < seconds; t += Time.unscaledDeltaTime)
+            {
+                m_Camera.backgroundColor = Color.Lerp(from, target, t / seconds);
+                yield return null;
+            }
+            m_Camera.backgroundColor = target;
+        }
+
         public override void Teleport(Vector3 feet, Quaternion facing)
         {
             m_Feet = feet; FloorY = feet.y;

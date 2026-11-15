@@ -81,7 +81,54 @@ namespace FrostAndFound
                 return room.IsPositionInSceneVolume(probe, r);
             };
             info.Recalculate();
+            AddDoorsAndFurniture(room, info);
             return true;
+        }
+
+        /// <summary>Doorways and labelled furniture from Space Setup, so the story can use the real room
+        /// (a knock at your actual door, Tony hiding behind your actual sofa).</summary>
+        static void AddDoorsAndFurniture(MRUKRoom room, RoomInfo info)
+        {
+            var kinds = new System.Collections.Generic.Dictionary<FurnitureKind, int>();
+            foreach (var a in room.Anchors)
+            {
+                if (!a) continue;
+                var tr = a.transform;
+                if (a.HasAnyLabel(MRUKAnchor.SceneLabels.DOOR_FRAME) && a.PlaneRect.HasValue)
+                {
+                    var rect = a.PlaneRect.Value;
+                    var mid = tr.TransformPoint(new Vector3(rect.center.x, rect.center.y, 0f));
+                    var inward = tr.forward.Flat();
+                    if (inward.sqrMagnitude < 1e-4f) continue;
+                    inward.Normalize();
+                    if (Vector3.Dot((info.Center - mid).Flat(), inward) < 0f) inward = -inward;   // face into the room
+                    var door = new RoomDoor
+                    {
+                        Threshold = new Vector3(mid.x, info.FloorY, mid.z), Inward = inward,
+                        Width = Mathf.Abs(rect.width * tr.lossyScale.x), Height = Mathf.Abs(rect.height * tr.lossyScale.y),
+                    };
+                    if (info.Contains(door.Inside(0.5f))) info.Doors.Add(door);
+                    continue;
+                }
+                if (!a.VolumeBounds.HasValue) continue;
+                FurnitureKind kind;
+                if (a.HasAnyLabel(MRUKAnchor.SceneLabels.TABLE)) kind = FurnitureKind.Table;
+                else if (a.HasAnyLabel(MRUKAnchor.SceneLabels.COUCH)) kind = FurnitureKind.Couch;
+                else if (a.HasAnyLabel(MRUKAnchor.SceneLabels.BED)) kind = FurnitureKind.Bed;
+                else if (a.HasAnyLabel(MRUKAnchor.SceneLabels.STORAGE)) kind = FurnitureKind.Storage;
+                else if (a.HasAnyLabel(MRUKAnchor.SceneLabels.SCREEN)) kind = FurnitureKind.Screen;
+                else if (a.HasAnyLabel(MRUKAnchor.SceneLabels.LAMP)) kind = FurnitureKind.Lamp;
+                else if (a.HasAnyLabel(MRUKAnchor.SceneLabels.PLANT)) kind = FurnitureKind.Plant;
+                else if (a.HasAnyLabel(MRUKAnchor.SceneLabels.OTHER)) kind = FurnitureKind.Other;
+                else continue;
+                var f = RoomFurniture.FromBox(kind, tr.localToWorldMatrix, a.VolumeBounds.Value);
+                if (f.TopY - info.FloorY < 0.12f || f.HalfWidth < 0.05f || f.HalfDepth < 0.05f) continue;   // rugs, mats
+                info.Furniture.Add(f);
+                kinds[kind] = kinds.TryGetValue(kind, out var n) ? n + 1 : 1;
+            }
+            var list = new System.Text.StringBuilder();
+            foreach (var kv in kinds) list.Append(list.Length > 0 ? ", " : "").Append(kv.Value).Append(' ').Append(kv.Key);
+            Debug.Log($"[Frost] Space Setup: {info.Doors.Count} door(s); furniture: {(list.Length > 0 ? list.ToString() : "none")}");
         }
 
         static void AddColliders(MRUKRoom room)

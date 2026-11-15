@@ -15,6 +15,7 @@ namespace FrostAndFound
     /// </summary>
     public static class Scenery
     {
+
         struct Obstacle { public Vector3 pos; public float radius; }
 
         static readonly Color Bark = new Color(0.62f, 0.3f, 0.17f);        // redwood: red-brown, fibrous
@@ -88,10 +89,19 @@ namespace FrostAndFound
             // and the title button in front of you (snowballs thrown at it mustn't hit a tree)
             float centreClear = Mathf.Clamp(1.4f + 0.025f * area, 1.6f, 2.6f);
             bool InPlay(Vector3 p, float r) =>
-                FrostUtil.FlatDistance(p, centre) < centreClear + r * 0.5f
+                NearDoor(p, r)
+                || FrostUtil.FlatDistance(p, centre) < centreClear + r * 0.5f
                 || FrostUtil.FlatDistance(p, feet) < 1.2f + r
                 || SegmentDistance(p, feet, centre) < 0.7f + r * 0.5f
                 || SegmentDistance(p, feet, feet + facing * 3f) < 0.8f + r * 0.5f;
+
+            // doorways stay clear: nobody plants a tree in front of a door (and a kid may walk in through it)
+            bool NearDoor(Vector3 p, float r)
+            {
+                foreach (var d in room.Doors)
+                    if (SegmentDistance(p, d.Threshold, d.Inside(1.3f)) < d.Width * 0.5f + 0.35f + r) return true;
+                return false;
+            }
 
             // ---- the kids walk round everything placed here
             var obstacles = new List<Obstacle>();

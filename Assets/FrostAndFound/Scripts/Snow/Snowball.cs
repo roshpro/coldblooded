@@ -93,6 +93,8 @@ namespace FrostAndFound
         {
             transform.SetParent(null, true);
             gameObject.layer = Layers.Snowball;
+            var mr = GetComponent<MeshRenderer>();   // out of your hand: real things in its path hide it again
+            if (mr) mr.renderingLayerMask &= ~DepthOcclusion.ExemptLayerBit;
             GetComponent<SphereCollider>().enabled = true;
             m_Rb.isKinematic = false;
             m_Rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
@@ -141,7 +143,7 @@ namespace FrostAndFound
             {
                 target.OnSnowballHit(this, contact.point, c.relativeVelocity, head);
             }
-            Splat(contact.point, contact.normal, target, c.collider.gameObject.layer == Layers.Snow || c.collider.GetComponentInParent<SnowSurface>());
+            Splat(contact.point, contact.normal, target, c.collider.gameObject.layer == Layers.Snow || c.collider.GetComponentInParent<SnowSurface>(), c.collider);
         }
 
         public bool IsFlying => m_Flying && !m_Done;
@@ -154,11 +156,12 @@ namespace FrostAndFound
             Splat(point, normal, target, false);
         }
 
-        void Splat(Vector3 point, Vector3 normal, ISnowballTarget target, bool onSnow)
+        void Splat(Vector3 point, Vector3 normal, ISnowballTarget target, bool onSnow, Collider hit = null)
         {
             if (m_Done) return;
             m_Done = true;
             Fx.SnowImpact(point, normal, m_Vel, onSnow, target != null ? 0.85f : 1f);
+            if (!onSnow && hit) SnowSplat.Spawn(point, normal, hit);   // snow left stuck to walls, furniture, props and kids for a while
             if (!SatieSound.Fire("snowball_hit", point)) AudioDirector.PlayAt(Sfx.Splat, point, 0.8f, Random.Range(0.9f, 1.1f));
             var snow = SnowSurface.Instance;
             if (onSnow && snow) snow.Stamp(point, Random.Range(0f, 360f), StampShape.Crater, 0.16f, 0.8f);

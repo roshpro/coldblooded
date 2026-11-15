@@ -1,6 +1,7 @@
 #ifndef FROST_UNLIT_CORE_INCLUDED
 #define FROST_UNLIT_CORE_INCLUDED
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "FrostOcclusion.hlsl"
 
 TEXTURE2D(_BaseMap); SAMPLER(sampler_BaseMap);
 CBUFFER_START(UnityPerMaterial)
@@ -11,10 +12,11 @@ CBUFFER_START(UnityPerMaterial)
     half _DstBlend;
     half _ZWrite;
     half _NearFade;
+    half _NoOcclusion;
 CBUFFER_END
 
 struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; half4 color : COLOR; UNITY_VERTEX_INPUT_INSTANCE_ID };
-struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; half4 color : COLOR; float viewDist : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID UNITY_VERTEX_OUTPUT_STEREO };
+struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; half4 color : COLOR; float viewDist : TEXCOORD1; float3 positionWS : TEXCOORD2; UNITY_VERTEX_INPUT_INSTANCE_ID UNITY_VERTEX_OUTPUT_STEREO };
 
 Varyings UnlitVert(Attributes input)
 {
@@ -27,6 +29,7 @@ Varyings UnlitVert(Attributes input)
     o.uv = TRANSFORM_TEX(input.uv, _BaseMap);
     o.color = input.color;
     o.viewDist = distance(positionWS, GetCameraPositionWS());
+    o.positionWS = positionWS;
     return o;
 }
 

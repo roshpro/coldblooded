@@ -25,6 +25,10 @@ namespace FrostAndFound
         float m_DodgeUntil, m_NextDodge, m_NextTaunt, m_TripAt, m_LastNearMissLine, m_SpeedNow;
         Vector3 m_Waypoint;
         bool m_HasWaypoint;
+        // ducking behind your real furniture (only when Space Setup has some)
+        float m_CoverUntil, m_NextCover;
+        RoomFurniture m_CoverPiece;
+        bool m_CoverPending;
         int m_WaypointsSinceTaunt;
         Coroutine m_DazeRoutine;
         DazeBirdies m_Birdies;
@@ -108,16 +112,31 @@ namespace FrostAndFound
             // safety net: trips over his own sled (and again every 20 s after he's back up, so the finale can't stall)
             if (Time.time > m_TripAt) { StartCoroutine(Trip()); return; }
 
+            float distToPlayer = FrostUtil.FlatDistance(transform.position, player);
+
+            // crouched behind your sofa / cabinet / bed, peeking at you: the real furniture hides him (Depth API)
+            if (Time.time < m_CoverUntil)
+            {
+                m_SpeedNow = 0f;
+                transform.rotation = Ease.Damp(transform.rotation, FrostUtil.FlatLookRotation(transform.position, rig.Head.position), 6f, Time.deltaTime);
+                if (distToPlayer < 1.4f) { m_CoverUntil = 0f; m_HasWaypoint = false; }   // you came round it: bolt!
+                return;
+            }
+
             // dodge the camera whenever he is in the viewfinder
             if (InViewfinder() && Time.time > m_NextDodge && !IsDodging) Dodge();
-
-            float distToPlayer = FrostUtil.FlatDistance(transform.position, player);
             float speed = distToPlayer < 1.2f ? tune.tonyPanicSpeed : tune.tonyRunSpeed;
             if (IsDodging) speed *= 0.25f;
             m_SpeedNow = Ease.Damp(m_SpeedNow, speed, 6f, Time.deltaTime);
 
             if (!m_HasWaypoint || FrostUtil.FlatDistance(transform.position, m_Waypoint) < 0.12f || (distToPlayer < 1.0f && FrostUtil.FlatDistance(m_Waypoint, player) < 1.4f))
             {
+                if (m_HasWaypoint && m_CoverPending && FrostUtil.FlatDistance(transform.position, m_Waypoint) < 0.12f)
+                {
+                    m_CoverPending = false;
+                    TakeCover();
+                    return;
+                }
                 if (m_HasWaypoint) m_WaypointsSinceTaunt++;
                 if (m_HasWaypoint && m_WaypointsSinceTaunt >= 2 && Time.time > m_NextTaunt && distToPlayer > 1.6f && !IsDodging)
                 {
@@ -139,6 +158,14 @@ namespace FrostAndFound
 
         Vector3 PickWaypoint(RoomInfo room, Vector3 player)
         {
+            m_CoverPending = false;
+            // now and then, make for the far side of a real piece of furniture and duck down behind it
+            if (Time.time > m_NextCover && room.Furniture.Count > 0 && m_Rng.NextDouble() < 0.55 && TryCoverSpot(room, player, out var cover))
+            {
+                m_CoverPending = true;
+                m_NextCover = Time.time + 6f + (float)m_Rng.NextDouble() * 4f;
+                return cover;
+            }
             var frosty = FrostyMarker.Position;
             Vector3 best = transform.position; float bestScore = float.MinValue;
             var away = (transform.position - player).Flat().normalized;
@@ -151,6 +178,7 @@ namespace FrostAndFound
                 if (frosty.HasValue && (SegmentDistance(transform.position.XZ(), p.XZ(), frosty.Value.XZ()) < Frosty.FootprintRadius + 0.1f
                     || FrostUtil.FlatDistance(p, frosty.Value) < Frosty.FootprintRadius + 0.3f)) continue;   // round him, never through him
                 if (SegmentDistance(transform.position.XZ(), p.XZ(), player.XZ()) < 0.8f) continue;
+                if (!KidNav.LineClear(transform.position, p)) continue;   // never straight through the sofa or a tree
                 // far side of the room, sideways to his current heading (zig-zag)
                 var dir = (p - transform.position).Flat().normalized;
                 float zig = 1f - Mathf.Abs(Vector3.Dot(dir, transform.forward));
@@ -159,6 +187,46 @@ namespace FrostAndFound
             }
             if (bestScore == float.MinValue) best = room.RandomFreePoint(0.25f, 0.45f, m_Rng);
             return best;
+        }
+
+        /// <summary>The far side of a real sofa, cabinet, bed or table from you, reachable in a straight dash.</summary>
+        bool TryCoverSpot(RoomInfo room, Vector3 player, out Vector3 spot)
+        {
+            spot = default;
+            float best = float.MinValue;
+            var frosty = FrostyMarker.Position;
+            foreach (var f in room.Furniture)
+            {
+                if (f.Height < 0.45f || f.Kind == FurnitureKind.Lamp || f.Kind == FurnitureKind.Plant || f.Kind == FurnitureKind.Screen) continue;
+                // anywhere round it that the furniture hides from you: behind it, or tucked round the end of a sofa
+                for (int a = 0; a < 12; a++)
+                {
+                    var dir = Quaternion.Euler(0f, a * 30f, 0f) * f.Forward;
+                    var p = f.EdgePoint(f.Center + dir * 10f, 0.3f, room.FloorY);
+                    // hidden means both his shoulders are behind it, not just a corner clipping the line
+                    var side = Vector3.Cross(Vector3.up, (p - player).Flat().normalized) * 0.16f;
+                    if (!f.Blocks(player, p + side) || !f.Blocks(player, p - side)) continue;
+                    float dSelf = FrostUtil.FlatDistance(p, transform.position), dPlayer = FrostUtil.FlatDistance(p, player);
+                    if (dSelf < 0.6f || dSelf > 4.2f || dPlayer < 1.9f) continue;
+                    if (!KidNav.Walkable(p) || !KidNav.LineClear(transform.position, p)) continue;
+                    if (SegmentDistance(transform.position.XZ(), p.XZ(), player.XZ()) < 0.9f) continue;   // not past your nose
+                    if (frosty.HasValue && SegmentDistance(transform.position.XZ(), p.XZ(), frosty.Value.XZ()) < Frosty.FootprintRadius + 0.1f) continue;
+                    // taller and wider cover hides more of him; closer is quicker to reach
+                    float score = Mathf.Min(f.Height, 1.1f) * 2f + Mathf.Min(f.HalfWidth, f.HalfDepth) - dSelf * 0.35f + (float)m_Rng.NextDouble() * 0.4f;
+                    if (score > best) { best = score; spot = p; m_CoverPiece = f; }
+                }
+            }
+            return best > float.MinValue;
+        }
+
+        void TakeCover()
+        {
+            float dur = 1.6f + (float)m_Rng.NextDouble() * 1.1f;
+            m_CoverUntil = Time.time + dur;
+            if (Anim) Anim.Duck(dur);
+            Debug.Log("[Frost] Tony ducks behind the " + (m_CoverPiece != null ? m_CoverPiece.Kind.ToString().ToLowerInvariant() : "furniture"));
+            if (m_Rng.NextDouble() < 0.4 && !DialogueRunner.AnyoneSpeaking)
+                DialogueRunner.Say(Lines.Get("tony_dodge_" + (1 + m_Rng.Next(3))), this, false);
         }
 
         static float SegmentDistance(Vector2 a, Vector2 b, Vector2 p)
