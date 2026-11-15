@@ -172,7 +172,8 @@ namespace FrostAndFound
     /// <summary>Pill button: Primary (blue), Secondary (grey), Icon (circle with a hover tooltip).</summary>
     public class HButton : HControl
     {
-        public enum Variant { Primary, Secondary, Icon, Ghost }
+        /// <summary>Round: a big circular accent button with just an icon (the title screen's Play).</summary>
+        public enum Variant { Primary, Secondary, Icon, Ghost, Round }
         Variant m_Variant;
         Material m_Fill;
         Transform m_Content, m_Ring;
@@ -199,17 +200,29 @@ namespace FrostAndFound
             m_Content = new GameObject("Content").transform;
             m_Content.SetParent(transform, false);
             m_Content.gameObject.layer = Layers.UI3D;
-            float r = variant == Variant.Icon ? size.y * 0.5f : size.y * 0.5f;
-            bool primary = variant == Variant.Primary;
+            float r = size.y * 0.5f;
+            bool round = variant == Variant.Round;
+            bool primary = IsAccent;
+            int seg = round ? 24 : 7;   // a smooth circle, not an octagon
             m_Fill = HUI.Glass(size, r, IdleColor, false, primary ? 0.2f : 0.12f, 0f, primary ? 0.25f : 0f, primary ? 0.7f : 0.35f);
             m_Fill.SetColor("_BaseColor", IdleColor);
-            UIKit.Quad(m_Content, "Fill", UIKit.RoundedRect(size.x, size.y, r), m_Fill, 0f);
+            UIKit.Quad(m_Content, "Fill", UIKit.RoundedRect(size.x, size.y, r, seg), m_Fill, 0f);
             m_RingMat = Palette.UnlitTextured(Texture2D.whiteTexture, Color.white.WithAlpha(0f), true, "HoverRing");
-            m_Ring = UIKit.Quad(m_Content, "Hover Ring", UIKit.RoundedFrame(size.x + 0.008f, size.y + 0.008f, r + 0.004f, 0.0028f), m_RingMat, 0.0005f);
+            float ringT = round ? 0.005f : 0.0028f;
+            m_Ring = UIKit.Quad(m_Content, "Hover Ring", UIKit.RoundedFrame(size.x + 0.008f, size.y + 0.008f, r + 0.004f, ringT, seg), m_RingMat, 0.0005f);
             m_Ring.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Overlay;
-            var textColor = variant == Variant.Primary ? Color.white : Palette.UiText;
+            var textColor = primary ? Color.white : Palette.UiText;
             float iconSize = Mathf.Min(size.y * 0.46f, 0.03f);
-            if (variant == Variant.Icon)
+            if (round)
+            {
+                // icon only; the play triangle's mass sits left of its box, so nudge it right to look centred
+                if (icon.HasValue)
+                {
+                    var ic = UIKit.IconQuad(m_Content, icon.Value, size.y * 0.42f, textColor, -0.002f);
+                    ic.localPosition = new Vector3(icon.Value == UIKit.Icon.Play ? size.x * 0.04f : 0f, 0, -0.002f);
+                }
+            }
+            else if (variant == Variant.Icon)
             {
                 if (icon.HasValue) UIKit.IconQuad(m_Content, icon.Value, size.y * 0.46f, textColor, -0.002f);
                 tooltip = label;
@@ -232,14 +245,10 @@ namespace FrostAndFound
             MakeCollider(size);
         }
 
-        Color IdleColor => m_Variant switch
-        {
-            Variant.Primary => Palette.UiAccent,
-            Variant.Ghost => Palette.UiPanelSolid,
-            _ => Palette.UiSurface,
-        };
-        Color HoverColor => m_Variant == Variant.Primary ? Palette.UiAccentHover : Palette.UiSurfaceHover;
-        Color PressColor => m_Variant == Variant.Primary ? Palette.UiAccentPressed : Palette.UiSurfacePressed;
+        bool IsAccent => m_Variant == Variant.Primary || m_Variant == Variant.Round;
+        Color IdleColor => IsAccent ? Palette.UiAccent : m_Variant == Variant.Ghost ? Palette.UiPanelSolid : Palette.UiSurface;
+        Color HoverColor => IsAccent ? Palette.UiAccentHover : Palette.UiSurfaceHover;
+        Color PressColor => IsAccent ? Palette.UiAccentPressed : Palette.UiSurfacePressed;
 
         public void SetLabel(string text) { if (m_Label) m_Label.text = text; tooltip = text; }
 

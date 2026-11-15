@@ -158,7 +158,7 @@ namespace FrostAndFound
             if (lucy && !DialogueRunner.AnyoneSpeaking && !Reacting) DialogueRunner.Say(Lines.Get(id), lucy, false);
         }
 
-        void OnThrown(Snowball ball) { if (!ball.Thrower) Throws++; }   // only yours count
+        void OnThrown(Snowball ball) { if (!ball.Thrower && GameManager.I && GameManager.I.State == GameState.Investigating) Throws++; }   // only yours, in the case (not the title)
         public void OnTonyHit() { Hits++; }
 
         // ------------------------------------------------------------------ show a photo (doc §5.2)
