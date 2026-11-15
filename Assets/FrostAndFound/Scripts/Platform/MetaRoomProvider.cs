@@ -36,6 +36,7 @@ namespace FrostAndFound
                 if (room != null && TryBuild(room, out var info))
                 {
                     AddColliders(room);
+                    if (FrostTuning.I.furnitureOccludes) AddOccluders(room);
                     m_Done = true;
                     RoomService.Set(info);
                     yield break;
@@ -100,6 +101,35 @@ namespace FrostAndFound
             fx.MeshMaterial = Palette.Unlit(Palette.Ink.WithAlpha(0f), true);
             fx.SpawnOnStart = MRUK.RoomFilter.None;   // we build it now, once
             fx.CreateMesh();
+        }
+
+        /// <summary>
+        /// Furniture from Space Setup drawn as invisible depth-only shapes: your real table/sofa/chair still shows through
+        /// passthrough, but virtual snow, drifts, kids and snowballs behind it are hidden instead of being drawn on top.
+        /// (The Depth API on the snow shader can't do this reliably: its depth map is coarse at chair legs and table edges.)
+        /// </summary>
+        static void AddOccluders(MRUKRoom room)
+        {
+            var go = new GameObject("Furniture Occluders (MRUK)");
+            var fx = go.AddComponent<EffectMesh>();
+            fx.Colliders = false;
+            fx.HideMesh = false;
+            fx.CastShadow = false;
+            fx.Layer = Layers.Room;
+            fx.Labels = MRUKAnchor.SceneLabels.TABLE | MRUKAnchor.SceneLabels.COUCH | MRUKAnchor.SceneLabels.BED |
+                        MRUKAnchor.SceneLabels.STORAGE | MRUKAnchor.SceneLabels.SCREEN | MRUKAnchor.SceneLabels.LAMP |
+                        MRUKAnchor.SceneLabels.PLANT | MRUKAnchor.SceneLabels.OTHER;
+            fx.MeshMaterial = Palette.DepthOccluder();
+            fx.SpawnOnStart = MRUK.RoomFilter.None;
+            fx.CreateMesh();
+            int n = 0;
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                n++;
+            }
+            Debug.Log($"[Frost] Furniture occluders: {n} pieces of furniture hide the snow behind them.");
         }
 #endif
     }

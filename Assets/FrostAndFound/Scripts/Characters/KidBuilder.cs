@@ -84,6 +84,7 @@ namespace FrostAndFound
                 rig.Height = want * rig.Visual.lossyScale.y;
                 smr.sharedMaterial = Palette.SoftTextured(slot != null ? slot.texture : null, "Kid_" + model.root.name);
                 // casts onto the snow, but no self-shadowing: a big hat brim would otherwise put the whole body in grey shade
+                // (the material does the real work: Palette.SoftTextured sets _ShadowStrength 0; URP ignores receiveShadows here)
                 smr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
                 smr.receiveShadows = false;
                 smr.updateWhenOffscreen = true;

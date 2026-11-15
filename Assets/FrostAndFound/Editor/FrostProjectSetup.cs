@@ -92,6 +92,7 @@ namespace FrostAndFound.EditorTools
             hub.blur = Shader.Find("FrostAndFound/Blur");
             hub.uiGlass = Shader.Find("FrostAndFound/UIGlass");
             hub.wool = Shader.Find("FrostAndFound/Wool");
+            hub.depthOccluder = Shader.Find("FrostAndFound/DepthOccluder");
             EditorUtility.SetDirty(hub);
 
             var tunePath = Root + "/Resources/FrostTuning.asset";
@@ -99,7 +100,7 @@ namespace FrostAndFound.EditorTools
                 AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<FrostTuning>(), tunePath);
             AssetDatabase.SaveAssets();
             int missing = 0;
-            foreach (var s in new Shader[] { hub.toon, hub.toonOutlined, hub.snow, hub.unlit, hub.unlitTransparent, hub.particle, hub.sky, hub.photo, hub.blur, hub.uiGlass, hub.wool })
+            foreach (var s in new Shader[] { hub.toon, hub.toonOutlined, hub.snow, hub.unlit, hub.unlitTransparent, hub.particle, hub.sky, hub.photo, hub.blur, hub.uiGlass, hub.wool, hub.depthOccluder })
                 if (!s) missing++;
             return missing == 0 ? "asset hub ok (11 shaders)" : $"asset hub: {missing} shaders missing!";
         }

@@ -197,7 +197,10 @@ namespace FrostAndFound
             m.SetColor("_ShadeColor", new Color(0.8f, 0.83f, 0.93f));   // a cool, light shade (multiplied by the texture)
             m.SetColor("_RimColor", new Color(0.92f, 0.96f, 1f));
             m.SetFloat("_RimStrength", 0.08f);
-            m.SetFloat("_ShadowStrength", 0.4f);
+            // characters ignore cast shadows entirely: their own hats (one mesh with the body) would otherwise drop a
+            // grey-blue shade over face and coat and wash out the colours. URP doesn't pass the renderer's
+            // receiveShadows flag to our toon shader, so this has to be switched off in the material.
+            m.SetFloat("_ShadowStrength", 0f);
             m.SetFloat("_RimPower", 3f);
             m.SetFloat("_BandThreshold", 0.42f);
             m.SetFloat("_BandSoftness", 0.34f);
@@ -212,6 +215,16 @@ namespace FrostAndFound
             if (s_Cache.TryGetValue(key, out var m) && m) return m;
             m = new Material(FrostAssets.Shader(transparent ? FrostAssets.ShaderId.UnlitTransparent : FrostAssets.ShaderId.Unlit)) { name = "Unlit_" + ColorUtility.ToHtmlStringRGBA(c) };
             m.SetColor("_BaseColor", c);
+            s_Cache[key] = m;
+            return m;
+        }
+
+        /// <summary>Invisible depth-only material: real objects (MR furniture) hide virtual things behind them.</summary>
+        public static Material DepthOccluder()
+        {
+            const string key = "depthOccluder";
+            if (s_Cache.TryGetValue(key, out var m) && m) return m;
+            m = new Material(FrostAssets.Shader(FrostAssets.ShaderId.DepthOccluder)) { name = "Depth Occluder", enableInstancing = true };
             s_Cache[key] = m;
             return m;
         }

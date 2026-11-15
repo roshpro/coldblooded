@@ -11,7 +11,7 @@ namespace FrostAndFound
     [CreateAssetMenu(menuName = "Frost & Found/Asset Hub", fileName = "FrostAssets")]
     public class FrostAssets : ScriptableObject
     {
-        public enum ShaderId { Toon, ToonOutlined, Snow, Unlit, UnlitTransparent, Particle, Sky, Photo, Blur, UIGlass, Wool }
+        public enum ShaderId { Toon, ToonOutlined, Snow, Unlit, UnlitTransparent, Particle, Sky, Photo, Blur, UIGlass, Wool, DepthOccluder }
 
         [Header("Shaders (auto-filled by Setup)")]
         public Shader toon;
@@ -25,6 +25,7 @@ namespace FrostAndFound
         public Shader blur;
         public Shader uiGlass;
         public Shader wool;
+        public Shader depthOccluder;
 
         [Header("Fonts (auto-filled by Setup from Assets/FrostAndFound/Fonts)")]
         public TMPro.TMP_FontAsset displayFont;   // Roboto Black
@@ -77,6 +78,7 @@ namespace FrostAndFound
                     case ShaderId.Blur: s = a.blur; break;
                     case ShaderId.UIGlass: s = a.uiGlass; break;
                     case ShaderId.Wool: s = a.wool; break;
+                    case ShaderId.DepthOccluder: s = a.depthOccluder; break;
                 }
             }
             if (s) return s;
