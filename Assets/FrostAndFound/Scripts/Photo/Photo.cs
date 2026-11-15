@@ -259,6 +259,9 @@ namespace FrostAndFound
         public bool Visible => Current && !IsTucked && m_Arrived;
         /// <summary>Set by ShowPhotoDetector while the player holds the photo out to a kid.</summary>
         public Transform FaceTarget { get; set; }
+        /// <summary>How far the photo has turned toward <see cref="FaceTarget"/> (0 = toward you, 1 = toward them):
+        /// it follows your push, so it turns as you present it (ShowPhotoDetector).</summary>
+        public float FaceAmount { get; set; } = 1f;
 
         bool m_Arrived;
         float m_Flip; // 0 = facing player, 1 = facing target
@@ -415,7 +418,7 @@ namespace FrostAndFound
             if (!rig || !Current || !m_Arrived || IsTucked) return;
             var hand = rig.FreeHand;
             if (!hand.Anchor) return;
-            m_Flip = Ease.Damp(m_Flip, FaceTarget ? 1f : 0f, 10f, Time.deltaTime);
+            m_Flip = Ease.Damp(m_Flip, FaceTarget ? Mathf.Clamp01(FaceAmount) : 0f, 12f, Time.deltaTime);
             HeldPose(rig, hand, FaceTarget, out var pos, out var rot, m_Flip);
             Current.transform.SetPositionAndRotation(pos, rot);
         }

@@ -96,6 +96,8 @@ namespace FrostAndFound
 
         public bool IsTracked;
         public bool IsOpticalHand;      // true = hand tracking, false = controller / simulated
+        /// <summary>Hand tracking is sure of the joints this frame (false while the hand blurs, shakes or is half hidden).</summary>
+        public bool HighConfidence = true;
         public float Grip;              // 0..1 (grip trigger, or fist curl)
         public float Trigger;           // 0..1 (index trigger, or index pinch strength)
         public bool TriggerDown;        // went past the press threshold this frame

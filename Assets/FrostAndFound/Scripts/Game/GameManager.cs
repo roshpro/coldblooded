@@ -99,7 +99,6 @@ namespace FrostAndFound
             SnowSurface.Create(r);
             m_Snowfall = Snowfall.Create(r);
             m_Scenery = Scenery.Create(r, Player, Random.Range(1, int.MaxValue));   // a fresh arrangement every game: snowy redwoods, shrubs, rocks and drifts — more of them in bigger rooms
-            FurnitureSnow.Create(r);     // snow settles on your real table, cabinet, bed and TV too (with the floor's)
             gameObject.AddComponent<FootprintTracker>();
             PhotoBackdrop.Create(r);
 

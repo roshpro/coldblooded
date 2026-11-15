@@ -67,7 +67,6 @@ Lefty mode in the pause menu swaps which hand holds the camera.
 | **Real-world occlusion** (Meta Depth API): a real person or piece of furniture in front of a kid, the snow or a snowball hides it. Your held camera and photos and the aurora are exempt, and so are the UI and the Polaroid's lens | `Shaders/FrostOcclusion.hlsl`, `Core/DepthOcclusion.cs` |
 | **The room tells the story** with passthrough colour grading: noir for the whole case, a flash when you take a photo, icy blue in a snowball fight (red pulses with the alarm), colour back at CASE CLOSED | `Game/PassthroughMood.cs` (runtime LUTs), `RoomTint` in `Game/OpeningSequence.cs` |
 | The opening's door stands on your real door when there is one | `Game/OpeningSequence.cs`, `GameManager.BeginCase` |
-| Snow settles on your real tables, cabinets, bed and TV | `Snow/FurnitureSnow.cs` |
 | Kids use your furniture: Tony hides behind your sofa or table in the chase, Dexter puts his cocoa down on a table, and everyone wanders over to look at things | `Characters/TonyKid.cs`, `Characters/Suspects.cs`, `Characters/KidBrain.cs` |
 | Northern lights fade in with the snow and stay up all game; a night veil darkens your real ceiling beneath them | `Game/NorthernLights.cs` |
 | The Polaroid can't see passthrough, so photos show a snowy backdrop only the lens can see | `PhotoBackdrop` in `Game/GameManager.cs` |

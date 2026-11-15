@@ -247,7 +247,8 @@ namespace FrostAndFound
             // ---- shutter. Hand tracking: a quick pinch, not necessarily all the way (or a full pinch). Controllers: the
             // trigger. Pressed while the camera is still coming up, it fires once it's there.
             bool tracked = rig.IsXR && hand.IsOpticalHand && hand.HasJoints;
-            if (tracked && QuickPinch(hand, out int before)) { ShootSteady(before); m_LastPose = Time.time; }
+            // hand tracking: only a real pinch shoots (the system's own pinch signal fires on shaky, blurred hands)
+            if (tracked) { if (QuickPinch(hand, out int before)) { ShootSteady(before); m_LastPose = Time.time; } }
             else if (Enabled && hand.TriggerDown && m_Cooldown <= 0f)
             {
                 if (m_Raise >= 0.95f) { if (tracked) ShootSteady(WidestRecent(Time.time - FrostTuning.I.quickPinchWindow)); else TakePhoto(); }
@@ -265,19 +266,27 @@ namespace FrostAndFound
         bool QuickPinch(HandRig hand, out int before)
         {
             before = -1;
-            var tune = FrostTuning.I;
             float gap = hand.PinchGap;
-            if (!m_QuickArmed && gap > m_QuickOpenGap * 0.75f) m_QuickArmed = true;
+            // a shaking or blurred hand: tracking jitters the fingertips by centimetres, so nothing counts until it's
+            // steady again (and it has to stay steady a moment)
+            bool steady = hand.HighConfidence && hand.Tracker.Instant.magnitude < MaxShakeSpeed;
+            if (!steady) { m_SteadySince = -1f; return false; }
+            if (m_SteadySince < 0f) m_SteadySince = Time.time;
+            if (Time.time - m_SteadySince < SteadyFor) return false;
+            if (!m_QuickArmed && gap > PinchOpen) m_QuickArmed = true;   // fingers properly apart again: the next pinch counts
             if (!Enabled || !m_Up || m_Raise < 0.95f || m_Busy || m_Cooldown > 0f || !m_QuickArmed) return false;
-            // only since the camera settled, so reaching into the gesture doesn't count as the pinch
-            before = WidestRecent(Mathf.Max(Time.time - tune.quickPinchWindow, m_UpSince + 0.15f));
-            if (before < 0) return false;
-            float open = m_HistGap[before];
-            if (open - gap < Mathf.Max(tune.quickPinchMin, open * tune.quickPinchFraction)) return false;
+            if (gap > PinchClosed) return false;   // thumb and index actually have to meet
+            // ...coming from apart (not just held shut), since the camera settled so reaching into the gesture doesn't count
+            before = WidestRecent(Mathf.Max(Time.time - 0.6f, m_UpSince + 0.15f));
+            if (before < 0 || m_HistGap[before] < PinchOpen) return false;
             m_QuickArmed = false;
-            m_QuickOpenGap = open;
+            m_QuickOpenGap = m_HistGap[before];
             return true;
         }
+
+        // a real pinch: thumb and index within 2.2 cm, from at least 4 cm apart; ignored while the hand's moving fast
+        const float PinchClosed = 0.022f, PinchOpen = 0.04f, MaxShakeSpeed = 1.1f, SteadyFor = 0.12f;
+        float m_SteadySince = -1f;
 
         /// <summary>The history entry with the widest pinch since <paramref name="since"/> (-1 if none).</summary>
         int WidestRecent(float since)

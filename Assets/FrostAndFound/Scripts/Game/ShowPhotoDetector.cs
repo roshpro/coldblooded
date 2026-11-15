@@ -17,7 +17,7 @@ namespace FrostAndFound
         const float PushDistance = 0.1f, PushWindow = 3f, RearmPullback = 0.08f, SampleEvery = 0.05f;
         const int Samples = 64;
 
-        Kid m_Candidate;
+        Kid m_Candidate, m_ShownTo;
         float m_Cooldown;
         bool m_Armed = true;
         float m_PeakReach;
@@ -67,17 +67,28 @@ namespace FrostAndFound
                 float score = face + dist * 4f - (isNeeded ? 12f : 0f);
                 if (score < best) { best = score; target = kid; }
             }
-            holder.FaceTarget = target ? target.Rig.Head : null;
             m_Candidate = target;
-
-            // re-arm once the photo's been pulled back in (or the arm dropped): one push, one show
             float extension = Vector3.Distance(palm, head);
+
+            // re-arm once the photo's been pulled back in (or the arm dropped): one push, one show. Until then the
+            // photo stays turned toward whoever you showed it to, while they look at it.
             if (!m_Armed)
             {
                 m_PeakReach = Mathf.Max(m_PeakReach, extension);
-                if (extension < tune.armExtendedDistance - 0.05f || extension < m_PeakReach - RearmPullback) { m_Armed = true; m_Count = 0; }
-                return;
+                if (extension < tune.armExtendedDistance - 0.05f || extension < m_PeakReach - RearmPullback) { m_Armed = true; m_Count = 0; m_ShownTo = null; }
+                else
+                {
+                    holder.FaceTarget = m_ShownTo ? m_ShownTo.Rig.Head : null;
+                    holder.FaceAmount = 1f;
+                    return;
+                }
             }
+
+            // the photo turns toward the kid as you push it out to them: part-way while you push, all the way the
+            // moment it counts; held close (or looking at nobody) it faces you
+            float progress = target && extension > tune.armExtendedDistance - 0.08f ? Mathf.Clamp01(PushTravel(palm, (target.HeadPoint - head).Flat().normalized) / PushDistance) : 0f;
+            holder.FaceTarget = target ? target.Rig.Head : null;
+            holder.FaceAmount = progress * 0.85f;
             if (!target || m_Cooldown > 0f) return;
             if (extension < tune.armExtendedDistance || palm.y < head.y - 0.8f) return;
             if (!Pushed(palm, (target.HeadPoint - head).Flat().normalized)) return;
@@ -85,6 +96,9 @@ namespace FrostAndFound
             // a push at them: this counts
             m_Armed = false;
             m_PeakReach = extension;
+            m_ShownTo = target;
+            holder.FaceTarget = target.Rig.Head;
+            holder.FaceAmount = 1f;
             if (SnowballFight.Active) { SnowballFight.I.NotNow(target); return; }   // mid-fight nobody's looking at photos
             if (!director.CanShow || target.Busy) return;
             m_Cooldown = 2.5f;
@@ -97,6 +111,8 @@ namespace FrostAndFound
         void Clear(PhotoHolder holder)
         {
             holder.FaceTarget = null;
+            holder.FaceAmount = 1f;
+            m_ShownTo = null;
             m_Candidate = null;
             m_Count = 0;
             m_Armed = true;
@@ -112,7 +128,10 @@ namespace FrostAndFound
         }
 
         // has the hand moved PushDistance toward the kid over the last few seconds (however slowly)?
-        bool Pushed(Vector3 palm, Vector3 toward)
+        bool Pushed(Vector3 palm, Vector3 toward) => PushTravel(palm, toward) >= PushDistance;
+
+        // how far the hand has come toward the kid over the last few seconds
+        float PushTravel(Vector3 palm, Vector3 toward)
         {
             float most = 0f;
             for (int i = 1; i < m_Count; i++)
@@ -121,7 +140,7 @@ namespace FrostAndFound
                 if (Time.time - m_Time[k] > PushWindow) break;
                 most = Mathf.Max(most, Vector3.Dot((palm - m_Pos[k]).Flat(), toward));
             }
-            return most >= PushDistance;
+            return most;
         }
     }
 }

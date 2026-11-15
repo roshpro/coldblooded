@@ -304,6 +304,7 @@ namespace FrostAndFound
                 else { h.Palm.localPosition = new Vector3(0, -0.02f, 0.06f); h.Palm.localRotation = Quaternion.identity; }
                 if (tip) h.Tip.position = tip.position; else h.Tip.localPosition = new Vector3(0, 0, 0.15f);
                 h.Grip = FistCurl(skel);
+                h.HighConfidence = ovrHand.IsDataHighConfidence;
                 float pinch = ovrHand.GetFingerPinchStrength(OVRHand.HandFinger.Index);
                 h.UpdateTrigger(pinch, 0.85f, 0.55f);
                 h.PrimaryDown = false;
