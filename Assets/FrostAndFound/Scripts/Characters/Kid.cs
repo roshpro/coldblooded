@@ -61,6 +61,12 @@ namespace FrostAndFound
         public KidAnimator Anim { get; private set; }
         public Vector3 Velocity { get; private set; }
         public bool Busy { get; set; }
+        /// <summary>Seeing stars after a snowball or a punch: they stand there dizzy and do nothing else (walks pause,
+        /// a throw in progress is dropped, no new throws or poses) until it wears off.</summary>
+        public bool IsStunned => Time.time < m_StunnedUntil;
+        public const float StunSeconds = 2.4f;
+        float m_StunnedUntil = -1f;
+        Coroutine m_Throw;
         public bool CanMove { get; set; } = true;
         public Vector3 HomePosition { get; set; }
         public Quaternion HomeRotation { get; set; }
@@ -166,7 +172,7 @@ namespace FrostAndFound
             }
             // idle: turn to face the player if they're near and we're not walking
             var player = PlayerRig.Active;
-            if (player && m_Move == null && CanMove && !Busy)
+            if (player && m_Move == null && CanMove && !Busy && !IsStunned)
             {
                 // whatever has our attention (the friend we walked over to, Frosty) for a while, else you if you're near
                 float d = FrostUtil.FlatDistance(transform.position, player.Head.position);
@@ -262,6 +268,7 @@ namespace FrostAndFound
             if (room != null) target.y = room.FloorY;
             while (true)
             {
+                while (IsStunned) yield return null;   // dizzy: the walk waits
                 var to = (target - transform.position).Flat();
                 float dist = to.magnitude;
                 if (dist < 0.05f) break;
@@ -362,9 +369,9 @@ namespace FrostAndFound
         /// <summary>Scoop up a snowball and throw it at a world point. False if this kid can't right now.</summary>
         public bool ThrowSnowballAt(Vector3 target)
         {
-            if (!Anim || !Anim.IsHumanoid || Anim.IsThrowing || Busy) return false;
+            if (!Anim || !Anim.IsHumanoid || Anim.IsThrowing || Busy || IsStunned) return false;
             StopMoving();
-            StartCoroutine(ThrowRoutine(target));
+            m_Throw = StartCoroutine(ThrowRoutine(target));
             return true;
         }
 
@@ -373,6 +380,7 @@ namespace FrostAndFound
             Busy = true;
             yield return Anim.ScoopAndThrow(this, target);
             Busy = false;
+            m_Throw = null;
         }
 
         internal static void NotifyThrew(Kid kid, Snowball ball) => ThrewSnowball?.Invoke(kid, ball);
@@ -389,7 +397,7 @@ namespace FrostAndFound
         /// <summary>Called when this kid is in frame of a photo — each kid has a pose (doc: Sherman throws up two peace signs, Tony flexes).</summary>
         public virtual void OnPhotographed(PhotoData photo)
         {
-            if (Busy || Time.time - m_LastPoseTime < 6f) return;
+            if (Busy || IsStunned || Time.time - m_LastPoseTime < 6f) return;
             m_LastPoseTime = Time.time;
             Anim.StrikePose(PoseFor(), 1.3f);
             if (Faces) Faces.Show(FaceExpression.O, 0.6f);
@@ -410,7 +418,9 @@ namespace FrostAndFound
         protected void TakeHit(Vector3 point, Vector3 velocity, bool headshot, bool snowball, bool playerSnowball = false)
         {
             Anim.HitReact();
-            if (Faces) Faces.Dizzy(2.4f);
+            if (Faces) Faces.Dizzy(StunSeconds);
+            m_StunnedUntil = Time.time + StunSeconds;
+            if (m_Throw != null) { StopCoroutine(m_Throw); m_Throw = null; Busy = false; Anim.CancelThrow(); }
             if (snowball)
             {
                 AudioDirector.PlayAt(headshot ? Sfx.Bonk : Sfx.Splat, point, headshot ? 0.7f : 0.9f, Random.Range(0.95f, 1.08f));

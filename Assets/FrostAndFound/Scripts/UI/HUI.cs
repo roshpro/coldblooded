@@ -653,9 +653,12 @@ namespace FrostAndFound
         Transform m_Root;
         bool m_Showing;
 
+        /// <summary>Text toasts are switched off: the game teaches with the animated gesture hints instead.</summary>
+        public const bool ShowText = false;
+
         public static void Show(string text, UIKit.Icon icon, float seconds = 4f)
         {
-            if (!FrostPrefs.Tips) return;
+            if (!ShowText) return;
             if (!s_I) s_I = new GameObject("[Frost Toasts]").AddComponent<HToast>();
             s_I.m_Queue.Enqueue((text, icon, seconds));
         }

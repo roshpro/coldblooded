@@ -307,6 +307,7 @@ namespace FrostAndFound
         {
             Dropped.Remove(p);
             p.PickUp();
+            p.transform.localScale = Vector3.one;
             if (Current && Current != p) Current.gameObject.SetActive(false);
             Current = p;
             m_Arrived = true;

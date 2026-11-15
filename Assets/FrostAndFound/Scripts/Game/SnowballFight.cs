@@ -119,8 +119,26 @@ namespace FrostAndFound
                 var rig = PlayerRig.Active;
                 var room = RoomService.Current;
                 if (!rig || room == null) yield break;
-                if (k.Busy || (k.Anim && k.Anim.IsThrowing) || k.IsMoving) { yield return null; continue; }
+                if (k.Busy || k.IsStunned || (k.Anim && k.Anim.IsThrowing) || k.IsMoving) { yield return null; continue; }
                 var you = rig.Head.position;
+                // now and then someone gets a kid instead (one who isn't already seeing stars)
+                if (Random.value < KidTargetChance && TryKidTarget(k, out var victim))
+                {
+                    float kd = FrostUtil.FlatDistance(k.transform.position, victim.transform.position);
+                    var kidAim = victim.AimPoint + Random.insideUnitSphere * Mathf.Lerp(0.15f, 0.4f, Mathf.Clamp01(kd / 5f));
+                    if (k.ThrowSnowballAt(kidAim))
+                    {
+                        if (Random.value < 0.35f && !DialogueRunner.IsSpeaking(k.id))
+                        {
+                            var shout = Lines.Get(Cast.Key(k.id) + "_fight");
+                            if (shout != null) DialogueRunner.Say(shout, k, false);
+                        }
+                        yield return null;
+                        while (m_Active && k && k.Anim && k.Anim.IsThrowing) yield return null;
+                        yield return new WaitForSeconds(Random.Range(0.8f, 2f));
+                        continue;
+                    }
+                }
                 float d = FrostUtil.FlatDistance(k.transform.position, you);
                 // close in (or back off) to a good throwing distance, if there's room to; otherwise throw from here
                 if ((d > 5.5f || d < 1.1f) && TrySpot(room, you, k, Random.Range(2.6f, 4f), out var spot, d < 1.1f ? 120f : 35f))
@@ -147,6 +165,24 @@ namespace FrostAndFound
                 if (m_Active && k && Random.value < 0.4f && TrySpot(room, you, k, Mathf.Clamp(d, 2.6f, 4.5f), out var side, 50f))
                     k.MoveTo(side, 1.6f);
             }
+        }
+
+        const float KidTargetChance = 0.25f;   // about one throw in four goes at another kid
+
+        /// <summary>Another kid within throwing range of <paramref name="k"/> who isn't stunned (nearer ones more likely).</summary>
+        static bool TryKidTarget(Kid k, out Kid victim)
+        {
+            victim = null;
+            float best = float.MaxValue;
+            foreach (var o in Kid.All)
+            {
+                if (!o || o == k || o.IsStunned || (o is TonyKid t && t.State != TonyKid.TonyState.Idle)) continue;
+                float d = FrostUtil.FlatDistance(k.transform.position, o.transform.position);
+                if (d < 1.2f || d > 6f) continue;
+                float score = d * Random.Range(0.6f, 1.4f);
+                if (score < best) { best = score; victim = o; }
+            }
+            return victim;
         }
 
         /// <summary>A free spot about `range` from you, near the line to the kid (turned up to ±spread degrees),

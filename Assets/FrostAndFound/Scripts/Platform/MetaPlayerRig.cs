@@ -44,6 +44,11 @@ namespace FrostAndFound
             m_GloveMat.SetFloat("_Inflate", 0.0035f);
             m_LeftGlove = NativeGlove.Create(leftHand, leftSkeleton, m_GloveMat);
             m_RightGlove = NativeGlove.Create(rightHand, rightSkeleton, m_GloveMat);
+            // holding controllers: the headset still poses your hands (wrapped round the controllers) so the same
+            // knitted hand shows, and keeps the hand data valid while a controller is in it
+            if (OVRManager.instance) OVRManager.instance.controllerDrivenHandPosesType = OVRManager.ControllerDrivenHandPosesType.ConformingToController;
+            if (leftHand) leftHand.m_showState = OVRInput.InputDeviceShowState.Always;
+            if (rightHand) rightHand.m_showState = OVRInput.InputDeviceShowState.Always;
             // passthrough shows your real room, so the guardian lines aren't needed on top of it
             if (OVRManager.instance) OVRManager.instance.shouldBoundaryVisibilityBeSuppressed = true;
         }
@@ -88,8 +93,8 @@ namespace FrostAndFound
             SampleJoints(Left, leftSkeleton);
             SampleJoints(Right, rightSkeleton);
             SampleTrackers();
-            Left.HasNativeMesh = m_LeftGlove != null && Left.IsOpticalHand && Left.HasJoints && m_LeftGlove.Showing();
-            Right.HasNativeMesh = m_RightGlove != null && Right.IsOpticalHand && Right.HasJoints && m_RightGlove.Showing();
+            Left.HasNativeMesh = m_LeftGlove != null && Left.HasJoints && m_LeftGlove.Showing();
+            Right.HasNativeMesh = m_RightGlove != null && Right.HasJoints && m_RightGlove.Showing();
         }
 
         /// <summary>
@@ -185,7 +190,9 @@ namespace FrostAndFound
             bool controllerTracked = OVRInput.IsControllerConnected(ctrl) && (OVRInput.GetControllerPositionTracked(ctrl) || OVRInput.GetControllerOrientationTracked(ctrl));
             h.IsTracked = handTracked || controllerTracked;
 
-            if (controllerTracked && !handTracked)
+            // a controller in this hand drives it (the hand pose then comes from the controller too)
+            bool inHand = controllerTracked && (!handTracked || OVRInput.GetControllerIsInHandState(h.Side == HandSide.Left ? OVRInput.Hand.HandLeft : OVRInput.Hand.HandRight) == OVRInput.ControllerInHandState.ControllerInHand);
+            if (inHand)
             {
                 h.IsOpticalHand = false;
                 var src = controllerAnchor ? controllerAnchor : handAnchor;
@@ -196,8 +203,8 @@ namespace FrostAndFound
                 h.Grip = OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger, ctrl);
                 h.UpdateTrigger(OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, ctrl));
                 h.PrimaryDown = OVRInput.GetDown(OVRInput.Button.One, ctrl);
-                h.PhotoPose = h.Trigger;
-                h.HasJoints = false;
+                // the camera comes up on the side grip; the index (top) trigger is the shutter
+                h.PhotoPose = h.Grip;
             }
             else if (handTracked)
             {
@@ -227,23 +234,13 @@ namespace FrostAndFound
             }
         }
 
-        /// <summary>
-        /// 0..1, how much the hand is making the camera gesture: thumb and index roughly parallel with their pads
-        /// facing each other across the gap (as if holding the camera's top and bottom edges), not too far apart.
-        /// A flat hand has them roughly parallel too, but side by side in the palm's plane, so that doesn't count.
-        /// </summary>
+        /// <summary>0..1, how much the hand is making the camera gesture: just how close thumb and index are (any angle),
+        /// starting at <c>cameraAppearGap</c> and full by <c>cameraFullGap</c> (or once OVR reports a pinch).</summary>
         static float CameraPose(HandRig h)
         {
             if (!h.HasJoints) return 0f;
-            var j = h.Joints;
             var tune = FrostTuning.I;
-            Vector3 index = j[7] - j[5], thumb = j[3] - j[1], gap = j[7] - j[3];
-            if (index.sqrMagnitude < 1e-8f || thumb.sqrMagnitude < 1e-8f || gap.sqrMagnitude < 1e-8f) return 0f;
-            float parallel = Mathf.InverseLerp(tune.cameraParallelFade, tune.cameraParallelDeg, Vector3.Angle(index, thumb));
-            var palm = Vector3.Cross(j[8] - h.Wrist, j[16] - j[4]);
-            float facing = palm.sqrMagnitude > 1e-10f ? Mathf.InverseLerp(0.25f, 0.5f, Mathf.Abs(Vector3.Dot(gap.normalized, palm.normalized))) : 1f;
-            float near = Mathf.InverseLerp(tune.cameraMaxGap, tune.cameraMaxGap - 0.02f, gap.magnitude);
-            return parallel * facing * near;
+            return Mathf.InverseLerp(tune.cameraAppearGap, tune.cameraFullGap, h.PinchGap);
         }
 
         static readonly OVRSkeleton.BoneId[][] s_XrChains =
@@ -268,7 +265,7 @@ namespace FrostAndFound
         static void SampleJoints(HandRig h, OVRSkeleton skel)
         {
             h.HasJoints = false;
-            if (!h.IsOpticalHand || !skel || !skel.IsInitialized || !skel.IsDataValid || skel.Bones == null || skel.Bones.Count == 0) return;
+            if (!h.IsTracked || !skel || !skel.IsInitialized || !skel.IsDataValid || skel.Bones == null || skel.Bones.Count == 0) return;
             var t = skel.GetSkeletonType();
             bool xr = t == OVRSkeleton.SkeletonType.XRHandLeft || t == OVRSkeleton.SkeletonType.XRHandRight;
             var chains = xr ? s_XrChains : s_OvrChains;

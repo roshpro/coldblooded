@@ -48,7 +48,7 @@ namespace FrostAndFound
                     // side, doesn't count
                     float extension = Vector3.Distance(palm, head);
                     float reach = Vector3.Dot(reachDir, toKid.normalized);
-                    if (extension < tune.armExtendedDistance || reach < 0.22f) continue;
+                    if (extension < tune.armExtendedDistance || reach < 0.08f) continue;
                     if (palm.y < head.y - 0.8f) continue;
                     float ang = Vector3.Angle(reachDir, toKid);
                     if (ang < bestAngle) { bestAngle = ang; target = kid; }

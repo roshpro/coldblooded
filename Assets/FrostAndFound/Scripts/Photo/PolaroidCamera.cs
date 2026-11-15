@@ -32,7 +32,7 @@ namespace FrostAndFound
 
         const float UpAtHand = 0.85f;       // camera-gesture progress where it's fully there (hand tracking: ~5 cm)
         const float UpAtController = 0.3f;  // the same for a controller's trigger travel
-        const float StayAbove = 0.15f;      // once there, it stays while the gesture is held at least this much
+        const float StayAbove = 0.02f;      // once there, it stays while the gesture is held at least this much
         const float LowerDelay = 0.6f;      // the camera lingers this long after you relax your fingers
         const float EjectSeconds = 0.9f;
         const float GrabReach = 0.085f;     // how close your free hand has to get to the print
@@ -74,10 +74,13 @@ namespace FrostAndFound
         const int HistoryN = 48;
         readonly float[] m_HistT = new float[HistoryN], m_HistGap = new float[HistoryN];
         readonly Vector3[] m_HistPos = new Vector3[HistoryN];
-        readonly Quaternion[] m_HistRot = new Quaternion[HistoryN];
+        readonly Quaternion[] m_HistRot = new Quaternion[HistoryN], m_HistHandRot = new Quaternion[HistoryN];
+        readonly Vector3[] m_HistHandPos = new Vector3[HistoryN];
         int m_HistHead = -1, m_HistCount;
         bool m_Frozen, m_QuickArmed = true;
         float m_FreezeUntil, m_QuickOpenGap, m_UpSince;
+        // while shooting, the camera's pose relative to your hand (wrist) is held: it moves with your hand, but the
+        // fingers closing can't tip it
         Vector3 m_FrozenPos; Quaternion m_FrozenRot = Quaternion.identity;
         int m_PlacedFrame = -1;
 
@@ -175,10 +178,11 @@ namespace FrostAndFound
                 ProcMesh.Part("Stripe", t, ProcMesh.RoundedBox(0.1f, 1), Palette.Toon(rainbow[i], false, 0.2f),
                     new Vector3(-side * (0.0151f + i * 0.0042f), 0f, 0.0341f), new Vector3(0.0042f, 0.032f, 0.003f));
             // the photo slot along the front-bottom edge, just above the base
-            ProcMesh.Part("Slot", t, ProcMesh.RoundedBox(0.3f, 1), Palette.Toon(Palette.Coal), new Vector3(0, -0.0245f, 0.034f), new Vector3(0.08f, 0.0025f, 0.006f));
+            // the photo slot: a slit across the bottom, so prints hang down out of it facing you
+            ProcMesh.Part("Slot", t, ProcMesh.RoundedBox(0.3f, 1), Palette.Toon(Palette.Coal), new Vector3(0, -0.0326f, 0.004f), new Vector3(0.094f, 0.002f, 0.005f));
             // viewfinder bezel on the back (the screen itself is added in Build)
             ProcMesh.Part("Bezel", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(-0.006f * side, 0f, -0.0345f), new Vector3(0.04f, 0.039f, 0.004f));
-            Slot = ProcMesh.Pivot("PhotoSlot", t, new Vector3(0, -0.0245f, 0.037f));
+            Slot = ProcMesh.Pivot("PhotoSlot", t, new Vector3(0, -0.0327f, 0.004f));
             m_Body.localPosition = new Vector3(0, 0.01f, -0.005f);
             MeshMerger.Merge(m_Body, null, 0f);
         }
@@ -195,7 +199,7 @@ namespace FrostAndFound
             float target;
             bool gate = true;
             // while it's coming in, it's sized to the pinch you're making; once it's settled it keeps that size
-            if (!m_Up) GripScale = rig.IsXR && hand.HasJoints ? Mathf.Clamp(hand.PinchGap / ContactSpan, 0.8f, 1.1f) : 1f;
+            if (!m_Up) GripScale = rig.IsXR && hand.IsOpticalHand && hand.HasJoints ? Mathf.Clamp(hand.PinchGap / ContactSpan, 0.8f, 1.1f) : 1f;
             if (!rig.IsXR) { target = 1f; m_Up = true; }   // desktop stand-in: always in hand
             else
             {
@@ -204,16 +208,20 @@ namespace FrostAndFound
                 var snow = SnowSurface.Instance;
                 bool low = snow && hand.Palm && hand.Palm.position.y - snow.SurfaceHeightAt(hand.Palm.position) < FrostTuning.I.scoopHeight + 0.12f;
                 bool busy = SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand);
-                gate = Enabled && hand.IsTracked && hand.Grip < 0.55f && !busy && (m_Up || (!low && InView(rig, hand)));
+                // (controllers: holding the side grip is the gesture, so a fist and the view cone don't apply)
+                bool optical = hand.IsOpticalHand;
+                gate = Enabled && hand.IsTracked && (!optical || hand.Grip < 0.55f) && !busy && !low && (m_Up || !optical || InView(rig, hand));
                 float pose = gate ? Mathf.Clamp01(hand.PhotoPose) : 0f;
                 float upAt = hand.IsOpticalHand ? UpAtHand : UpAtController;
                 if (!m_Up && pose >= upAt) Settle(hand);
                 if (m_Up && pose > StayAbove) m_LastPose = Time.time;
-                if (m_Up && Time.time - m_LastPose >= LowerDelay && !m_Waiting && !m_Busy && !m_QueuedShot) m_Up = false;
+                if (m_Up && Time.time - m_LastPose >= LowerDelay && !m_Busy && !m_QueuedShot) m_Up = false;
                 target = m_Up ? 1f : Mathf.Clamp01(pose / upAt) * 0.9f;
             }
-            if (m_Waiting || m_Busy) { target = 1f; m_Up = true; }    // mid-shot, or a print still in the slot
+            if (m_Busy) { target = 1f; m_Up = true; }    // mid-shot
             if (m_Hidden || !hand.IsTracked) { target = 0f; m_Up = false; m_QueuedShot = false; }
+            // put away with a print still hanging out of it: the print falls to the snow
+            if (!m_Up && m_Waiting && (!rig.IsXR || target < 0.9f)) DropWaiting();
             m_Raise = Mathf.MoveTowards(m_Raise, target, dt / (target > m_Raise ? 0.12f : 0.2f));
             // a little bump as it settles into your hand
             m_Pop = Mathf.Min(1f, m_Pop + dt / 0.2f);
@@ -238,12 +246,11 @@ namespace FrostAndFound
             if (tracked && QuickPinch(hand, out int before)) { ShootSteady(before); m_LastPose = Time.time; }
             else if (Enabled && hand.TriggerDown && m_Cooldown <= 0f)
             {
-                if (m_Waiting) Jammed(hand);
-                else if (m_Raise >= 0.95f) { if (tracked) ShootSteady(WidestRecent(Time.time - FrostTuning.I.quickPinchWindow)); else TakePhoto(); }
+                if (m_Raise >= 0.95f) { if (tracked) ShootSteady(WidestRecent(Time.time - FrostTuning.I.quickPinchWindow)); else TakePhoto(); }
                 else if (gate) { if (!m_Up) Settle(hand); m_QueuedShot = true; m_LastPose = Time.time; }
             }
             if (m_QueuedShot && (!Enabled || !hand.IsTracked)) m_QueuedShot = false;
-            if (m_QueuedShot && m_Raise >= 0.95f) { m_QueuedShot = false; if (!m_Waiting) TakePhoto(); }
+            if (m_QueuedShot && m_Raise >= 0.95f) { m_QueuedShot = false; TakePhoto(); }
         }
 
         /// <summary>
@@ -257,7 +264,7 @@ namespace FrostAndFound
             var tune = FrostTuning.I;
             float gap = hand.PinchGap;
             if (!m_QuickArmed && gap > m_QuickOpenGap * 0.75f) m_QuickArmed = true;
-            if (!Enabled || !m_Up || m_Raise < 0.95f || m_Waiting || m_Busy || m_Cooldown > 0f || !m_QuickArmed) return false;
+            if (!Enabled || !m_Up || m_Raise < 0.95f || m_Busy || m_Cooldown > 0f || !m_QuickArmed) return false;
             // only since the camera settled, so reaching into the gesture doesn't count as the pinch
             before = WidestRecent(Mathf.Max(Time.time - tune.quickPinchWindow, m_UpSince + 0.15f));
             if (before < 0) return false;
@@ -281,15 +288,20 @@ namespace FrostAndFound
             return best;
         }
 
-        /// <summary>Shoot from the hold at history entry <paramref name="at"/> (or where it is now), held still while it shoots.</summary>
+        /// <summary>Shoot with the camera at its pose relative to your hand from history entry <paramref name="at"/>
+        /// (or as it is now), and keep it at that pose relative to your hand while it shoots.</summary>
         void ShootSteady(int at)
         {
-            if (m_Cooldown > 0f || m_Busy || m_Waiting) return;
-            m_FrozenPos = at >= 0 ? m_HistPos[at] : transform.position;
-            m_FrozenRot = at >= 0 ? m_HistRot[at] : transform.rotation;
+            var a = PlayerRig.Active ? PlayerRig.Active.CameraHand.Anchor : null;
+            if (m_Cooldown > 0f || m_Busy || !a) return;
+            Vector3 hp = at >= 0 ? m_HistHandPos[at] : a.position, cp = at >= 0 ? m_HistPos[at] : transform.position;
+            Quaternion hr = at >= 0 ? m_HistHandRot[at] : a.rotation, cr = at >= 0 ? m_HistRot[at] : transform.rotation;
+            var inv = Quaternion.Inverse(hr);
+            m_FrozenPos = inv * (cp - hp);
+            m_FrozenRot = inv * cr;
             m_Frozen = true;
             m_FreezeUntil = Time.time + 0.45f;
-            transform.SetPositionAndRotation(m_FrozenPos, m_FrozenRot);
+            transform.SetPositionAndRotation(a.position + a.rotation * m_FrozenPos, a.rotation * m_FrozenRot);
             TakePhoto();
         }
 
@@ -352,7 +364,7 @@ namespace FrostAndFound
                 rot = hand.Anchor.rotation;
                 return;
             }
-            if (hand.HasJoints)
+            if (hand.HasJoints && hand.IsOpticalHand)
             {
                 var j = hand.Joints;
                 // held like a phone taking a picture: the screen lies flush between your thumb (bottom edge) and
@@ -383,33 +395,45 @@ namespace FrostAndFound
                 m_HistHead = (m_HistHead + 1) % HistoryN;
                 m_HistT[m_HistHead] = Time.time; m_HistGap[m_HistHead] = hand.PinchGap;
                 m_HistPos[m_HistHead] = m_HoldPos; m_HistRot[m_HistHead] = m_HoldRot;
+                m_HistHandPos[m_HistHead] = hand.Anchor.position; m_HistHandRot[m_HistHead] = hand.Anchor.rotation;
                 if (m_HistCount < HistoryN) m_HistCount++;
                 if (m_Frozen)
                 {
-                    if (Time.time < m_FreezeUntil || m_Busy) { pos = m_FrozenPos; rot = m_FrozenRot; return; }
-                    // let go of the freeze: glide back to your hand from where the shot was taken
+                    if (Time.time < m_FreezeUntil || m_Busy)
+                    {
+                        // held at the shot's pose relative to your hand: it follows the hand, not the closing fingers
+                        pos = hand.Anchor.position + hand.Anchor.rotation * m_FrozenPos;
+                        rot = hand.Anchor.rotation * m_FrozenRot;
+                        m_HoldPos = pos; m_HoldRot = rot;   // so it glides on from here once released
+                        return;
+                    }
                     m_Frozen = false;
-                    m_HoldPos = m_FrozenPos; m_HoldRot = m_FrozenRot;
                 }
                 pos = m_HoldPos;
                 rot = m_HoldRot;
                 return;
             }
-            pos = hand.Anchor.TransformPoint(new Vector3(0, 0.03f, 0.03f));
+            // controller: held up just above the controller (clear of the hand wrapped round it), aimed where it points
+            pos = hand.Anchor.TransformPoint(new Vector3(0, 0.075f, 0.035f));
             rot = hand.Anchor.rotation * Quaternion.Euler(15f, 0, 0);
         }
 
-        void Jammed(HandRig hand)
+        /// <summary>The print hanging out of the slot falls off into the snow (you can pick it up from there).</summary>
+        void DropWaiting()
         {
-            m_Cooldown = 0.4f;
-            AudioDirector.PlayAt(Sfx.Whirr, transform.position, 0.25f, 0.6f);
-            hand.Haptic(0.2f, 0.03f);
-            HToast.Show("Pull the photo out first, with your other hand", UIKit.Icon.Camera, 3f);
+            var p = m_Waiting;
+            m_Waiting = null;
+            if (!p) return;
+            p.transform.localScale = Vector3.one * BodyScale;
+            p.Drop(Vector3.down * 0.3f + (Slot ? -Slot.forward * 0.15f : Vector3.zero));
+            PhotoHolder.Instance?.Dropped.Add(p);
+            AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.2f, 1.9f);
         }
 
         public void TakePhoto()
         {
-            if (m_Cooldown > 0f || m_Busy || m_Waiting) return;
+            if (m_Cooldown > 0f || m_Busy) return;
+            if (m_Waiting) DropWaiting();   // the last print gets pushed out by the next
             m_Cooldown = 0.55f;
             m_LastPose = Time.time;
             StartCoroutine(Shoot());
@@ -456,25 +480,28 @@ namespace FrostAndFound
             yield return Ease.Tween(0.25f, t => m_FlashMat.SetColor("_BaseColor", Color.Lerp(Color.white * 1.6f, Palette.SkyHorizon, t)), Ease.OutCubic, false);
         }
 
-        /// <summary>The print slides out of the slot and waits there, blank, until your free hand pulls it free.</summary>
+        /// <summary>The print slides down out of the bottom slot facing you and develops as it hangs there, until your
+        /// free hand pulls it free (or the next shot or putting the camera away knocks it into the snow).</summary>
         IEnumerator EjectAndWait(PolaroidPhoto photo)
         {
             m_Waiting = photo;
             m_Busy = false;
             var p = photo.transform;
-            p.localScale = Vector3.one * BodyScale;   // sized to the slot; it grows to full size as you pull it out
             AudioDirector.PlayAt(Sfx.Whirr, transform.position, 0.6f, 1f);
-            for (float t = 0; t < 1f; t += Time.deltaTime / EjectSeconds)
+            bool fastDev = CaseDirector.I != null && CaseDirector.I.CaseClosed;
+            StartCoroutine(photo.Develop(fastDev ? 0.6f : DevelopSeconds));
+            for (float t = 0; t < 1f && m_Waiting == photo; t += Time.deltaTime / EjectSeconds)
             {
                 m_SlotOut = Ease.OutCubic(t);
                 PlaceInSlot(p, m_SlotOut);
                 yield return null;
             }
+            if (m_Waiting != photo) yield break;   // knocked out mid-eject
             m_SlotOut = 1f;
             float waitStart = Time.time;
             bool tipped = false;
             m_InReach = false;
-            while (photo)
+            while (photo && m_Waiting == photo)
             {
                 var rig = PlayerRig.Active;
                 bool closing = CaseDirector.I != null && CaseDirector.I.CaseClosed;
@@ -487,16 +514,20 @@ namespace FrostAndFound
                 }
                 yield return null;
             }
+            if (m_Waiting != photo) yield break;   // it fell off
             m_Waiting = null;
             if (photo) yield return TakeOut(photo);
         }
 
+        /// <summary>Hanging down out of the bottom slot, picture toward you (its front is -z, the same way as the screen).
+        /// It grows downward out of the slit as it ejects, so it never pokes up through the body.</summary>
         void PlaceInSlot(Transform p, float out01)
         {
             if (!Slot) return;
-            var rot = Slot.rotation * Quaternion.Euler(-90f, 0f, 0f) * Quaternion.Euler(0, 180f, 0);
-            float along = Mathf.Lerp(-PolaroidPhoto.Height * 0.45f, PolaroidPhoto.Height * 0.2f, out01);
-            p.SetPositionAndRotation(Slot.position + Slot.forward * along + Slot.up * -0.004f, rot);
+            float s = BodyScale, shown = Mathf.Lerp(0.04f, 1f, out01);
+            p.localScale = new Vector3(s, s * shown, s);
+            var top = Slot.position + Slot.up * (0.004f * s);
+            p.SetPositionAndRotation(top - Slot.up * (PolaroidPhoto.Height * s * shown * 0.5f), Slot.rotation);
         }
 
         /// <summary>Your free hand pulls the print: reach the bit sticking out and close your fingers on it.</summary>
@@ -507,7 +538,7 @@ namespace FrostAndFound
             bool closed = hand.Grip > 0.6f || hand.Trigger > 0.6f;
             if (!closed) m_FreeOpenTime = Time.time;
             var grabAt = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
-            var edge = Slot.position + Slot.forward * (PolaroidPhoto.Height * 0.62f);
+            var edge = Slot.position - Slot.up * (PolaroidPhoto.Height * BodyScale * 0.7f);   // the hanging print's lower half
             bool reach = Vector3.Distance(grabAt, edge) < GrabReach;
             if (reach && !m_InReach) hand.Haptic(0.12f, 0.02f);   // a little tick: you're touching it
             m_InReach = reach;
@@ -542,8 +573,6 @@ namespace FrostAndFound
                     HToast.Show(rig.FreeHand.IsOpticalHand ? "Open your hand flat to drop a photo. Pinch it to pick it back up" : "Press A/X to drop a photo. Grab it to pick it back up", UIKit.Icon.Camera, 4.5f);
                 }
             }
-            bool fast = CaseDirector.I != null && CaseDirector.I.CaseClosed;
-            yield return photo.Develop(fast ? 0.6f : DevelopSeconds);
         }
 
         public void SetVisible(bool on) { m_Hidden = !on; if (!on) { m_Raise = 0f; m_Up = false; } }

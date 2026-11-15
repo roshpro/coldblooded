@@ -92,6 +92,7 @@ namespace FrostAndFound
         protected override void Update()
         {
             base.Update();
+            if (IsStunned) return;   // seeing stars: no running, taunting or dodging
             if (State == TonyState.Fleeing) UpdateFlee();
             else if (State == TonyState.Taunting) { var p = PlayerRig.Active; if (p) transform.rotation = Ease.Damp(transform.rotation, FrostUtil.FlatLookRotation(transform.position, p.Head.position), 6f, Time.deltaTime); }
         }

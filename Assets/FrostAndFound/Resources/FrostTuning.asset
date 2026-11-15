@@ -18,9 +18,9 @@ MonoBehaviour:
   photoFov: 52
   photoResolution: 512
   developFadeSeconds: 0.3
-  showRange: 1.5
-  armExtendedDistance: 0.46
-  showConeDegrees: 38
+  showRange: 1.8
+  armExtendedDistance: 0.32
+  showConeDegrees: 50
   showDwellSeconds: 0.3
   scoopHeight: 0.24
   gripClosed: 0.6

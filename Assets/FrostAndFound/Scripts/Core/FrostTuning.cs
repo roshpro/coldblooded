@@ -37,11 +37,11 @@ namespace FrostAndFound
 
         [Header("Show a photo")]
         [Tooltip("Kid must be within this distance of your hand (doc: about 1.5 m).")]
-        public float showRange = 1.5f;
+        public float showRange = 1.8f;
         [Tooltip("Hand must be at least this far from your head (arm extended toward the kid) to count as held out.")]
-        public float armExtendedDistance = 0.46f;
+        public float armExtendedDistance = 0.32f;
         [Tooltip("Max angle between your outstretched hand and the kid.")]
-        public float showConeDegrees = 38f;
+        public float showConeDegrees = 50f;
         public float showDwellSeconds = 0.3f;
 
         [Header("Snow & snowballs")]
@@ -101,12 +101,10 @@ namespace FrostAndFound
         public float showGestureIdleSeconds = 12f;
 
         [Header("Camera hand")]
-        [Tooltip("The camera comes up when your thumb and index are this parallel (degrees between them), pads facing.")]
-        public float cameraParallelDeg = 30f;
-        [Tooltip("It starts fading in from this angle.")]
-        public float cameraParallelFade = 50f;
-        [Tooltip("Thumb-to-index gap (m) beyond which it isn't a pinch any more.")]
-        public float cameraMaxGap = 0.11f;
+        [Tooltip("Thumb-to-index gap (m) at which the camera starts fading into your hand (and past which it's put away).")]
+        public float cameraAppearGap = 0.09f;
+        [Tooltip("Thumb-to-index gap (m) at which it's fully there.")]
+        public float cameraFullGap = 0.06f;
         [Tooltip("A quick pinch takes the picture: the gap closing by this fraction of how open it was...")]
         public float quickPinchFraction = 0.35f;
         [Tooltip("...(and at least this many metres)...")]

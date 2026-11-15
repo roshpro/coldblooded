@@ -36,6 +36,7 @@ namespace FrostAndFound
         float m_LookW;
         bool m_HasLook;
         Snowball m_Carry;
+        Coroutine m_ThrowTurn;
         Transform m_UpperArmL, m_UpperArmR, m_LowerArmR, m_FootL, m_FootR;
 
         public bool IsHumanoid => m_Humanoid;
@@ -394,7 +395,7 @@ namespace FrostAndFound
             var squareOn = kid.transform.rotation;
             Animator.CrossFadeInFixedTime("Throw", 0.25f, 0, ThrowStart);
             float t0 = Time.time;
-            StartCoroutine(Ease.Tween(0.35f, k => kid.transform.rotation = Quaternion.Slerp(squareOn, sideOn, k), Ease.InOutCubic, false));
+            m_ThrowTurn = StartCoroutine(Ease.Tween(0.35f, k => kid.transform.rotation = Quaternion.Slerp(squareOn, sideOn, k), Ease.InOutCubic, false));
             yield return Ease.Tween(0.2f, k => m_ThrowArms = k, Ease.Linear, false);
             while (Time.time - t0 < ThrowRelease - ThrowStart) yield return null;
             Release(kid, target);
@@ -405,6 +406,18 @@ namespace FrostAndFound
             yield return Ease.Tween(0.35f, k => { m_ThrowArms = 1f - k; kid.transform.rotation = Quaternion.Slerp(after, back, Ease.InOutCubic(k)); }, Ease.Linear, false);
             m_ThrowArms = 0f;
             IsThrowing = false;
+        }
+
+        /// <summary>Knocked out of a throw (hit while winding up): drop the snowball and go back to standing.</summary>
+        public void CancelThrow()
+        {
+            if (!IsThrowing) return;
+            if (m_ThrowTurn != null) { StopCoroutine(m_ThrowTurn); m_ThrowTurn = null; }
+            IsThrowing = false;
+            m_Scoop = 0f;
+            m_ThrowArms = 0f;
+            if (m_Carry) { Destroy(m_Carry.gameObject); m_Carry = null; }
+            if (m_Humanoid && Animator) Animator.CrossFadeInFixedTime("Locomotion", 0.2f, 0);
         }
 
         void Release(Kid kid, Vector3 target)

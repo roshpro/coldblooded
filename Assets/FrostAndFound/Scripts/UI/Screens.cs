@@ -145,7 +145,7 @@ namespace FrostAndFound
             {
                 ("Lefty mode", "Camera in your right hand instead", () => FrostPrefs.LeftHanded, v => FrostPrefs.LeftHanded = v),
                 ("Subtitles", "Speech bubbles & captions", () => FrostPrefs.Subtitles, v => FrostPrefs.Subtitles = v),
-                ("Tips", "Short control hints", () => FrostPrefs.Tips, v => FrostPrefs.Tips = v),
+                ("Gesture hints", "Animated hand hints", () => FrostPrefs.Tips, v => FrostPrefs.Tips = v),
             })
             {
                 var t = HToggle.Create(c, label, desc, new Vector2(W - 0.05f, 0.062f), get, set);

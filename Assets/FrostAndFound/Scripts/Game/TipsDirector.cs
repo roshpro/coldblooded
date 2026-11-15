@@ -35,7 +35,7 @@ namespace FrostAndFound
                 string side = rig ? (rig.CameraHand.Side == HandSide.Left ? "left" : "right") : "left";
                 string tip = !(rig && rig.IsXR) ? "Take a photo: left click (WASD to walk, C to crouch)"
                     : rig.CameraHand.IsOpticalHand ? null   // hand tracking: the pinch gesture animation teaches it (GestureDirector)
-                    : $"Squeeze the {side} trigger lightly to raise the camera, pull it to shoot";
+                    : $"Hold the {side} grip to raise the camera, pull the {side} trigger to shoot";
                 if (tip != null) HToast.Show(tip, UIKit.Icon.Camera, 5f);
             }
             if (!m_ShowTip && m_EvidenceAt > 0f && Time.time - m_EvidenceAt > 7f && d.Shows == 0 && !DialogueRunner.AnyoneSpeaking)

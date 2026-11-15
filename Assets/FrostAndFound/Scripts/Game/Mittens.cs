@@ -48,8 +48,8 @@ namespace FrostAndFound
             // screen placements and the gloves just curl into the grip
             // with hand tracking on Quest the glove is Meta's own tracked hand mesh (MetaPlayerRig): this one only
             // keeps the hold points and stays hidden
-            m_L.Hidden = rig.Left.IsOpticalHand && rig.Left.HasNativeMesh;
-            m_R.Hidden = rig.Right.IsOpticalHand && rig.Right.HasNativeMesh;
+            m_L.Hidden = rig.Left.HasNativeMesh;   // hand tracking, or the headset's hands holding the controllers
+            m_R.Hidden = rig.Right.HasNativeMesh;
             m_L.Pose(rig.Left, GripFor(rig, rig.Left), rig.IsXR);
             m_R.Pose(rig.Right, GripFor(rig, rig.Right), rig.IsXR);
         }
