@@ -62,6 +62,7 @@ namespace FrostAndFound
         ParticleSystem m_Motes;
         float m_MotesDue;
         Mesh m_Stars;
+        Material m_CeilingMat;   // night over your real ceiling (headset), so the sky reads as overhead
         Color[] m_StarColors;
         float[] m_StarPhase, m_StarSpeed, m_StarBase;
         Vector3 m_Center;
@@ -129,6 +130,7 @@ namespace FrostAndFound
             }
             BuildMotes();
             BuildStars();
+            BuildCeilingShade();
             DepthOcclusion.Exempt(gameObject);   // the sky lives beyond the real walls and ceiling: never hidden by them
             Update();   // in place before the first frame draws
         }
@@ -322,6 +324,42 @@ namespace FrostAndFound
             }, 1);
         }
 
+        /// <summary>A soft night-blue veil over your real ceiling (headset only; the desktop room lifts its ceiling off
+        /// instead): darkest in the middle, lighter towards the walls, drawn before the aurora so the lights and stars
+        /// stay bright on top of it.</summary>
+        void BuildCeilingShade()
+        {
+            var rig = PlayerRig.Active;
+            var room = RoomService.Current;
+            if (!rig || !rig.IsXR || room == null || room.Polygon.Count < 3) return;
+            float y = room.CeilingY - 0.02f;
+            var c = room.Centroid;
+            var verts = new List<Vector3> { new Vector3(c.x, y, c.y) };
+            var cols = new List<Color> { new Color(1f, 1f, 1f, 1f) };
+            foreach (var p in room.Polygon)
+            {
+                // a little short of the walls, where the veil thins out
+                var q = Vector2.Lerp(p, c, 0.04f);
+                verts.Add(new Vector3(q.x, y, q.y));
+                cols.Add(new Color(1f, 1f, 1f, 0.55f));
+            }
+            var tris = new List<int>();
+            for (int i = 1; i < verts.Count; i++) { tris.Add(0); tris.Add(i); tris.Add(i == verts.Count - 1 ? 1 : i + 1); }
+            var mesh = Own(new Mesh { name = "Ceiling Shade" });
+            mesh.SetVertices(verts); mesh.SetColors(cols); mesh.SetTriangles(tris, 0);
+            mesh.RecalculateBounds();
+            m_CeilingMat = Own(new Material(Palette.Particle(Texture2D.whiteTexture, false, "Ceiling Shade")) { name = "Ceiling Shade" });
+            m_CeilingMat.SetColor("_BaseColor", new Color(0.015f, 0.025f, 0.07f, 0f));
+            m_CeilingMat.renderQueue = 2990;   // before the aurora's additive layers
+            var go = new GameObject("Ceiling Shade");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = m_CeilingMat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+        }
+
         void BuildStars()
         {
             const int N = 180;
@@ -372,6 +410,7 @@ namespace FrostAndFound
             // the two layers of rays drift against each other, so the curtains shimmer
             m_FrontMat.SetTextureOffset("_BaseMap", new Vector2(t * 0.02f, 0f));
             m_BackMat.SetTextureOffset("_BaseMap", new Vector2(-t * 0.013f, 0f));
+            if (m_CeilingMat) m_CeilingMat.SetColor("_BaseColor", new Color(0.015f, 0.025f, 0.07f, 0.82f * Mathf.SmoothStep(0f, 1f, t / 4f)));
 
             for (m_MotesDue += 9f * Mathf.SmoothStep(0f, 1f, (t - 1f) / 4f) * Time.deltaTime; m_MotesDue >= 1f; m_MotesDue -= 1f) Mote();
             if (m_Stars)

@@ -326,16 +326,17 @@ namespace FrostAndFound
             // ---------------- right page
             float tx = mx + 0.02f, tw = rx1 - tx;
             float tcx = tx + tw * 0.5f;
-            var head = Script(c, "It was TONY!", 0.95f, Marker, new Vector2(tw, 0.12f), TextAlignmentOptions.Left);
+            // a little narrower than the page's writing space: the tilt and the bold script lean past the box otherwise
+            var head = Script(c, "It was TONY!", 0.95f, Marker, new Vector2(tw * 0.86f, 0.12f), TextAlignmentOptions.Left);
             head.fontStyle = FontStyles.Bold;
-            head.transform.localPosition = new Vector3(tcx, H * 0.5f - 0.075f, -0.003f);
+            head.transform.localPosition = new Vector3(tx + tw * 0.43f, H * 0.5f - 0.075f, -0.003f);
             head.transform.localRotation = Quaternion.Euler(0f, 0f, 2.5f);
             // underlined twice, quickly
             Strip(c, "Underline", new Vector2(tw * 0.78f, 0.005f), Marker, new Vector3(tx + tw * 0.4f, H * 0.5f - 0.128f, -0.003f), 1.5f);
             Strip(c, "Underline 2", new Vector2(tw * 0.6f, 0.004f), Marker.WithAlpha(0.85f), new Vector3(tx + tw * 0.34f, H * 0.5f - 0.139f, -0.003f), -1f);
 
             var story = Script(c, "Tony \"Turbo\" Ramirez used Frosty as a ramp for the sickest jump in Maple Street history. It failed, obviously.",
-                0.27f, Pen, new Vector2(tw, 0.1f), TextAlignmentOptions.TopLeft, true);
+                0.27f, Pen, new Vector2(tw, 0.11f), TextAlignmentOptions.TopLeft, true);
             story.transform.localPosition = new Vector3(tcx, H * 0.5f - 0.2f, -0.003f);
 
             string wrongLine = wrong == 0 ? "No wrong suspects - flawless!" : $"Wrong kid shown a photo: {wrong}";
@@ -369,7 +370,7 @@ namespace FrostAndFound
                 slot.localPosition = new Vector3(sx, -H * 0.5f + 0.105f + (i % 2 == 0 ? 0.004f : -0.004f), -0.004f);
                 slot.localRotation = Quaternion.Euler(0f, 0f, (i % 2 == 0 ? -1f : 1f) * 3f);
                 TapeOn(slot, new Vector3(0f, PolaroidPhoto.Height * 0.52f, 0f), (i % 2 == 0 ? 8f : -8f), 0.045f);
-                var cap = Script(c, labels[i], 0.2f, Pen, new Vector2(slotW, 0.025f), TextAlignmentOptions.Center);
+                var cap = Script(c, labels[i], 0.2f, Pen, new Vector2(slotW, 0.04f), TextAlignmentOptions.Center);
                 cap.transform.localPosition = new Vector3(sx, -H * 0.5f + 0.03f, -0.003f);
                 slots.Add(slot);
             }
@@ -387,6 +388,10 @@ namespace FrostAndFound
             var t = UIKit.Text(parent, "Handwriting", text, UIKit.Face.Hand, size, color, box, align, 0f, wrap);
             t.font = UIKit.ScriptFont();
             t.fontStyle = FontStyles.Normal;
+            // handwriting never runs off the page: a long line (a big number, a long time) shrinks to fit its box
+            t.enableAutoSizing = true;
+            t.fontSizeMax = size;
+            t.fontSizeMin = size * 0.55f;
             return t;
         }
 
