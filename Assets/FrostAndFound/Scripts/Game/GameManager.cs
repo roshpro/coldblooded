@@ -211,7 +211,9 @@ namespace FrostAndFound
                 door = room.ClampInside(feet + fwd * ahead, 0.5f);
                 door.y = room.FloorY;
             }
-            Layout = LayoutDirector.Build(room, Player, feet - fwd * 2f);
+            // Frosty lands behind you, but never in quite the same place twice
+            var behind = Quaternion.Euler(0f, Random.Range(-45f, 45f), 0f) * -fwd * Random.Range(1.7f, 2.7f);
+            Layout = LayoutDirector.Build(room, Player, feet + behind);
             m_Intro = OpeningSequence.Begin(this, Player, Layout, m_Scenery, m_Snowfall, door, () => State = GameState.Investigating, doorFacing);
             while (!m_Intro.Done) yield return null;
         }
@@ -290,7 +292,7 @@ namespace FrostAndFound
             StartCoroutine(ColourBack(1.4f));   // the room's colour comes back at CASE CLOSED
             yield return CaseClosedStamp.Slam();
             if (lucy) DialogueRunner.Say(Lines.Get("lucy_case_closed"), lucy, true);
-            NorthernLights.Begin();   // the sky lights up over the room, and stays up behind the Case File
+            NorthernLights.Finale();   // the lights that have hung there all game blaze up, and stay up behind the Case File
             foreach (var kid in Kid.All) if (kid && kid.id != CastId.Tony) kid.Anim.StrikePose(Pose.Cheer, 1.5f);
 
             // your photos fan out as a Case File collage

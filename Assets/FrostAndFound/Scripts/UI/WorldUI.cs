@@ -56,7 +56,9 @@ namespace FrostAndFound
             go.transform.SetParent(view.transform, false);
             var cam = go.AddComponent<Camera>();
             cam.CopyFrom(view);
-            cam.cullingMask = Layers.Mask(Layers.UI3D);
+            // your hands (and what they hold) are drawn again here, depth-tested against the panels: a fingertip in front of
+            // a button (Play again, the menu) shows in front of it instead of disappearing behind the UI
+            cam.cullingMask = Layers.Mask(Layers.UI3D, Layers.PlayerHands);
             cam.clearFlags = CameraClearFlags.Depth;
             var data = UnityEngine.Rendering.Universal.CameraExtensions.GetUniversalAdditionalCameraData(cam);
             data.renderType = UnityEngine.Rendering.Universal.CameraRenderType.Overlay;

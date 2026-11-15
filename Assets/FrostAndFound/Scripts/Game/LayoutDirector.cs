@@ -139,32 +139,36 @@ namespace FrostAndFound
                     {
                         float gap = MinToPlaced(s);
                         if (gap < spacing) continue;
-                        float sc = score(s) + Mathf.Min(gap, 2.6f) * 2f + R(0f, 1.6f);   // spreading out matters most; a dash of chance
+                        float sc = score(s) + Mathf.Min(gap, 2.6f) * 1.6f + R(0f, 3.5f);   // spread out, and a good deal of chance: a new arrangement every round
                         if (sc > bestScore) { bestScore = sc; best = s; any = true; }
                     }
                     if (any) return best;
                 }
                 return center + fwd;
             }
-            // Tony spawns farthest from you
-            placed[CastId.Tony] = Pick(s => FrostUtil.FlatDistance(s, feet) - (FrostUtil.FlatDistance(s, sledSpot) < 1.6f ? 5f : 0f));   // not next to his own sled
+            // Tony spawns well away from you (somewhere different each time), and not next to his own sled
+            placed[CastId.Tony] = Pick(s => Mathf.Min(FrostUtil.FlatDistance(s, feet), 3.5f) * 0.9f - (FrostUtil.FlatDistance(s, sledSpot) < 1.6f ? 5f : 0f));
             // Lucy close, a little to the side (she's your guide and opens the scene)
+            float lucyAt = R(1.2f, 1.9f), lucySide = R(0.2f, 0.8f);
             placed[CastId.Lucy] = Pick(s =>
             {
                 float d = FrostUtil.FlatDistance(s, feet);
                 var dir = (s - feet).Flat().normalized;
-                float side = 1f - Mathf.Abs(Vector3.Dot(dir, fwd) - 0.55f);
-                return -Mathf.Abs(d - 1.4f) * 1.2f + side;
+                float side = 1f - Mathf.Abs(Vector3.Dot(dir, fwd) - lucySide);
+                return -Mathf.Abs(d - lucyAt) * 1.2f + side;
             });
             // Dexter: visible from where you stand, in front of Frosty's stain, so the drip trail reads
+            float dexterAt = R(1.0f, 1.9f);
             placed[CastId.Dexter] = Pick(s =>
             {
                 var dir = (s - center).Flat().normalized;
                 float inFront = Vector3.Dot(dir, frostyFacing * Vector3.forward);
-                return inFront * 0.8f - Mathf.Abs(FrostUtil.FlatDistance(s, center) - 1.3f);
+                return inFront * 0.8f - Mathf.Abs(FrostUtil.FlatDistance(s, center) - dexterAt);
             });
-            placed[CastId.Sherman] = Pick(s => Mathf.Min(FrostUtil.FlatDistance(s, feet), 2.5f) * 0.3f);
-            placed[CastId.Serena] = Pick(s => Mathf.Min(FrostUtil.FlatDistance(s, feet), 2.5f) * 0.3f);
+            // the other two, in either order, anywhere there's room
+            bool shermanFirst = rng.NextDouble() < 0.5;
+            placed[shermanFirst ? CastId.Sherman : CastId.Serena] = Pick(s => Mathf.Min(FrostUtil.FlatDistance(s, feet), 2.5f) * 0.3f);
+            placed[shermanFirst ? CastId.Serena : CastId.Sherman] = Pick(s => Mathf.Min(FrostUtil.FlatDistance(s, feet), 2.5f) * 0.3f);
 
             // ---------------- spawn
             foreach (var kv in placed)

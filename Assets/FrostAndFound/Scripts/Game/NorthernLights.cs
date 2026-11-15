@@ -70,16 +70,29 @@ namespace FrostAndFound
         float m_Born, m_Floor, m_Ceiling;
         readonly Color[] m_Row = new Color[Rows];
 
-        /// <summary>Lights up the sky (once). Centred on where you're standing and looking.</summary>
-        public static NorthernLights Begin()
+        /// <summary>Lights up the sky (once), centred on where you're standing and looking. With `moment`, the full
+        /// show straight away (the room dims, the shimmer, everyone looks up); without, the lights just fade in and
+        /// stay up quietly (they come in with the intro's snow and hang there all game) until <see cref="Finale"/>.</summary>
+        public static NorthernLights Begin(bool moment = true)
         {
-            if (Instance) return Instance;
+            if (Instance) { if (moment) Finale(); return Instance; }
             var go = new GameObject("Northern Lights");
             var nl = go.AddComponent<NorthernLights>();
             nl.Build();
-            nl.StartCoroutine(nl.Moment());
+            if (moment) nl.StartCoroutine(nl.Moment());
             return nl;
         }
+
+        /// <summary>CASE CLOSED: the big moment under lights that have been up all along (or lit now, if they weren't).</summary>
+        public static void Finale()
+        {
+            if (!Instance) { Begin(true); return; }
+            if (Instance.m_Finale) return;
+            Instance.StartCoroutine(Instance.Moment());
+        }
+
+        bool m_Finale;
+        float m_FinaleAt = -1f;
 
         void OnDestroy()
         {
@@ -406,11 +419,18 @@ namespace FrostAndFound
             var rig = PlayerRig.Active;
             var eye = rig && rig.ViewCamera ? rig.ViewCamera.transform.position : m_Center + Vector3.up * 1.6f;
             float activity = Activity(t);
+            // CASE CLOSED: the curtains that have hung there all game swell up again
+            if (m_FinaleAt >= 0f && Time.time - m_FinaleAt > 0f) activity += 0.6f * Mathf.Exp(-Sq((Time.time - m_FinaleAt - 3f) / 3f));
             foreach (var cu in m_Curtains) Animate(cu, t, eye, activity);
             // the two layers of rays drift against each other, so the curtains shimmer
             m_FrontMat.SetTextureOffset("_BaseMap", new Vector2(t * 0.02f, 0f));
             m_BackMat.SetTextureOffset("_BaseMap", new Vector2(-t * 0.013f, 0f));
-            if (m_CeilingMat) m_CeilingMat.SetColor("_BaseColor", new Color(0.015f, 0.025f, 0.07f, 0.82f * Mathf.SmoothStep(0f, 1f, t / 4f)));
+            if (m_CeilingMat)
+            {
+                // a light veil while you play; full night over the ceiling for the finale
+                float deep = m_FinaleAt < 0f ? 0f : Mathf.SmoothStep(0f, 1f, (Time.time - m_FinaleAt) / 4f);
+                m_CeilingMat.SetColor("_BaseColor", new Color(0.015f, 0.025f, 0.07f, Mathf.Lerp(0.45f, 0.82f, deep) * Mathf.SmoothStep(0f, 1f, t / 4f)));
+            }
 
             for (m_MotesDue += 9f * Mathf.SmoothStep(0f, 1f, (t - 1f) / 4f) * Time.deltaTime; m_MotesDue >= 1f; m_MotesDue -= 1f) Mote();
             if (m_Stars)
@@ -430,6 +450,8 @@ namespace FrostAndFound
         /// <summary>The moment itself: the room dims, the pad swells, the kids look up and Lucy takes the credit.</summary>
         IEnumerator Moment()
         {
+            m_Finale = true;
+            m_FinaleAt = Time.time;
             var rig = PlayerRig.Active;
             if (rig) rig.SetPassthroughDim(DimDuring, 4f);
             AudioDirector.Play2D(Sfx.Aurora, 0.75f);

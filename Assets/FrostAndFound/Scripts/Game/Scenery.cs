@@ -168,7 +168,7 @@ namespace FrostAndFound
                     float cr = crown;
                     ok = Place(cr * 0.85f, cr * 0.95f, p =>
                     {
-                        float s = WallScore(p, cr + 0.15f) * (grove ? 0.3f : 1f) + Enclosure(p, 0.9f) * 1.5f;
+                        float s = WallScore(p, cr + 0.15f) * (grove ? 0.85f : 1f) + Enclosure(p, 0.9f) * 1.5f;   // every tree stays at the edge
                         float nearest = 99f;
                         foreach (var t in treeSpots)
                         {

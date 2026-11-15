@@ -134,6 +134,7 @@ namespace FrostAndFound
             if (m_Jingle) m_Jingle.loop = true;
             AudioDirector.Quiet = false;
             if (m_Snowfall) m_Snowfall.SetFalling(true);
+            NorthernLights.Begin(false);   // the lights fade in over the room with the snow, and stay up all game
             var tracker = GetComponent<FootprintTracker>();
             if (tracker) tracker.enabled = true;
             const float pileUp = 12f;
@@ -157,24 +158,28 @@ namespace FrostAndFound
             if (frosty)
             {
                 PlaceFrostyBehind(frosty);
-                var at = frosty.transform.position + Vector3.up * 0.2f;
-                AudioDirector.PlayAt(Sfx.Thud, at, 1f, 1f);
-                AudioDirector.PlayAt(Sfx.Thud, at, 1f, 0.72f);
-                AudioDirector.Play2D(Sfx.Thud, 0.6f, 0.6f);   // felt in the chest as much as heard
+                // right down on the floor where he lands, and loud: full volume out past where you're standing
+                var at = frosty.transform.position + Vector3.up * 0.03f;
+                foreach (var src in new[] { AudioDirector.PlayAt(Sfx.Thud, at, 1f, 1f), AudioDirector.PlayAt(Sfx.Thud, at, 1f, 0.72f), AudioDirector.PlayAt(Sfx.Thud, at, 1f, 0.55f) })
+                    if (src) { src.minDistance = 3.5f; src.maxDistance = 20f; }
+                AudioDirector.Play2D(Sfx.Thud, 0.9f, 0.6f);   // felt in the chest as much as heard
                 m_Player.Left.Haptic(1f, 0.3f);
                 m_Player.Right.Haptic(1f, 0.3f);
                 frosty.Drop();
                 Fx.SnowPuff(frosty.transform.position + Vector3.up * 0.2f, Vector3.up, 40, 1.4f);
 
-                // give them time to turn round and take it in
+                // nobody says a word until you've turned round and seen him (or a few seconds have passed): a beat of
+                // stunned silence first, then you take it in
+                yield return new WaitForSeconds(1.5f);
                 float look = 0f;
-                for (float t = 0f; t < 6f; t += Time.deltaTime)
+                for (float t = 1.5f; t < 5f; t += Time.deltaTime)
                 {
                     var head = m_Player.Head;
-                    if (Vector3.Angle(head.forward, frosty.AimPoint - head.position) < 40f) { look += Time.deltaTime; if (look > 0.8f) break; }
+                    if (Vector3.Angle(head.forward, frosty.AimPoint - head.position) < 32f) { look += Time.deltaTime; if (look > 0.7f) break; }
+                    else look = 0f;
                     yield return null;
                 }
-                yield return new WaitForSeconds(0.6f);
+                yield return new WaitForSeconds(0.9f);
             }
             else yield return new WaitForSeconds(2f);
 
@@ -345,6 +350,7 @@ namespace FrostAndFound
             if (m_Jingle) { m_Jingle.loop = false; m_Jingle.Stop(); }
             if (SnowSurface.Instance) SnowSurface.Instance.Coverage = 1f;
             if (m_Snowfall && !m_Snowfall.gameObject.activeSelf) m_Snowfall.SetFalling(true);
+            NorthernLights.Begin(false);
             var tracker = GetComponent<FootprintTracker>();
             if (tracker) tracker.enabled = true;
             if (m_Scenery)

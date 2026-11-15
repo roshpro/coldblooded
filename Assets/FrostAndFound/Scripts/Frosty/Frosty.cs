@@ -12,7 +12,7 @@ namespace FrostAndFound
     public class Frosty : MonoBehaviour, ISnowballTarget
     {
         /// <summary>The team's snowman model's scale: lying in the snow he's about 2 m long.</summary>
-        public const float ModelScale = 1.8125f;
+        public const float ModelScale = 2.175f;   // 20% bigger than 1.8125
         /// <summary>Roughly how far his body reaches across the snow from his centre (m); kids, Tony and props keep clear.</summary>
         public static float FootprintRadius => 0.54f * ModelScale;
         public static Frosty Instance { get; private set; }

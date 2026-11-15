@@ -218,6 +218,7 @@ namespace FrostAndFound
                         && (gm.State == GameState.Investigating || gm.State == GameState.Title);
             if (WandersWhenIdle && player && CanMove && !Busy && !IsStunned && calm && gm.State == GameState.Investigating) m_Brain?.Tick(player);
             else m_Brain?.Reset();
+            Unpin();
             // personal space: if two of us have ended up shoulder to shoulder, one steps away
             if (player && m_Move == null && CanMove && !Busy && calm && Time.time > m_NextSeparate)
             {
@@ -425,10 +426,44 @@ namespace FrostAndFound
             if (dist >= space) return to;
             float before = (from - other).Flat().magnitude;
             if (dist >= before) return to;   // moving away from them
-            var n = dist > 1e-4f ? d / dist : (from - other).Flat().normalized;
+            var move = (to - from).Flat();
+            var n = (from - other).Flat();
+            n = n.sqrMagnitude > 1e-6f ? n.normalized : Vector3.Cross(Vector3.up, move).normalized;
             if (n.sqrMagnitude < 1e-6f) return from;
+            // keep the sideways part of the step, so we walk round them rather than stopping dead; heading straight at
+            // them, step round to our side (the two of us pick opposite sides, so we pass)
+            var side = move - n * Vector3.Dot(move, n);
+            if (side.magnitude < move.magnitude * 0.35f)
+            {
+                var tangent = Vector3.Cross(Vector3.up, n);
+                float s = Vector3.Dot(tangent, move) < -1e-5f ? -1f : 1f;
+                side = tangent * s * move.magnitude;
+            }
+            var p = from + side;
+            var q = (p - other).Flat();
             float r = Mathf.Min(space, before);   // never closer than we already were
-            return new Vector3(other.x + n.x * r, to.y, other.z + n.z * r);
+            if (q.magnitude < r) p = other + (q.sqrMagnitude > 1e-6f ? q.normalized : n) * r;
+            return new Vector3(p.x, to.y, p.z);
+        }
+
+        // two of us standing inside each other's space drift apart (whoever isn't busy), so nobody's ever pinned
+        void Unpin()
+        {
+            if (Busy || !CanMove || IsHidden || IsMoving || IsStunned || (Anim && Anim.IsThrowing)) return;
+            var me = transform.position;
+            Vector3 push = Vector3.zero;
+            foreach (var k in All)
+            {
+                if (!k || k == this || k.IsHidden) continue;
+                var d = (me - k.transform.position).Flat();
+                float dist = d.magnitude;
+                if (dist >= PersonalSpace * 0.95f) continue;
+                push += (dist > 1e-3f ? d / dist : transform.right) * (PersonalSpace - dist);
+            }
+            if (push.sqrMagnitude < 1e-6f) return;
+            var step = Vector3.ClampMagnitude(push, 1f) * 0.6f * Time.deltaTime;
+            var p = me + step;
+            if (KidNav.Walkable(p) || !KidNav.Walkable(me)) transform.position = p;
         }
 
         /// <summary>The idle AI just arrived somewhere and will stand about for `seconds` (Dexter puts his cocoa down

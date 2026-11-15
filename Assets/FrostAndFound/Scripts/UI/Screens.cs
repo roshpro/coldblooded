@@ -54,6 +54,13 @@ namespace FrostAndFound
             // a gentle bob, and a slow pulse that invites a press
             float t = Time.unscaledTime;
             m_Play.transform.localPosition = new Vector3(0f, 0.008f * Mathf.Sin(t * 2f * Mathf.PI / 2.6f), 0f);
+            // tipped to face your eyes, so the disc reads as a true circle even though it floats below them
+            var rig = PlayerRig.Active;
+            if (rig && rig.Head)
+            {
+                var away = m_Play.transform.position - rig.Head.position;
+                if (away.sqrMagnitude > 1e-4f) m_Play.transform.rotation = Quaternion.LookRotation(away.normalized, Vector3.up);
+            }
             if (!m_Started) m_Play.Pulse = 0.5f + 0.5f * Mathf.Sin(t * 2f * Mathf.PI / 1.6f);
         }
 
@@ -71,22 +78,21 @@ namespace FrostAndFound
         }
     }
 
-    /// <summary>A round, palm-sized, bright-blue push button with a white play triangle and a soft blue glow. Pressed
-    /// by a fingertip (index tip with hand tracking, the controller's tip otherwise) pushing in from the front, or by
-    /// a pointer click.</summary>
+    /// <summary>A round, palm-sized push button: a solid white disc with a hollow play triangle. Pressed by a fingertip
+    /// (index tip with hand tracking, the controller's tip otherwise) pushing in from the front, or by a pointer
+    /// click.</summary>
     public class PokeButton : HControl
     {
         const float R = 0.05f;          // palm-sized: 10 cm across
         const float Travel = 0.016f;    // how far it pushes in
         const float FireAt = 0.011f;    // pushed this far in: click
-        static readonly Color Blue = new Color32(30, 136, 255, 255), BlueHover = new Color32(70, 160, 255, 255), Rim = new Color32(14, 86, 196, 255), Glow = new Color32(80, 170, 255, 255);
+        static readonly Color Face = Color.white, FaceHover = new Color32(226, 232, 240, 255);
 
         public System.Action onPress;
         /// <summary>0..1 idle pulse (glow and a hint of scale), driven by the title screen.</summary>
         public float Pulse;
         Transform m_Body;
         Material m_Face;
-        readonly List<Material> m_Glow = new List<Material>();
         readonly bool[] m_Armed = new bool[2];
         float m_Push, m_PushVis;
         bool m_Fired;
@@ -105,32 +111,41 @@ namespace FrostAndFound
 
         void Build()
         {
-            // soft glow: a few faint rings behind
-            float[] sizes = { 1.3f, 1.55f, 1.85f };
-            float[] alphas = { 0.32f, 0.16f, 0.07f };
-            for (int i = 0; i < sizes.Length; i++)
-            {
-                float d = R * 2f * sizes[i];
-                var m = Palette.Unlit(Glow.WithAlpha(alphas[i]), true);
-                m_Glow.Add(m);
-                var q = UIKit.Quad(transform, "Glow", UIKit.RoundedRect(d, d, d * 0.5f, 24), m, 0.02f + i * 0.001f);
-                q.GetComponent<MeshRenderer>().sortingOrder = UIKit.Order.Shadow;
-            }
             m_Body = new GameObject("Body").transform;
             m_Body.SetParent(transform, false);
             m_Body.gameObject.layer = Layers.UI3D;
-            // a chunky puck: dark-blue side, a rim and the bright face
-            ProcMesh.Part("Side", m_Body, ProcMesh.Cylinder(40), Palette.Toon(Rim, false, 0.3f), new Vector3(0f, 0f, 0.011f), new Vector3(R * 2f + 0.006f, 0.02f, R * 2f + 0.006f), new Vector3(90f, 0f, 0f))
-                .GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            UIKit.Quad(m_Body, "Rim", UIKit.RoundedRect(R * 2f + 0.006f, R * 2f + 0.006f, R + 0.003f, 24), Palette.Unlit(Rim), 0.0006f);
-            m_Face = Palette.Unlit(Blue);
-            UIKit.Quad(m_Body, "Face", UIKit.RoundedRect(R * 2f, R * 2f, R, 24), m_Face, 0f);
-            var shine = UIKit.Quad(m_Body, "Shine", UIKit.RoundedRect(R * 0.9f, R * 0.4f, R * 0.2f, 12), Palette.Unlit(Color.white.WithAlpha(0.22f), true), -0.0006f);
-            shine.localPosition = new Vector3(-R * 0.2f, R * 0.55f, -0.0006f);
-            shine.localRotation = Quaternion.Euler(0f, 0f, 18f);
-            var icon = UIKit.IconQuad(m_Body, UIKit.Icon.Play, R * 0.95f, Color.white, -0.0012f);
-            icon.localPosition = new Vector3(R * 0.08f, 0f, -0.0012f);
+            // a flat, solid white disc
+            m_Face = Palette.Unlit(Face);
+            UIKit.Quad(m_Body, "Face", UIKit.RoundedRect(R * 2f, R * 2f, R, 32), m_Face, 0f);
+            // and a hollow play triangle in it, nudged right so it looks centred
+            var tri = UIKit.Quad(m_Body, "Play", TriangleOutline(R * 0.46f, R * 0.085f), Palette.Unlit(Palette.Ink), -0.0012f);
+            tri.localPosition = new Vector3(R * 0.06f, 0f, -0.0012f);
             MakeCollider(new Vector2(R * 2f + 0.03f, R * 2f + 0.03f), 0.06f);
+        }
+
+        /// <summary>The outline of an equilateral triangle pointing right (+x), `radius` to its corners, lines `width` thick,
+        /// in the XY plane (drawn from both sides).</summary>
+        static Mesh TriangleOutline(float radius, float width)
+        {
+            float inner = radius - 2f * width;   // inset a constant `width` from each edge (corner radius shrinks by w / sin 30°)
+            var v = new List<Vector3>();
+            for (int i = 0; i < 3; i++)
+            {
+                float a = i * Mathf.PI * 2f / 3f;
+                v.Add(new Vector3(Mathf.Cos(a) * radius, Mathf.Sin(a) * radius, 0f));
+                v.Add(new Vector3(Mathf.Cos(a) * inner, Mathf.Sin(a) * inner, 0f));
+            }
+            var t = new List<int>();
+            for (int i = 0; i < 3; i++)
+            {
+                int o0 = i * 2, i0 = o0 + 1, o1 = (i * 2 + 2) % 6, i1 = o1 + 1;
+                t.AddRange(new[] { o0, o1, i0, i0, o1, i1 });
+                t.AddRange(new[] { o0, i0, o1, i0, i1, o1 });   // the other side too
+            }
+            var m = new Mesh { name = "Play Outline" };
+            m.SetVertices(v); m.SetTriangles(t, 0);
+            m.RecalculateNormals(); m.RecalculateBounds();
+            return m;
         }
 
         protected override void Update()
@@ -183,12 +198,7 @@ namespace FrostAndFound
                 m_Body.localPosition = new Vector3(0f, 0f, m_PushVis);
                 m_Body.localScale = Vector3.one * (1f + 0.025f * Pulse * (m_Fired ? 0f : 1f));
             }
-            if (m_Face) m_Face.SetColor("_BaseColor", Color.Lerp(Blue, BlueHover, Mathf.Max(hover, m_PushVis / Travel)));
-            for (int i = 0; i < m_Glow.Count; i++)
-            {
-                float a = (i == 0 ? 0.32f : i == 1 ? 0.16f : 0.07f) * (0.75f + 0.5f * Pulse + 0.4f * hover);
-                m_Glow[i].SetColor("_BaseColor", Glow.WithAlpha(a));
-            }
+            if (m_Face) m_Face.SetColor("_BaseColor", Color.Lerp(Face, FaceHover, Mathf.Max(hover, m_PushVis / Travel)));
         }
     }
 
@@ -428,17 +438,51 @@ namespace FrostAndFound
         IEnumerator FlyTo(Transform t, Transform parent, Vector3 localPos, Quaternion localRot, float scale, float delay)
         {
             t.gameObject.SetActive(true);
+            // taped in from now on: no physics (a photo that was lying in the snow) and nothing else gets to move it
+            // (the print still hanging from the camera, the one in your hand)
+            var photo = t.GetComponent<PolaroidPhoto>();
+            if (photo) photo.PickUp();
             yield return new WaitForSecondsRealtime(delay);
             t.SetParent(parent, true);
             var p0 = t.localPosition; var r0 = t.localRotation; var s0 = t.localScale;
             AudioDirector.Play2D(Sfx.Whoosh, 0.3f, 1.5f);
             yield return Ease.Tween(0.45f, k =>
             {
+                if (!t) return;
+                if (t.parent != parent) t.SetParent(parent, true);
                 t.localPosition = Vector3.Lerp(p0, localPos, k);
                 t.localRotation = Quaternion.Slerp(r0, localRot, k);
                 t.localScale = Vector3.Lerp(s0, Vector3.one * scale, k);
             }, Ease.OutBack, true);
+            if (!t) yield break;
             t.gameObject.SetLayerRecursive(Layers.UI3D);
+            t.gameObject.AddComponent<PinnedInJournal>().Pin(parent, localPos, localRot, Vector3.one * scale);
+        }
+    }
+
+    /// <summary>Keeps a photo taped into the case-closed journal: wherever the journal goes (it follows your view),
+    /// the photo stays put on its page, whatever else tries to move it.</summary>
+    public class PinnedInJournal : MonoBehaviour
+    {
+        Transform m_Parent;
+        Vector3 m_Pos, m_Scale;
+        Quaternion m_Rot;
+
+        public void Pin(Transform parent, Vector3 pos, Quaternion rot, Vector3 scale)
+        {
+            m_Parent = parent; m_Pos = pos; m_Rot = rot; m_Scale = scale;
+            LateUpdate();
+        }
+
+        void LateUpdate()
+        {
+            if (!m_Parent) return;
+            if (transform.parent != m_Parent) transform.SetParent(m_Parent, false);
+            transform.localPosition = m_Pos;
+            transform.localRotation = m_Rot;
+            transform.localScale = m_Scale;
+            var rb = GetComponent<Rigidbody>();
+            if (rb) Destroy(rb);
         }
     }
 }
