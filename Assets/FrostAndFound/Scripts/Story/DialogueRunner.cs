@@ -26,6 +26,9 @@ namespace FrostAndFound
             }
         }
 
+        /// <summary>A kid starts a line (faces use it to pick the expression they settle into afterwards).</summary>
+        public static event System.Action<Kid, Line> LineStarted;
+
         public static bool IsSpeaking(CastId id) => s_I && s_I.m_SpeakingUntil.TryGetValue(id, out var t) && t > Time.time;
 
         public static void Ensure()
@@ -56,6 +59,7 @@ namespace FrostAndFound
             var id = speaker.id;
             if (IsSpeaking(id) && !interrupt) yield break;
             if (interrupt && IsSpeaking(id)) AudioDirector.StopAllVoices();
+            LineStarted?.Invoke(speaker, line);
             float voiceLen = AudioDirector.PlayVoice(line, speaker.Rig.Head ? speaker.Rig.Head : speaker.transform);
             // subtitles stay up at least long enough to read
             float readLen = Mathf.Max(voiceLen, 0.9f + line.Text.Length * 0.045f);

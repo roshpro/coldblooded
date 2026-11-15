@@ -475,8 +475,7 @@ namespace FrostAndFound
             }
             for (int i = 0; i < 3; i++)
             {
-                var star = ProcMesh.Part("Star", transform, ProcMesh.Sphere(6, 4), Palette.Toon(Palette.Glint, true, 0.5f, 0.4f), Vector3.zero, new Vector3(0.035f, 0.035f, 0.012f)).transform;
-                m_Things.Add(star);
+                m_Things.Add(StunStar.Create(transform, 0.075f, i).transform);   // the sprite-sheet stars
             }
             m_Tweets = AudioDirector.Loop(Sfx.Tweet, transform, 0.5f);
             MeshMerger.Merge(transform, new[] { "Star" }, 0f);   // stars orbit individually

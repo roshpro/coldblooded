@@ -71,6 +71,9 @@ namespace FrostAndFound
             Debug.Log($"[Frost] {name}: rigged kid, {m_Height:F2} m tall, walks {m_WalkSpeed:F2} m/s, runs {m_RunSpeed:F2} m/s");
         }
 
+        /// <summary>0–1: the head rolls round in circles (dizzy after a snowball, Tony dazed). Set by KidFaces.</summary>
+        public float Dizzy { get; set; }
+
         // ------------------------------------------------------------------ per frame (after the Animator)
         void HumanoidLate(float dt, float t)
         {
@@ -86,9 +89,18 @@ namespace FrostAndFound
             if (HasParam("Talk")) Animator.SetBool("Talk", Talking);
 
             // small touches on top of the solved pose, in world axes (independent of Meshy's bone orientations)
+            // dizzy: the upper body sways and the head rolls round in a circle (the tilt axis spins about the vertical)
+            var roll = Quaternion.identity;
+            if (Dizzy > 0.01f)
+            {
+                float a = Time.time * 6.5f;
+                var axis = Mathf.Cos(a) * transform.right + Mathf.Sin(a) * transform.forward;
+                if (Rig.Spine && Rig.Spine != Rig.Head) Rig.Spine.rotation = Quaternion.AngleAxis(7f * Dizzy, axis) * Rig.Spine.rotation;
+                roll = Quaternion.AngleAxis(20f * Dizzy, axis);
+            }
             if (Rig.Head)
             {
-                var q = Quaternion.AngleAxis(Talking ? Mathf.Sin(t * 9f) * 3f : 0f, transform.right);
+                var q = roll * Quaternion.AngleAxis(Talking ? Mathf.Sin(t * 9f) * 3f : 0f, transform.right);
                 if (m_Wobble > 0.01f)
                     q = Quaternion.AngleAxis(Mathf.Sin(t * 5f) * 12f * m_Wobble, transform.right) * Quaternion.AngleAxis(Mathf.Cos(t * 5f) * 14f * m_Wobble, transform.forward) * q;
                 Rig.Head.rotation = q * Rig.Head.rotation;

@@ -56,6 +56,8 @@ namespace FrostAndFound
 
         public CastId id;
         public KidRig Rig { get; private set; } = new KidRig();
+        /// <summary>Face texture swapper (null for kids without painted face variants).</summary>
+        public KidFaces Faces { get; private set; }
         public KidAnimator Anim { get; private set; }
         public Vector3 Velocity { get; private set; }
         public bool Busy { get; set; }
@@ -105,6 +107,9 @@ namespace FrostAndFound
             Anim = gameObject.AddComponent<KidAnimator>();
             Anim.Rig = Rig;
             Anim.Animator = GetComponentInChildren<Animator>();
+            // painted face variants (mouth shapes, dizzy eyes) for rigged models that have them
+            if (Anim.Animator && Anim.Animator.avatar && Anim.Animator.avatar.isHuman)
+                Faces = KidFaces.Attach(this, GetComponentInChildren<SkinnedMeshRenderer>());
             // physics: kinematic body + capsule for the torso, sphere for the head (head-shots BONK louder)
             var rb = gameObject.AddComponent<Rigidbody>();
             rb.isKinematic = true;
@@ -279,6 +284,7 @@ namespace FrostAndFound
             if (Busy || Time.time - m_LastPoseTime < 6f) return;
             m_LastPoseTime = Time.time;
             Anim.StrikePose(PoseFor(), 1.3f);
+            if (Faces) Faces.Show(FaceExpression.O, 0.6f);
             var line = Lines.Get(Cast.Key(id) + "_pose");
             if (line != null && !DialogueRunner.AnyoneSpeaking) DialogueRunner.Say(line, this, false);
         }
@@ -289,6 +295,7 @@ namespace FrostAndFound
         public virtual void OnSnowballHit(Snowball ball, Vector3 point, Vector3 velocity, bool headshot)
         {
             Anim.HitReact();
+            if (Faces) Faces.Dizzy(2.4f);
             AudioDirector.PlayAt(headshot ? Sfx.Bonk : Sfx.Splat, point, headshot ? 0.7f : 0.9f, Random.Range(0.95f, 1.08f));
             SplatDecal.Spawn(point, (point - ChestPoint).normalized, 0.12f, Rig.Spine);
             if (Time.time - m_LastHitLine > 4f && !Busy)
