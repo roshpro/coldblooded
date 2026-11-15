@@ -73,7 +73,7 @@ namespace FrostAndFound
             {
                 // the team's snowman: fallen and flattened, lying in the snow. In body space he lies along z with his
                 // head and hat at -z, the coal-buttoned middle in the centre and the plain base at +z.
-                const float scale = 1.3f;
+                const float scale = 1.45f;
                 var body = new GameObject("Body").transform;
                 body.SetParent(m_Visual, false);
                 body.localRotation = Quaternion.Euler(0f, 90f, 0f);   // lying across your view, so you see all of him

@@ -251,39 +251,35 @@ namespace FrostAndFound
 
         // ------------------------------------------------------------------ the pieces
 
-        /// <summary>A coast redwood, stylised: a straight red-brown trunk with a flared foot, and a narrow cone of
-        /// drooping tiers, each with a line of snow along its top edge, and a snowy tip.</summary>
+        /// <summary>A coast redwood in the low-poly style: a faceted, flared red-brown trunk and a stack of jagged,
+        /// flat-shaded tiers (pyramids with a short lip at the rim, some a star of drooping tips), each wearing a
+        /// faceted cap of snow that stops just short of its rim in a zigzag, and a green spike of a tip.</summary>
         static void Redwood(Kit k, Vector3 spot, float H, int seed)
         {
             var basePos = new Vector3(spot.x, k.room.FloorY, spot.z);
             var frame = Quaternion.Euler(k.Range(-2f, 2f), k.Range(0f, 360f), k.Range(-2f, 2f));
             float r0 = Mathf.Clamp(0.052f * H, 0.075f, 0.17f);   // a sturdy column of a trunk
-            k.Part("Trunk", ProcMesh.Cylinder(10, 0.32f), k.bark, basePos, frame, new Vector3(0f, H * 0.45f, 0f), new Vector3(r0 * 2f, H * 0.9f, r0 * 2f), Quaternion.identity);
-            k.Part("Root Flare", ProcMesh.Cylinder(10, 0.45f), k.bark, basePos, frame, new Vector3(0f, 0.07f, 0f), new Vector3(r0 * 3.6f, 0.16f, r0 * 3.6f), Quaternion.identity);
-
-            int n = H < 1.8f ? 6 : 8;
-            // a redwood shows a good length of bare trunk below a narrow crown; the tip (leader) ends about at H
-            float rb = 0.25f * H, y0 = (H < 1.8f ? 0.3f : 0.36f) * H, y1 = 0.78f * H;
+            int n = H < 1.8f ? 5 : 6;
+            float rb = 0.25f * H, y0 = (H < 1.8f ? 0.24f : 0.28f) * H, y1 = 0.7f * H;
             float gap = (y1 - y0) / (n - 1);
+            k.Part("Trunk", TrunkMesh(), k.bark, basePos, frame, Vector3.zero, new Vector3(r0 * 2f, y0 + gap, r0 * 2f), Quaternion.Euler(0f, k.Range(0f, 360f), 0f));
             float top = y1;
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)(n - 1);
-                float ri = rb * (1f - 0.76f * t) * k.Range(0.9f, 1.08f);
-                float hi = gap * 1.75f * (1f - 0.2f * t);
+                float ri = rb * (1f - 0.7f * t) * k.Range(0.92f, 1.06f);
+                float hi = gap * 2.15f * (1f - 0.15f * t);   // steep, well-overlapped tiers: a full silhouette
                 float yi = y0 + t * (y1 - y0);
                 top = yi + hi;
-                var off = new Vector3(k.Range(-1f, 1f), 0f, k.Range(-1f, 1f)) * 0.02f * H;
-                var tilt = Quaternion.Euler(k.Range(-5f, 5f), k.Range(0f, 360f), k.Range(-5f, 5f));
-                k.Part("Tier", ProcMesh.Cylinder(11, 0.12f), i % 2 == 0 ? k.needles : k.needles2, basePos, frame, off + Vector3.up * (yi + hi * 0.5f), new Vector3(ri * 2f, hi, ri * 2f), tilt);
-                // snow lying along the top of the bough, just in from its tips (where it shows between the tiers)
-                float ring = 0.84f;
-                float fy = (1f - ring) / 0.88f;   // height up the cone where its radius is ring·ri
-                k.Part("Tier Snow", ProcMesh.Torus(0.5f, 0.1f, 16, 6), k.snowMat, basePos, frame,
-                    off + Vector3.up * (yi + hi * fy + ri * 0.035f), new Vector3(ri * 2f * ring, ri * 2f * ring * 0.42f, ri * 2f * ring), tilt);
+                var off = new Vector3(k.Range(-1f, 1f), 0f, k.Range(-1f, 1f)) * 0.015f * H;
+                var tilt = Quaternion.Euler(k.Range(-4f, 4f), k.Range(0f, 360f), k.Range(-4f, 4f));
+                var (tier, snow) = TierMeshes(k.rng.Next(TierVariants));
+                var size = new Vector3(ri * 2f, hi, ri * 2f);
+                k.Part("Tier", tier, i % 2 == 0 ? k.needles : k.needles2, basePos, frame, off + Vector3.up * yi, size, tilt);
+                k.Part("Tier Snow", snow, k.snowMat, basePos, frame, off + Vector3.up * yi, size, tilt);
             }
-            k.Part("Leader", ProcMesh.Cylinder(9, 0f), k.needles2, basePos, frame, new Vector3(0f, top + 0.05f * H, 0f), new Vector3(0.08f * H, 0.14f * H, 0.08f * H), Quaternion.identity);
-            k.Part("Leader Snow", ProcMesh.Sphere(10, 6, 0.12f, seed % 5), k.snowMat, basePos, frame, new Vector3(0f, top + 0.015f * H, 0f), new Vector3(0.07f * H, 0.035f * H, 0.07f * H), Quaternion.identity);
+            k.Part("Leader", TipMesh(), k.needles2, basePos, frame, Vector3.up * (top - 0.035f * H), new Vector3(0.1f * H, 0.15f * H, 0.1f * H),
+                Quaternion.Euler(k.Range(-4f, 4f), k.Range(0f, 360f), k.Range(-4f, 4f)));
 
             var holder = k.Holder("Redwood", basePos);
             var trunk = holder.AddComponent<CapsuleCollider>();
@@ -291,6 +287,156 @@ namespace FrostAndFound
             var crown = holder.AddComponent<CapsuleCollider>();   // snowballs thud into the boughs
             crown.radius = rb * 0.72f; crown.height = Mathf.Max(crown.radius * 2f, H - y0); crown.center = new Vector3(0f, (y0 + H) * 0.5f, 0f);
             PhotoSubject.Tag(holder, SubjectKind.Tree, 0.85f).WithBounds(new Bounds(basePos + Vector3.up * H * 0.55f, new Vector3(rb * 2f, H, rb * 2f)));
+        }
+
+        // ------------------------------------------------------------------ low-poly meshes (flat-shaded facets)
+
+        const int TierVariants = 8;
+        static readonly Dictionary<int, (Mesh tier, Mesh snow)> s_TierMeshes = new Dictionary<int, (Mesh, Mesh)>();
+        static Mesh s_Trunk, s_Tip;
+
+        /// <summary>Flat-shaded mesh builder: every triangle gets its own three vertices and its face normal, so the
+        /// toon shading lands as crisp facets. Each triangle is wound to face along the outward hint it's given.</summary>
+        class Facets
+        {
+            readonly List<Vector3> m_V = new List<Vector3>(), m_N = new List<Vector3>();
+            readonly List<int> m_T = new List<int>();
+
+            public void Tri(Vector3 a, Vector3 b, Vector3 c, Vector3 outward)
+            {
+                var n = Vector3.Cross(b - a, c - a);
+                if (n.sqrMagnitude < 1e-12f) return;
+                if (Vector3.Dot(n, outward) < 0f) { (b, c) = (c, b); n = -n; }
+                n.Normalize();
+                int i = m_V.Count;
+                m_V.Add(a); m_V.Add(b); m_V.Add(c);
+                m_N.Add(n); m_N.Add(n); m_N.Add(n);
+                m_T.Add(i); m_T.Add(i + 1); m_T.Add(i + 2);
+            }
+
+            public void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 outward) { Tri(a, b, c, outward); Tri(a, c, d, outward); }
+
+            public Mesh Build(string name)
+            {
+                var m = new Mesh { name = name };
+                m.SetVertices(m_V);
+                m.SetNormals(m_N);
+                m.SetTriangles(m_T, 0);
+                m.RecalculateBounds();
+                return m;
+            }
+        }
+
+        /// <summary>One tier (unit size: rim radius ~0.5 at y≈0, apex at y=1) and the snow cap that fits it. Eight
+        /// variants are shared by every tree: 6–8 bough tips round the rim, half of them a star of drooping tips
+        /// with notches between, all a little irregular.</summary>
+        static (Mesh tier, Mesh snow) TierMeshes(int variant)
+        {
+            if (s_TierMeshes.TryGetValue(variant, out var cached) && cached.tier && cached.snow) return cached;
+            var rng = new System.Random(7919 + variant * 104729);
+            float R() => (float)rng.NextDouble();
+            int sides = 6 + variant % 3;
+            bool notched = variant % 2 == 1;
+            int n = notched ? sides * 2 : sides;
+            var apex = new Vector3((R() - 0.5f) * 0.05f, 1f, (R() - 0.5f) * 0.05f);
+            var rim = new Vector3[n];
+            var lip = new Vector3[n];
+            var edge = new Vector3[n];
+            float a0 = R() * Mathf.PI * 2f, step = Mathf.PI * 2f / n;
+            for (int i = 0; i < n; i++)
+            {
+                bool tip = !notched || i % 2 == 0;
+                float a = a0 + i * step + (R() - 0.5f) * step * 0.3f;
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                float r = tip ? 0.5f * (0.9f + 0.16f * R()) : 0.5f * (0.66f + 0.1f * R());
+                float y = tip ? -0.04f - 0.1f * R() : 0.05f * R();            // tips droop, notches sit higher
+                rim[i] = dir * r + Vector3.up * y;
+                lip[i] = dir * (r * 0.93f) + Vector3.up * (y - 0.11f - 0.04f * R());
+                edge[i] = Vector3.Lerp(apex, rim[i], 0.66f + 0.18f * R());   // where the snow stops, unevenly, leaving a green rim
+            }
+
+            var tier = new Facets();
+            var under = new Vector3(0f, 0.12f, 0f);
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                var mid = (rim[i] + rim[j]) * 0.5f;
+                var outH = new Vector3(mid.x, 0f, mid.z).normalized;
+                tier.Tri(apex, rim[i], rim[j], outH + Vector3.up);           // the sloping top
+                tier.Quad(rim[i], rim[j], lip[j], lip[i], outH);             // the short lip round the rim
+                tier.Tri(lip[i], lip[j], under, Vector3.down);               // the underside, up into the crown
+            }
+
+            var snow = new Facets();
+            Vector3 S(Vector3 p) => p + Vector3.up * 0.022f + new Vector3(p.x, 0f, p.z) * 0.035f;   // just proud of the boughs
+            var sApex = S(apex) + Vector3.up * 0.01f;
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                var mid = (edge[i] + edge[j]) * 0.5f;
+                var outH = new Vector3(mid.x, 0f, mid.z).normalized;
+                snow.Tri(sApex, S(edge[i]), S(edge[j]), outH + Vector3.up);
+                // a little thickness at the edge, like a slab of snow resting on the boughs
+                snow.Quad(S(edge[i]), S(edge[j]), S(edge[j]) - Vector3.up * 0.06f, S(edge[i]) - Vector3.up * 0.06f, outH);
+            }
+            var built = (tier.Build("Redwood Tier " + variant), snow.Build("Redwood Tier Snow " + variant));
+            s_TierMeshes[variant] = built;
+            return built;
+        }
+
+        /// <summary>Six-sided trunk (unit: radius 0.5, height 1) with a flared, buttressed foot and a gentle taper.</summary>
+        static Mesh TrunkMesh()
+        {
+            if (s_Trunk) return s_Trunk;
+            var rng = new System.Random(4242);
+            float R() => (float)rng.NextDouble();
+            const int sides = 6;
+            float[] ys = { 0f, 0.14f, 1f };
+            float[] rs = { 0.75f, 0.5f, 0.36f };
+            var rings = new Vector3[3, sides];
+            for (int r = 0; r < 3; r++)
+                for (int i = 0; i < sides; i++)
+                {
+                    float a = i / (float)sides * Mathf.PI * 2f + (r == 0 ? (R() - 0.5f) * 0.3f : 0f);
+                    float rad = rs[r] * (r == 0 ? 0.85f + 0.3f * R() : 1f);
+                    rings[r, i] = new Vector3(Mathf.Cos(a) * rad, ys[r], Mathf.Sin(a) * rad);
+                }
+            var f = new Facets();
+            for (int r = 0; r < 2; r++)
+                for (int i = 0; i < sides; i++)
+                {
+                    int j = (i + 1) % sides;
+                    var mid = (rings[r, i] + rings[r, j]) * 0.5f;
+                    f.Quad(rings[r, i], rings[r, j], rings[r + 1, j], rings[r + 1, i], new Vector3(mid.x, 0f, mid.z));
+                }
+            return s_Trunk = f.Build("Redwood Trunk");
+        }
+
+        /// <summary>The tree's tip: a five-sided green spike, leaning a touch (unit: base radius 0.5, height 1).</summary>
+        static Mesh TipMesh()
+        {
+            if (s_Tip) return s_Tip;
+            var rng = new System.Random(777);
+            float R() => (float)rng.NextDouble();
+            const int sides = 5;
+            var apex = new Vector3(0.05f, 1f, -0.04f);
+            var ring = new Vector3[sides];
+            for (int i = 0; i < sides; i++)
+            {
+                float a = i / (float)sides * Mathf.PI * 2f;
+                float r = 0.5f * (0.85f + 0.25f * R());
+                ring[i] = new Vector3(Mathf.Cos(a) * r, 0.05f * R(), Mathf.Sin(a) * r);
+            }
+            var f = new Facets();
+            var baseC = Vector3.up * 0.02f;
+            for (int i = 0; i < sides; i++)
+            {
+                int j = (i + 1) % sides;
+                var mid = (ring[i] + ring[j]) * 0.5f;
+                f.Tri(apex, ring[i], ring[j], new Vector3(mid.x, 0.3f, mid.z));
+                f.Tri(ring[i], ring[j], baseC, Vector3.down);
+            }
+            return s_Tip = f.Build("Redwood Tip");
         }
 
         /// <summary>A rounded evergreen bush, a few lumpy clumps each with a cap of snow.</summary>

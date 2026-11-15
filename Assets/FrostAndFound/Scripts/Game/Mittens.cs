@@ -84,10 +84,10 @@ namespace FrostAndFound
         static readonly Vector3[] CamJoints =
         {
             new Vector3(-0.080f, -0.022f, -0.036f), new Vector3(-0.070f, -0.046f, -0.032f), new Vector3(-0.056f, -0.055f, -0.020f), new Vector3(-0.042f, -0.057f, -0.006f),   // thumb, under the bottom
-            new Vector3(-0.092f, 0.046f, -0.032f), new Vector3(-0.090f, 0.084f, -0.030f), new Vector3(-0.070f, 0.094f, -0.024f), new Vector3(-0.050f, 0.090f, -0.016f),     // index, tip on the shutter
-            new Vector3(-0.094f, 0.048f, -0.010f), new Vector3(-0.092f, 0.088f, -0.008f), new Vector3(-0.071f, 0.097f, -0.004f), new Vector3(-0.050f, 0.092f, 0.004f),      // middle
-            new Vector3(-0.093f, 0.046f, 0.012f), new Vector3(-0.091f, 0.084f, 0.014f), new Vector3(-0.072f, 0.094f, 0.016f), new Vector3(-0.053f, 0.089f, 0.022f),        // ring
-            new Vector3(-0.091f, 0.042f, 0.032f), new Vector3(-0.089f, 0.072f, 0.034f), new Vector3(-0.074f, 0.084f, 0.035f), new Vector3(-0.058f, 0.081f, 0.038f),        // little
+            new Vector3(-0.092f, 0.040f, -0.032f), new Vector3(-0.090f, 0.072f, -0.030f), new Vector3(-0.070f, 0.082f, -0.024f), new Vector3(-0.050f, 0.078f, -0.016f),     // index, tip on the shutter
+            new Vector3(-0.094f, 0.042f, -0.010f), new Vector3(-0.092f, 0.076f, -0.008f), new Vector3(-0.071f, 0.085f, -0.004f), new Vector3(-0.050f, 0.080f, 0.004f),      // middle
+            new Vector3(-0.093f, 0.040f, 0.012f), new Vector3(-0.091f, 0.072f, 0.014f), new Vector3(-0.072f, 0.082f, 0.016f), new Vector3(-0.053f, 0.077f, 0.022f),        // ring
+            new Vector3(-0.091f, 0.036f, 0.032f), new Vector3(-0.089f, 0.060f, 0.034f), new Vector3(-0.074f, 0.072f, 0.035f), new Vector3(-0.058f, 0.069f, 0.038f),        // little
         };
         Vector3 CamMirror(Vector3 v) => new Vector3(m_Side == HandSide.Left ? v.x : -v.x, v.y, v.z);
 

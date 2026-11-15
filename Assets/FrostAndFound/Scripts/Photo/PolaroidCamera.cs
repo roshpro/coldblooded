@@ -75,7 +75,7 @@ namespace FrostAndFound
             // the lens camera
             var lensGo = new GameObject("Lens Camera");
             lensGo.transform.SetParent(transform, false);
-            lensGo.transform.localPosition = new Vector3(0, 0.005f, 0.06f) * BodyScale;
+            lensGo.transform.localPosition = new Vector3(0, 0.001f, 0.06f) * BodyScale;
             Lens = lensGo.AddComponent<Camera>();
             Lens.fieldOfView = tune.photoFov;
             Lens.nearClipPlane = 0.04f;
@@ -99,7 +99,7 @@ namespace FrostAndFound
 
             // viewfinder screen on the back of the camera
             var screen = ProcMesh.Part("Viewfinder", m_Body, ProcMesh.Quad(), Palette.UnlitTextured(m_Viewfinder, Color.white, false, "ViewfinderScreen"),
-                new Vector3(0.012f, 0.012f, -0.0496f), new Vector3(0.056f, 0.056f, 1f), new Vector3(0, 0, 0));
+                new Vector3(0.012f, 0.006f, -0.0496f), new Vector3(0.056f, 0.056f, 1f), new Vector3(0, 0, 0));
             screen.transform.localRotation = Quaternion.Euler(0, 180f, 0) * Quaternion.Euler(0, 180f, 0); // quad faces -Z = toward you
             screen.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
@@ -112,28 +112,29 @@ namespace FrostAndFound
             var dark = Palette.Toon(Palette.CameraDark, true, 0.3f);
             var t = m_Body;
             // classic wedge body: main block + sloped top + chunky lens + flash window + red button + rainbow stripe
-            ProcMesh.Part("Shell", t, ProcMesh.RoundedBox(0.16f, 3), body, new Vector3(0, -0.005f, 0), new Vector3(0.13f, 0.085f, 0.095f));
-            ProcMesh.Part("Top", t, ProcMesh.RoundedBox(0.2f, 3), body, new Vector3(0, 0.045f, -0.01f), new Vector3(0.13f, 0.035f, 0.075f), new Vector3(-12, 0, 0));
+            // (a little less tall than it was: the shell is 1.2 cm shorter and everything above it sits lower)
+            ProcMesh.Part("Shell", t, ProcMesh.RoundedBox(0.16f, 3), body, new Vector3(0, -0.011f, 0), new Vector3(0.13f, 0.073f, 0.095f));
+            ProcMesh.Part("Top", t, ProcMesh.RoundedBox(0.2f, 3), body, new Vector3(0, 0.033f, -0.01f), new Vector3(0.13f, 0.035f, 0.075f), new Vector3(-12, 0, 0));
             ProcMesh.Part("Base", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(0, -0.05f, 0.002f), new Vector3(0.133f, 0.012f, 0.098f));
-            ProcMesh.Part("Lens Barrel", t, ProcMesh.Cylinder(18), dark, new Vector3(0, 0.0f, 0.052f), new Vector3(0.048f, 0.022f, 0.048f), new Vector3(90, 0, 0));
-            ProcMesh.Part("Lens Ring", t, ProcMesh.Torus(0.42f, 0.08f, 20, 8), Palette.Toon(Palette.Coal, false, 0.4f), new Vector3(0, 0.0f, 0.064f), new Vector3(0.055f, 0.055f, 0.055f), new Vector3(90, 0, 0));
-            ProcMesh.Part("Glass", t, ProcMesh.Disc(18), Palette.Toon(Palette.Lens, false, 0.9f, 0.15f), new Vector3(0, 0.0f, 0.0635f), new Vector3(0.036f, 0.002f, 0.036f), new Vector3(90, 0, 0));
+            ProcMesh.Part("Lens Barrel", t, ProcMesh.Cylinder(18), dark, new Vector3(0, -0.004f, 0.052f), new Vector3(0.048f, 0.022f, 0.048f), new Vector3(90, 0, 0));
+            ProcMesh.Part("Lens Ring", t, ProcMesh.Torus(0.42f, 0.08f, 20, 8), Palette.Toon(Palette.Coal, false, 0.4f), new Vector3(0, -0.004f, 0.064f), new Vector3(0.055f, 0.055f, 0.055f), new Vector3(90, 0, 0));
+            ProcMesh.Part("Glass", t, ProcMesh.Disc(18), Palette.Toon(Palette.Lens, false, 0.9f, 0.15f), new Vector3(0, -0.004f, 0.0635f), new Vector3(0.036f, 0.002f, 0.036f), new Vector3(90, 0, 0));
             m_FlashMat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Unlit)) { name = "FlashBulb" };
             m_FlashMat.SetColor("_BaseColor", Palette.SkyHorizon);
-            var bulb = ProcMesh.Part("Flash", t, ProcMesh.RoundedBox(0.3f, 2), m_FlashMat, new Vector3(0.036f, 0.046f, 0.03f), new Vector3(0.036f, 0.018f, 0.012f), new Vector3(-12, 0, 0));
+            var bulb = ProcMesh.Part("Flash", t, ProcMesh.RoundedBox(0.3f, 2), m_FlashMat, new Vector3(0.036f, 0.034f, 0.03f), new Vector3(0.036f, 0.018f, 0.012f), new Vector3(-12, 0, 0));
             m_FlashBulb = bulb.GetComponent<Renderer>();
             // the shutter sits on top at the holding hand's end, right under the mitten's tip (left end for the left hand)
             float side = FrostPrefs.CameraHand == HandSide.Left ? -1f : 1f;
-            ProcMesh.Part("Shutter", t, ProcMesh.Cylinder(12), Palette.Toon(Palette.EvidenceRed, true, 0.4f), new Vector3(0.046f * side, 0.0645f, -0.004f), new Vector3(0.018f, 0.008f, 0.018f), new Vector3(-12f, 0, 0));
-            ProcMesh.Part("Eyepiece", t, ProcMesh.RoundedBox(0.25f, 2), dark, new Vector3(-0.035f * side, 0.052f, -0.035f), new Vector3(0.026f, 0.018f, 0.02f));
+            ProcMesh.Part("Shutter", t, ProcMesh.Cylinder(12), Palette.Toon(Palette.EvidenceRed, true, 0.4f), new Vector3(0.046f * side, 0.0525f, -0.004f), new Vector3(0.018f, 0.008f, 0.018f), new Vector3(-12f, 0, 0));
+            ProcMesh.Part("Eyepiece", t, ProcMesh.RoundedBox(0.25f, 2), dark, new Vector3(-0.035f * side, 0.040f, -0.035f), new Vector3(0.026f, 0.018f, 0.02f));
             Color[] rainbow = { Palette.Rainbow1, Palette.Rainbow2, Palette.Rainbow3, Palette.Rainbow4, Palette.Rainbow5 };
             for (int i = 0; i < rainbow.Length; i++)
                 ProcMesh.Part("Stripe", t, ProcMesh.RoundedBox(0.1f, 1), Palette.Toon(rainbow[i], false, 0.2f),
-                    new Vector3(-0.012f + i * 0.0062f, 0.01f, 0.0482f), new Vector3(0.0058f, 0.06f, 0.002f));
+                    new Vector3(-0.012f + i * 0.0062f, 0.0f, 0.0482f), new Vector3(0.0058f, 0.05f, 0.002f));
             // the photo slot at the front-bottom
             ProcMesh.Part("Slot", t, ProcMesh.RoundedBox(0.3f, 1), Palette.Toon(Palette.Coal), new Vector3(0, -0.042f, 0.0475f), new Vector3(0.095f, 0.006f, 0.002f));
             // viewfinder bezel on the back
-            ProcMesh.Part("Bezel", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(0.012f, 0.012f, -0.047f), new Vector3(0.064f, 0.064f, 0.004f));
+            ProcMesh.Part("Bezel", t, ProcMesh.RoundedBox(0.2f, 2), dark, new Vector3(0.012f, 0.006f, -0.047f), new Vector3(0.064f, 0.064f, 0.004f));
             Slot = ProcMesh.Pivot("PhotoSlot", t, new Vector3(0, -0.044f, 0.05f));
             m_Body.localPosition = new Vector3(0, 0.015f, -0.01f);
             MeshMerger.Merge(m_Body, null, 0f);
