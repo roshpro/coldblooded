@@ -339,13 +339,14 @@ namespace FrostAndFound
                 0.27f, Pen, new Vector2(tw, 0.11f), TextAlignmentOptions.TopLeft, true);
             story.transform.localPosition = new Vector3(tcx, H * 0.5f - 0.2f, -0.003f);
 
-            string wrongLine = wrong == 0 ? "No wrong suspects - flawless!" : $"Wrong kid shown a photo: {wrong}";
+            // the numbers in bold, like you went over them twice in pen
+            string wrongLine = wrong == 0 ? "No wrong suspects - flawless!" : $"Wrong kid shown a photo: <b>{wrong}</b>";
             var lines = new[]
             {
-                $"Time on the case:  {time}",
-                $"Photos snapped:  {photos}",
-                $"Photos shown:  {shows}",
-                $"Snowballs thrown:  {throws}",
+                $"Time on the case:  <b>{time}</b>",
+                $"Photos snapped:  <b>{photos}</b>",
+                $"Photos shown:  <b>{shows}</b>",
+                $"Snowballs thrown:  <b>{throws}</b>",
                 wrongLine,
             };
             float ly = H * 0.5f - 0.285f;

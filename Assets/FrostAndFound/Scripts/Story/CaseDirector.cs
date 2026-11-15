@@ -168,6 +168,13 @@ namespace FrostAndFound
         // ------------------------------------------------------------------ show a photo (doc §5.2)
         public bool CanShow => !Reacting && !CaseClosed && !SnowballFight.Active;
 
+        /// <summary>The kid this photo moves the case on with (its clue is the one you're on), or null.</summary>
+        public Kid NeededFor(PhotoData photo)
+        {
+            if (photo == null || photo.Blurred || CaseClosed || photo.Clue == ClueId.None || photo.Clue != CurrentClue) return null;
+            return Kid.Find(CurrentKid);
+        }
+
         public void ShowPhoto(Kid kid, PhotoData photo)
         {
             if (!CanShow || kid == null || photo == null) return;

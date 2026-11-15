@@ -162,11 +162,68 @@ namespace FrostAndFound
 
         public void PickUp()
         {
+            SetHighlight(false);
             if (m_Rb) Destroy(m_Rb);
             var col = GetComponent<BoxCollider>();
             if (col) Destroy(col);
             m_Rb = null;
             gameObject.layer = Layers.PlayerHands;
+        }
+
+        // ---- the "this is the one you'll pick up" glow
+        Transform m_Glow;
+        Material m_GlowMat;
+        float m_GlowOn, m_GlowWant;
+        static Texture2D s_GlowTex;
+
+        /// <summary>Light it up softly round its edges (it's the one your hand will pick up), or not.</summary>
+        public void SetHighlight(bool on)
+        {
+            m_GlowWant = on ? 1f : 0f;
+            if (on && !m_Glow) BuildGlow();
+        }
+
+        void BuildGlow()
+        {
+            if (!s_GlowTex) s_GlowTex = MakeGlowTexture();
+            m_GlowMat = new Material(Palette.Particle(s_GlowTex, true, "Photo Glow")) { name = "Photo Glow" };
+            m_GlowMat.SetColor("_BaseColor", new Color(1f, 0.93f, 0.7f, 0f));
+            // in the paper's own plane: the photo hides the middle, so only a halo round its edges shows (either side up)
+            var g = ProcMesh.Part("Pick-up Glow", m_Content, ProcMesh.Quad(), m_GlowMat, Vector3.zero, new Vector3(Width * 1.3f, Height * 1.25f, 1f));
+            g.layer = gameObject.layer;
+            var mr = g.GetComponent<MeshRenderer>();
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            m_Glow = g.transform;
+        }
+
+        void LateUpdate()
+        {
+            if (!m_Glow) return;
+            m_GlowOn = Mathf.MoveTowards(m_GlowOn, m_GlowWant, Time.deltaTime * 5f);
+            m_Glow.gameObject.SetActive(m_GlowOn > 0.001f);
+            float pulse = 0.9f + 0.1f * Mathf.Sin(Time.time * 3f);   // a slow, faint breathing
+            m_GlowMat.SetColor("_BaseColor", new Color(1f, 0.95f, 0.82f, 0.3f * m_GlowOn * pulse));
+        }
+
+        // a soft rounded-rectangle halo: full inside the photo's outline, fading out a couple of centimetres beyond it
+        static Texture2D MakeGlowTexture()
+        {
+            const int n = 64;
+            var t = new Texture2D(n, n, TextureFormat.RGBA32, false) { name = "Photo Glow", wrapMode = TextureWrapMode.Clamp };
+            var px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = (x + 0.5f) / n * 2f - 1f, v = (y + 0.5f) / n * 2f - 1f;
+                    float dx = Mathf.Max(Mathf.Abs(u) - 0.74f, 0f), dy = Mathf.Max(Mathf.Abs(v) - 0.76f, 0f);
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    float a = Mathf.Clamp01(1f - d / 0.24f);
+                    px[y * n + x] = new Color(1f, 1f, 1f, a * a);
+                }
+            t.SetPixels(px);
+            t.Apply();
+            return t;
         }
 
         /// <summary>Stop simulating once it has settled (or when something else wants to move it, e.g. the case file).</summary>
@@ -273,22 +330,56 @@ namespace FrostAndFound
                 else drop = Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
                 if (drop) { DropCurrent(hand); return; }
             }
-            // pick one back up: pinch or grab it where it lies (desktop: G picks up the nearest)
-            if (Dropped.Count == 0 || (SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand))) return;
+            // pick one back up: reach down to it and grab (desktop: G picks up the nearest). The one your hand would
+            // take glows softly, so with a few lying close together you can see which.
+            Dropped.RemoveAll(p => !p);
+            var holding = SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand);
+            var near = holding ? null : NearestDropped(rig, hand, rig.IsXR ? HighlightReach : 2.5f);
+            if (near != m_Highlighted)
+            {
+                if (m_Highlighted) m_Highlighted.SetHighlight(false);
+                m_Highlighted = near;
+                if (near) near.SetHighlight(true);
+            }
+            if (!near) { m_OpenTime = Time.time; return; }
             if (!rig.IsXR)
             {
-                if (Keyboard.current == null || !Keyboard.current.gKey.wasPressedThisFrame) return;
-                PolaroidPhoto near = null; float best = 2.5f;
-                foreach (var p in Dropped) if (p) { float d = FrostUtil.FlatDistance(p.transform.position, rig.Head.position); if (d < best) { best = d; near = p; } }
-                if (near) PickUp(near, hand);
+                if (Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame) PickUp(near, hand);
                 return;
             }
             bool closed = hand.Grip > 0.6f || hand.Trigger > 0.6f;
             if (!closed) { m_OpenTime = Time.time; return; }
             if (Time.time - m_OpenTime > 0.8f) return;
-            var at = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
+            if (Vector3.Distance(near.transform.position, ReachPoint(hand)) < PickReach) PickUp(near, hand);
+        }
+
+        const float PickReach = 0.2f, HighlightReach = 0.32f;
+        PolaroidPhoto m_Highlighted;
+
+        static Vector3 ReachPoint(HandRig hand) => hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
+
+        PolaroidPhoto NearestDropped(PlayerRig rig, HandRig hand, float within)
+        {
+            PolaroidPhoto best = null;
+            float bestD = within;
+            var at = rig.IsXR ? ReachPoint(hand) : rig.Head.position;
             foreach (var p in Dropped)
-                if (p && Vector3.Distance(p.transform.position, at) < 0.11f) { PickUp(p, hand); return; }
+            {
+                if (!p) continue;
+                float d = rig.IsXR ? Vector3.Distance(p.transform.position, at) : FrostUtil.FlatDistance(p.transform.position, at);
+                if (d < bestD) { bestD = d; best = p; }
+            }
+            return best;
+        }
+
+        /// <summary>A dropped photo is within this hand's grab: picking it up wins over scooping snow.</summary>
+        public bool PhotoInReach(HandRig hand)
+        {
+            var rig = PlayerRig.Active;
+            if (!rig || hand != rig.FreeHand || Dropped.Count == 0 || (CaseDirector.I != null && CaseDirector.I.CaseClosed)) return false;
+            var at = ReachPoint(hand);
+            foreach (var p in Dropped) if (p && Vector3.Distance(p.transform.position, at) < PickReach + 0.05f) return true;
+            return false;
         }
 
         void DropCurrent(HandRig hand)

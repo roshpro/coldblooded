@@ -1,3 +1,2 @@
 id,character,voice,text,subtitle,plays_when,note,priority,category
 snowball_fight,Announcer,"(a big, loud announcer voice)",[shouting] SNOWBALL FIGHT!,SNOWBALL FIGHT!,"Snowball fight starts: after the alarm (2D, full volume)",Save as snowball_fight.mp3 in Resources/Voice,1,Snowball fight
-lucy_aurora,Lucy,"Ivanna - Sassy, Condescending",Huh. Even the sky knows I solved it.,Huh. Even the sky knows I solved it.,,,4,Other

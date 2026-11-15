@@ -347,7 +347,7 @@ namespace FrostAndFound
                 float targetV = speed * slow * (angle > 75f ? 0.1f : Mathf.Lerp(1f, 0.5f, angle / 75f));
                 if (last) targetV *= Mathf.Clamp01(dist / 0.45f) * 0.8f + 0.2f;
                 v = Mathf.MoveTowards(v, targetV, (targetV > v ? 1.8f : 3.5f) * Time.deltaTime);
-                transform.position += dir * Mathf.Min(v * Time.deltaTime, dist);
+                transform.position = KeepApart(transform.position, transform.position + dir * Mathf.Min(v * Time.deltaTime, dist));
 
                 // stuck behind someone for too long: give up and think again
                 if (Time.time > checkAt)
@@ -366,9 +366,11 @@ namespace FrostAndFound
         {
             var room = RoomService.Current;
             if (room != null) target.y = room.FloorY;
+            float checkAt = Time.time + 1.5f;
+            var checkPos = transform.position;
             while (true)
             {
-                while (IsStunned) yield return null;   // dizzy: the walk waits
+                while (IsStunned) { checkAt = Time.time + 1.5f; yield return null; }   // dizzy: the walk waits
                 var to = (target - transform.position).Flat();
                 float dist = to.magnitude;
                 if (dist < 0.05f) break;
@@ -376,7 +378,14 @@ namespace FrostAndFound
                 var face = Quaternion.LookRotation(dir, Vector3.up);
                 transform.rotation = Ease.Damp(transform.rotation, face, 10f, Time.deltaTime);
                 float step = Mathf.Min(dist, speed * Time.deltaTime);
-                transform.position += dir * step;
+                transform.position = KeepApart(transform.position, transform.position + dir * step);
+                // someone's standing on the spot (or right in the way) and won't budge: stop here
+                if (Time.time > checkAt)
+                {
+                    if (FrostUtil.FlatDistance(transform.position, checkPos) < 0.05f) break;
+                    checkPos = transform.position;
+                    checkAt = Time.time + 1.5f;
+                }
                 yield return null;
             }
             m_Move = null;
@@ -384,6 +393,43 @@ namespace FrostAndFound
         }
 
         protected virtual bool WanderSpotOk(Vector3 p) => true;
+
+        public bool IsHidden => m_Hidden;
+
+        /// <summary>How close two kids (or a kid and you) ever get: nobody walks into anybody.</summary>
+        public const float PersonalSpace = 0.5f;
+
+        /// <summary>A step from `from` to `to`, kept out of the others' (and your) personal space: heading into
+        /// someone, it slides round them instead; moving apart is always allowed, so two who've ended up too close
+        /// can separate.</summary>
+        internal Vector3 KeepApart(Vector3 from, Vector3 to)
+        {
+            for (int pass = 0; pass < 2; pass++)
+            {
+                foreach (var k in All)
+                {
+                    if (!k || k == this || k.IsHidden || !k.isActiveAndEnabled) continue;
+                    to = OutOf(from, to, k.transform.position, PersonalSpace);
+                }
+                var player = PlayerRig.Active;
+                if (player) to = OutOf(from, to, player.FeetPosition, 0.45f);
+            }
+            if (!KidNav.Walkable(to) && KidNav.Walkable(from)) return from;   // sliding round them would mean a wall or a tree
+            return to;
+        }
+
+        static Vector3 OutOf(Vector3 from, Vector3 to, Vector3 other, float space)
+        {
+            var d = (to - other).Flat();
+            float dist = d.magnitude;
+            if (dist >= space) return to;
+            float before = (from - other).Flat().magnitude;
+            if (dist >= before) return to;   // moving away from them
+            var n = dist > 1e-4f ? d / dist : (from - other).Flat().normalized;
+            if (n.sqrMagnitude < 1e-6f) return from;
+            float r = Mathf.Min(space, before);   // never closer than we already were
+            return new Vector3(other.x + n.x * r, to.y, other.z + n.z * r);
+        }
 
         /// <summary>The idle AI just arrived somewhere and will stand about for `seconds` (Dexter puts his cocoa down
         /// if it's a table).</summary>

@@ -152,7 +152,7 @@ namespace FrostAndFound
             {
                 var dir = to.normalized;
                 transform.rotation = Ease.Damp(transform.rotation, Quaternion.LookRotation(dir), 9f, Time.deltaTime);
-                transform.position += dir * Mathf.Min(to.magnitude, m_SpeedNow * Time.deltaTime);
+                transform.position = KeepApart(transform.position, transform.position + dir * Mathf.Min(to.magnitude, m_SpeedNow * Time.deltaTime));
             }
         }
 

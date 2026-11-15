@@ -67,6 +67,8 @@ namespace FrostAndFound
                 var palm = hand.Palm.position;
                 float above = palm.y - snow.SurfaceHeightAt(palm);
                 bool inSnowZone = above < tune.scoopHeight && above > -0.15f && SnowNear(snow, palm);
+                // reaching down for a dropped photo: that hand picks the photo up instead of scooping snow
+                if (inSnowZone && PhotoHolder.Instance && PhotoHolder.Instance.PhotoInReach(hand)) return;
                 bool closing = hand.Grip > tune.gripClosed;
                 bool wasOpenRecently = Time.time - st.LastOpen < 1.8f;
                 if (inSnowZone && closing && wasOpenRecently) FormBall(st, hand, rig, snow, palm);
