@@ -64,8 +64,6 @@ namespace FrostAndFound
                     var cam = PolaroidCamera.Instance;
                     if (cam && (cam.IsRaised || cam.PrintWaiting)) return;   // that hand is busy with the camera
                 }
-                // a hand holding a photo has to let go of it before it can scoop
-                if (rig.IsXR && hand == rig.FreeHand && PhotoHolder.Instance && PhotoHolder.Instance.Visible) return;
                 var palm = hand.Palm.position;
                 float above = palm.y - snow.SurfaceHeightAt(palm);
                 bool inSnowZone = above < tune.scoopHeight && above > -0.15f && SnowNear(snow, palm);

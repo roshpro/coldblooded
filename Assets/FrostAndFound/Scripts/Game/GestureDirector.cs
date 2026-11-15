@@ -10,7 +10,7 @@ namespace FrostAndFound
     /// - Scoop &amp; throw: once Tony runs, if you haven't thrown a snowball in a long while. Hidden once you scoop.
     /// - Show a photo: holding a developed photo without showing it to anyone (soon for your first, then only if you
     ///   seem stuck). Hidden the moment you show one, or when you stop holding a photo.
-    /// All respect the "Tips" toggle; one plays at a time.
+    /// The take-photo hint always plays with the show-photo hint beside it. All respect the "Tips" toggle.
     /// </summary>
     public class GestureDirector : MonoBehaviour
     {
@@ -105,7 +105,7 @@ namespace FrostAndFound
                 GestureHint.Show(GestureKind.ShowPhoto);
 
             // supposed to take a picture but hasn't for a long while: the current clue has no usable photo yet
-            if (m_Prompted && !d.Reacting && !NeedsNoPhoto(d) && !GestureHint.IsShowing(GestureKind.Camera) && !GestureHint.OtherShowing(GestureKind.Camera))
+            if (m_Prompted && !d.Reacting && !NeedsNoPhoto(d) && !GestureHint.IsShowing(GestureKind.Camera))
             {
                 float idle = Time.time - Mathf.Max(m_InvestigatingSince, m_LastPhoto, d.StepStartedAt);
                 if (idle > tune.cameraGestureIdleSeconds) GestureHint.Show(GestureKind.Camera);

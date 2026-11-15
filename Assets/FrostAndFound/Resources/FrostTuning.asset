@@ -37,12 +37,12 @@ MonoBehaviour:
   aimAssistStrength: 0.35
   aimAssistMaxDegrees: 4.5
   tonyDazeSeconds: 4.2
-  tonyRunSpeed: 1.15
-  tonyPanicSpeed: 1.7
+  tonyRunSpeed: 1.725
+  tonyPanicSpeed: 2.55
   tonyTripAfterSeconds: 25
   tonyDodgeCooldown: 0.35
-  idleNudgeSeconds: 15
-  cameraPromptDelay: 1.5
+  idleNudgeSeconds: 25
+  cameraPromptDelay: 0
   cameraGestureIdleSeconds: 20
   throwGestureIdleSeconds: 10
   kidWallInset: 0.55

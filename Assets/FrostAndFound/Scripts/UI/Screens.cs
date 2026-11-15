@@ -174,45 +174,6 @@ namespace FrostAndFound
         }
     }
 
-    /// <summary>"Finding your room…" while the headset's Space Setup loads, with an escape hatch after a few seconds.</summary>
-    public class LoadingCard : MonoBehaviour
-    {
-        Transform m_Spinner;
-        HButton m_Skip;
-        float m_Born;
-        System.Action m_OnSkip;
-
-        public static LoadingCard Show(string text, string sub, System.Action onSkip)
-        {
-            var go = new GameObject("Loading");
-            go.layer = Layers.UI3D;
-            var l = go.AddComponent<LoadingCard>();
-            l.m_Born = Time.unscaledTime;
-            l.m_OnSkip = onSkip;
-            const float W = 0.5f, H = 0.2f;
-            var glass = HUI.Panel(go.transform, "Panel", new Vector2(W, H), 0.04f);
-            HUI.Winterize(glass.Root, new Vector2(W, H), 0.04f, 9, true, true, 0.6f);
-            l.m_Spinner = UIKit.Quad(go.transform, "Spinner", UIKit.Arc(0.021f, 0.005f, 270f), Palette.Unlit(Palette.UiAccent), -0.002f);
-            l.m_Spinner.localPosition = new Vector3(-W * 0.5f + 0.05f, 0.045f, -0.002f);
-            var t = HUI.Label(go.transform, text, UIKit.Face.Body, 0.22f, Palette.UiText, new Vector2(W - 0.12f, 0.04f), TextAlignmentOptions.Left, 0f, false);
-            t.transform.localPosition = new Vector3(0.035f, 0.055f, -0.002f);
-            var s2 = HUI.Label(go.transform, sub, UIKit.Face.Regular, 0.155f, Palette.UiTextDim, new Vector2(W - 0.12f, 0.05f), TextAlignmentOptions.TopLeft);
-            s2.transform.localPosition = new Vector3(0.035f, 0.005f, -0.002f);
-            l.m_Skip = HButton.Create(go.transform, "Play without room scan", HButton.Variant.Secondary, new Vector2(W - 0.05f, 0.054f), UIKit.Icon.Play, () => l.m_OnSkip?.Invoke());
-            l.m_Skip.transform.localPosition = new Vector3(0, -H * 0.5f + 0.042f, -0.004f);
-            l.m_Skip.gameObject.SetActive(false);
-            go.SetLayerRecursive(Layers.UI3D);
-            var f = go.AddComponent<HFollow>(); f.distance = 1f; f.drop = 0.05f;
-            return l;
-        }
-
-        void Update()
-        {
-            if (m_Spinner) m_Spinner.localRotation = Quaternion.Euler(0, 0, -Time.unscaledTime * 360f);
-            if (m_Skip && !m_Skip.gameObject.activeSelf && Time.unscaledTime - m_Born > 6f) m_Skip.gameObject.SetActive(true);
-        }
-    }
-
     /// <summary>
     /// The ending (doc §6.7: "your photos fan out as a Case File collage"): the GUILTY shot as the hero, the verdict,
     /// the evidence chain as a row of photos, your stats as chips, and one primary action.

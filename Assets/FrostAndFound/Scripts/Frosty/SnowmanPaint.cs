@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace FrostAndFound
@@ -52,6 +53,11 @@ namespace FrostAndFound
             var wp = new Vector3[verts.Length];
             for (int i = 0; i < verts.Length; i++) wp[i] = toWorld.MultiplyPoint3x4(verts[i]);
             float r2 = radius * radius;
+            // each texel is painted once, by the triangle it's most inside. Neighbouring triangles' rasters overlap a
+            // little (so seams leave no gaps); blending again in that overlap left a darker line along their shared
+            // edge right through the stain
+            var claims = new Dictionary<int, (float inside, Color col, float alpha)>();
+            const float Margin = 3f;   // texels past a triangle's edge it may still fill, so UV seams through the stain stay brown even in the blurrier mip levels
             for (int t = 0; t + 2 < tris.Length; t += 3)
             {
                 int ia = tris[t], ib = tris[t + 1], ic = tris[t + 2];
@@ -63,6 +69,10 @@ namespace FrostAndFound
                 Vector2 ua = new Vector2(uvs[ia].x * W, uvs[ia].y * H), ub = new Vector2(uvs[ib].x * W, uvs[ib].y * H), uc = new Vector2(uvs[ic].x * W, uvs[ic].y * H);
                 float area = Edge(ua, ub, uc);
                 if (Mathf.Abs(area) < 1e-6f) continue;
+                // texel distance from a point to each edge = its barycentric weight × the triangle's height there
+                float ha = Mathf.Abs(area) / Mathf.Max(1e-6f, (uc - ub).magnitude);
+                float hb = Mathf.Abs(area) / Mathf.Max(1e-6f, (ua - uc).magnitude);
+                float hc = Mathf.Abs(area) / Mathf.Max(1e-6f, (ub - ua).magnitude);
                 int x0 = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(ua.x, Mathf.Min(ub.x, uc.x))) - 1);
                 int x1 = Mathf.Min(W - 1, Mathf.CeilToInt(Mathf.Max(ua.x, Mathf.Max(ub.x, uc.x))) + 1);
                 int y0 = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(ua.y, Mathf.Min(ub.y, uc.y))) - 1);
@@ -72,19 +82,28 @@ namespace FrostAndFound
                     {
                         var q = new Vector2(x + 0.5f, y + 0.5f);
                         float w0 = Edge(ub, uc, q) / area, w1 = Edge(uc, ua, q) / area, w2 = 1f - w0 - w1;
-                        const float e = -0.03f;   // a hair of overlap so seams don't leave gaps
-                        if (w0 < e || w1 < e || w2 < e) continue;
+                        float inside = Mathf.Min(w0 * ha, Mathf.Min(w1 * hb, w2 * hc));   // texels inside (negative: outside)
+                        if (inside < -Margin) continue;
+                        int i = y * W + x;
+                        if (claims.TryGetValue(i, out var had) && had.inside >= inside) continue;
                         var P = A * w0 + B * w1 + C * w2;
                         var d = P - center;
-                        if (Mathf.Abs(Vector3.Dot(d, normal)) > radius * 0.6f) continue;
-                        var s = new Vector2(Vector3.Dot(d, tx), Vector3.Dot(d, ty));
-                        if (s.sqrMagnitude > r2) continue;
-                        if (!pattern(s, out var col, out var al) || al <= 0.001f) continue;
-                        int i = y * W + x;
-                        Color baseC = px[i];
-                        var paint = col * Mathf.Lerp(0.72f, 1.04f, baseC.grayscale);   // the snow's own shading shows through
-                        px[i] = Color.Lerp(baseC, new Color(paint.r, paint.g, paint.b, baseC.a), Mathf.Clamp01(al));
+                        Color col = default; float al = 0f;
+                        if (Mathf.Abs(Vector3.Dot(d, normal)) <= radius * 0.6f)
+                        {
+                            var s = new Vector2(Vector3.Dot(d, tx), Vector3.Dot(d, ty));
+                            if (s.sqrMagnitude <= r2 && !pattern(s, out col, out al)) al = 0f;
+                        }
+                        claims[i] = (inside, col, al);   // claimed even if unpainted, so a neighbour's margin can't paint it
                     }
+            }
+            foreach (var kv in claims)
+            {
+                var (_, col, al) = kv.Value;
+                if (al <= 0.001f) continue;
+                Color baseC = px[kv.Key];
+                var paint = col * Mathf.Lerp(0.72f, 1.04f, baseC.grayscale);   // the snow's own shading shows through
+                px[kv.Key] = Color.Lerp(baseC, new Color(paint.r, paint.g, paint.b, baseC.a), Mathf.Clamp01(al));
             }
         }
 

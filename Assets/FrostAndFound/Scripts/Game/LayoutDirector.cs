@@ -178,14 +178,6 @@ namespace FrostAndFound
                 }
             }
 
-            // ---------------- the cocoa drip trail from the stain to Dexter's feet
-            if (res.Kids.TryGetValue(CastId.Dexter, out var dexter))
-            {
-                var from = center + frostyFacing * Vector3.forward * (0.38f * Frosty.ModelScale / 1.45f);   // just clear of his body
-                var to = dexter.transform.position + (center - dexter.transform.position).Flat().normalized * 0.22f;
-                var drips = DripTrail.Create(from, to, room.FloorY);
-                res.Frosty.AttachDrips(drips);
-            }
             return res;
         }
 

@@ -18,6 +18,9 @@ namespace FrostAndFound
     [DefaultExecutionOrder(100)] // after the rig has sampled this frame's joints; before the camera/photo/snowball place themselves
     public class Mittens : MonoBehaviour
     {
+        public static readonly Color GloveColor = new Color(0.74f, 0.08f, 0.1f);
+        public static readonly Color CuffColor = new Color(0.6f, 0.05f, 0.07f);
+
         WoolGlove m_L, m_R;
         Material m_Mat;
 
@@ -36,20 +39,38 @@ namespace FrostAndFound
         {
             var rig = PlayerRig.Active;
             if (!rig) return;
+            // a tracked camera hand pinches the camera: place it first, so that glove can pin its fingertips to it
+            var cam = PolaroidCamera.Instance;
+            if (cam) cam.PlaceTracked();
+            SetPin(m_L, rig.Left, rig, cam);
+            SetPin(m_R, rig.Right, rig, cam);
             // the desktop stand-in's hands aren't controllers: there the camera, photo and snowball keep their own
             // screen placements and the gloves just curl into the grip
+            // with hand tracking on Quest the glove is Meta's own tracked hand mesh (MetaPlayerRig): this one only
+            // keeps the hold points and stays hidden
+            m_L.Hidden = rig.Left.IsOpticalHand && rig.Left.HasNativeMesh;
+            m_R.Hidden = rig.Right.IsOpticalHand && rig.Right.HasNativeMesh;
             m_L.Pose(rig.Left, GripFor(rig, rig.Left), rig.IsXR);
             m_R.Pose(rig.Right, GripFor(rig, rig.Right), rig.IsXR);
+        }
+
+        static void SetPin(WoolGlove glove, HandRig hand, PlayerRig rig, PolaroidCamera cam)
+        {
+            glove.PinWeight = cam && rig.CameraHand == hand ? cam.PinWeight : 0f;
+            if (glove.PinWeight <= 0f) return;
+            glove.PinTop = cam.TopContact;
+            glove.PinBottom = cam.BottomContact;
+            glove.PinUp = cam.ContactUp;
         }
 
         static MittenGrip GripFor(PlayerRig rig, HandRig hand)
         {
             if (SnowballHand.Instance && SnowballHand.Instance.IsHoldingIn(hand)) return MittenGrip.Ball;
-            // tracked hands keep their real fingers round the camera and the photo; controllers and the desktop
-            // stand-in have none, so their gloves take a grip
+            // tracked hands keep their real fingers round the camera (tips pinned to its top and bottom); controllers
+            // and the desktop stand-in have none, so their gloves take the camera grip
             var cam = PolaroidCamera.Instance;
             if (cam && cam.IsRaised && rig.CameraHand == hand && !hand.IsOpticalHand) return MittenGrip.Camera;
-            if (rig.FreeHand == hand && !rig.IsXR && PhotoHolder.Instance && PhotoHolder.Instance.Visible) return MittenGrip.Photo;
+            if (rig.FreeHand == hand && PhotoHolder.Instance && PhotoHolder.Instance.Visible) return MittenGrip.Photo;
             return MittenGrip.Free;
         }
 
@@ -64,11 +85,11 @@ namespace FrostAndFound
     class WoolGlove
     {
         // ---------------------------------------------------------------- look
-        const float FingerRadius = 0.0104f, ThumbRadius = 0.0122f, PalmThickness = 0.029f, Bulk = 1.22f, CuffLength = 0.058f;
-        const float KnuckleSpread = 1.1f;   // fingers sit a touch further apart than bare ones (the wool is thick)
+        const float FingerRadius = 0.0116f, ThumbRadius = 0.0132f, PalmThickness = 0.029f, Bulk = 1.22f, CuffLength = 0.058f;
+        const float KnuckleSpread = 1.12f;   // fingers sit a touch further apart than bare ones (the wool is thick)
         static readonly float[] FingerRadiusMul = { 1f, 1f, 1.05f, 0.98f, 0.86f };
-        static readonly Color GloveColor = new Color(0.74f, 0.08f, 0.1f);
-        static readonly Color CuffColor = new Color(0.6f, 0.05f, 0.07f);
+        static Color GloveColor => Mittens.GloveColor;
+        static Color CuffColor => Mittens.CuffColor;
         static readonly Color StripeColor = new Color(0.96f, 0.93f, 0.86f);
 
         // controller pose (right hand; left is mirrored)
@@ -248,7 +269,7 @@ namespace FrostAndFound
             m_Mesh.vertices = _verts;
             m_Mesh.SetTriangles(_tris, 0);
             go.GetComponent<MeshFilter>().sharedMesh = m_Mesh;
-            var mr = go.GetComponent<MeshRenderer>();
+            var mr = m_Renderer = go.GetComponent<MeshRenderer>();
             mr.sharedMaterial = mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
             mr.receiveShadows = false;
@@ -301,7 +322,10 @@ namespace FrostAndFound
             {
                 switch (grip)
                 {
-                    case MittenGrip.Free: visible = hand.HasJoints ? FromJoints(hand) : FromController(hand); break;
+                    case MittenGrip.Free:
+                        visible = hand.HasJoints ? FromJoints(hand) : FromController(hand);
+                        if (visible && hand.HasJoints && PinWeight > 0f && !Hidden) PinTips(hand);
+                        break;
                     case MittenGrip.Ball: Grip(0.5f, 0.56f, 0.55f); break;      // fingers wrapped round the ball
                     case MittenGrip.Camera:
                     {
@@ -322,12 +346,14 @@ namespace FrostAndFound
                 }
             }
             if (m_Root.gameObject.activeSelf != visible) m_Root.gameObject.SetActive(visible);
+            if (m_Renderer.enabled == Hidden) m_Renderer.enabled = !Hidden;
             if (!visible || !hand.HasJoints) m_Tracking = false;   // a lost hand starts fresh (no easing from a stale pose)
             hand.Hold = visible && publishMounts ? HoldPoint : null;
-            hand.HasCameraGrip = visible && publishMounts && grip == MittenGrip.Camera;
-            hand.HasPhotoGrip = visible && publishMounts && grip == MittenGrip.Photo;
+            hand.HasCameraGrip = visible && publishMounts && grip == MittenGrip.Camera && !Hidden;
+            // the native hand mesh shows your real fingers, so a photo sits in your real pinch instead of the glove's
+            hand.HasPhotoGrip = visible && publishMounts && grip == MittenGrip.Photo && !Hidden;
             if (!visible) return;
-            Apply();
+            if (!Hidden) Apply();
             HoldPoint.SetPositionAndRotation(L2W(BallCenter), m_FrameRot);
             if (hand.HasCameraGrip) hand.CameraGrip = new UnityEngine.Pose(m_CamPos, m_CamRot);   // the camera's root
             if (hand.HasPhotoGrip) hand.PhotoGrip = (_joints[3] + _joints[7]) * 0.5f;
@@ -377,6 +403,34 @@ namespace FrostAndFound
             rot = Quaternion.LookRotation(aim, Vector3.up);
             var palm = hand.Palm ? hand.Palm.position : hand.Anchor.position;
             pos = palm - rot * CamMirror(CamPalm);
+        }
+
+        /// <summary>Another mesh shows this hand (Meta's tracked hand mesh): keep the pose and hold points, don't draw.</summary>
+        public bool Hidden;
+        MeshRenderer m_Renderer;
+
+        // the camera pinched between thumb and index (set by Mittens each frame)
+        public float PinWeight;
+        public Vector3 PinTop, PinBottom, PinUp;
+        static readonly float[] PinShare = { 0f, 0.35f, 0.7f, 1f };   // how much of the correction each joint takes
+
+        /// <summary>
+        /// Tracking is loose around a held object, so the glove's index tip is pinned onto the camera's top (on the
+        /// shutter, pressing it as you pinch) and its thumb tip onto the bottom face; each finger bends to reach,
+        /// the correction growing toward the tip so the knuckles stay where your hand is.
+        /// </summary>
+        void PinTips(HandRig hand)
+        {
+            float press = Mathf.Clamp01((hand.Trigger - 0.5f) / 0.4f);
+            float rIndex = FingerRadius * Bulk * FingerRadiusMul[1] * m_TScale, rThumb = ThumbRadius * Bulk * m_TScale;
+            PinChain(1, PinTop + PinUp * (rIndex * 0.8f - press * 0.004f));
+            PinChain(0, PinBottom - PinUp * (rThumb * 0.8f));
+        }
+
+        void PinChain(int f, Vector3 target)
+        {
+            var delta = Vector3.ClampMagnitude(target - _joints[f * 4 + 3], 0.05f) * PinWeight;
+            for (int s = 1; s < 4; s++) _joints[f * 4 + s] += delta * PinShare[s];
         }
 
         /// <summary>Snap the glove into a grip: index curl, the other fingers' curl, thumb fold (0..1).</summary>
@@ -704,7 +758,7 @@ namespace FrostAndFound
                 float u = r / (float)(FR - 1) * 4f;
                 int seg = Mathf.Min(3, (int)u);
                 _fc[r] = CatmullRom(_ctrl[seg], _ctrl[seg + 1], _ctrl[seg + 2], _ctrl[seg + 3], u - seg);
-                _fr[r] = r0 * Mathf.Lerp(1.06f, 0.86f, u / 4f);
+                _fr[r] = r0 * Mathf.Lerp(1.1f, 0.88f, Mathf.SmoothStep(0f, 1f, u / 4f));   // stays full near the knuckle
             }
             _ft[0] = f;
             for (int r = 1; r < FR; r++) _ft[r] = Dir(_fc[r - 1], _fc[Mathf.Min(FR - 1, r + 1)], tipDir);
@@ -735,7 +789,7 @@ namespace FrostAndFound
             {
                 if (r > 0) fv += Vector3.Distance(_fc[r - 1], _fc[r]);
                 _fcen[fi * FRings + r] = _fc[r];
-                float blend = r >= 3 ? 1f : Mathf.SmoothStep(0f, 1f, r / 3f);   // knuckle slice → round finger
+                float blend = r >= 5 ? 1f : Mathf.SmoothStep(0f, 1f, r / 5f);   // knuckle slice → round finger, gradually
                 for (int m = 0; m <= F; m++)
                 {
                     int i = FV(fi, r, m);

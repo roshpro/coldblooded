@@ -142,18 +142,8 @@ namespace FrostAndFound
         float m_DroppedAt;
         public bool IsDropped => m_Rb;
 
-        /// <summary>Distance from a point to the nearest spot on this photo (0 when touching it).</summary>
-        public float DistanceTo(Vector3 point)
-        {
-            var l = transform.InverseTransformPoint(point);
-            var s = transform.lossyScale;
-            l = Vector3.Scale(l, s);
-            var c = new Vector3(Mathf.Clamp(l.x, -Width * 0.5f * s.x, Width * 0.5f * s.x), Mathf.Clamp(l.y, -Height * 0.5f * s.y, Height * 0.5f * s.y), 0f);
-            return Vector3.Distance(l, c);
-        }
-
         /// <summary>Let go: it flutters down into the snow and lies there until someone picks it up.</summary>
-        public void Drop(Vector3 velocity, Vector3 spin = default)
+        public void Drop(Vector3 velocity)
         {
             transform.SetParent(null, true);
             gameObject.layer = 0;   // Default: lands on the snow and furniture (the picture itself stays hidden from the lens)
@@ -165,7 +155,7 @@ namespace FrostAndFound
             m_Rb.angularDamping = 1.5f;
             m_Rb.interpolation = RigidbodyInterpolation.Interpolate;
             m_Rb.linearVelocity = Vector3.ClampMagnitude(velocity, 2f);
-            m_Rb.angularVelocity = Vector3.ClampMagnitude(spin, 8f) + Random.insideUnitSphere * 1.5f;
+            m_Rb.angularVelocity = Random.insideUnitSphere * 3f;
             m_DroppedAt = Time.time;
         }
 
@@ -194,10 +184,8 @@ namespace FrostAndFound
     }
 
     /// <summary>
-    /// The photo in your free hand. You always show the one you're holding (the chain is linear, so there's no
-    /// inventory). With your own hands (XR) it's a real grab: pinch or grab a print (in the camera's slot or lying in
-    /// the snow) and it stays exactly where you took it, following your hand; open your hand and it drops with your
-    /// hand's momentum. The desktop stand-in holds it up like a card (G drops / picks up).
+    /// The free hand's photo slot. You always show your newest photo (the chain is linear, so there's no
+    /// inventory). Scooping snow tucks it away; throwing brings it back.
     /// </summary>
     [DefaultExecutionOrder(150)] // after the mittens have taken their pinch this frame
     public class PhotoHolder : MonoBehaviour
@@ -208,7 +196,7 @@ namespace FrostAndFound
         /// <summary>Photos you've let go of, lying in the snow (still part of the album).</summary>
         public readonly List<PolaroidPhoto> Dropped = new List<PolaroidPhoto>();
         public static bool DropTipShown;
-
+        float m_FlatSince = -1f, m_OpenTime = -10f;
         public bool IsTucked { get; private set; }
         public bool Visible => Current && !IsTucked && m_Arrived;
         /// <summary>Set by ShowPhotoDetector while the player holds the photo out to a kid.</summary>
@@ -217,13 +205,6 @@ namespace FrostAndFound
         bool m_Arrived;
         float m_Flip; // 0 = facing player, 1 = facing target
         Coroutine m_Restore;
-        // XR grab: the photo's pose relative to the hand's grip frame when it was taken
-        GrabStyle m_Style;
-        Vector3 m_GrabPos;
-        Quaternion m_GrabRot = Quaternion.identity;
-        int m_GrabFrame = -1;
-        /// <summary>A photo was just grabbed this frame (so one pinch doesn't take two).</summary>
-        public bool GrabbedThisFrame => m_GrabFrame == Time.frameCount;
 
         void OnEnable() => Instance = this;
         void OnDisable() { if (Instance == this) Instance = null; }
@@ -240,47 +221,6 @@ namespace FrostAndFound
         }
 
         public void MarkArrived() { m_Arrived = true; if (IsTucked && Current) Current.gameObject.SetActive(false); }
-        /// <summary>Take hold of a photo with a tracked hand or controller, keeping it exactly where it was relative to
-        /// the hand (a pinch holds it from the pinch, a fist from the palm).</summary>
-        public void Grab(PolaroidPhoto p, HandRig hand)
-        {
-            Dropped.Remove(p);
-            p.PickUp();
-            if (Current && Current != p) Current.gameObject.SetActive(false);
-            Current = p;
-            m_Arrived = true;
-            IsTucked = false;
-            FaceTarget = null;
-            p.gameObject.SetActive(true);
-            AddToAlbum(p);
-            m_Style = hand.Grab == GrabStyle.Pinch ? GrabStyle.Pinch : GrabStyle.Fist;
-            GripFrame(hand, m_Style, out var gp, out var gr);
-            var inv = Quaternion.Inverse(gr);
-            m_GrabPos = inv * (p.transform.position - gp);
-            m_GrabRot = inv * p.transform.rotation;
-            m_GrabFrame = Time.frameCount;
-            AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.3f, 1.7f);
-            hand.Haptic(0.25f, 0.04f);
-        }
-
-        /// <summary>The hand frame a grabbed photo rides on: the pinch for a pinch, the palm for a fist.</summary>
-        static void GripFrame(HandRig hand, GrabStyle style, out Vector3 pos, out Quaternion rot)
-        {
-            pos = style == GrabStyle.Pinch && hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
-            rot = hand.Anchor.rotation;
-        }
-
-        /// <summary>Is the hand close enough to take hold of this photo (by its pinch, or its palm)?</summary>
-        public static bool InReach(HandRig hand, PolaroidPhoto p)
-        {
-            if (!p || !hand.Anchor) return false;
-            float reach = FrostTuning.I.photoGrabReach;
-            if (hand.HasJoints && p.DistanceTo(hand.PinchPoint) < reach) return true;
-            var palm = hand.Palm ? hand.Palm.position : hand.Anchor.position;
-            if (p.DistanceTo(palm) < reach) return true;
-            return !hand.HasJoints && hand.Tip && p.DistanceTo(hand.Tip.position) < reach;
-        }
-
         /// <summary>Photos join the album the moment they're taken (the case file needs them even if a print is still in the slot).</summary>
         public void AddToAlbum(PolaroidPhoto photo) { if (photo && !Album.Contains(photo)) Album.Add(photo); }
 
@@ -317,11 +257,19 @@ namespace FrostAndFound
             if (CaseDirector.I != null && CaseDirector.I.CaseClosed) { foreach (var p in Dropped) if (p) p.Freeze(); return; }
             var hand = rig.FreeHand;
             if (!hand.IsTracked) return;
-            // let go: open your hand (XR: it's held only while you pinch or grab it), or G (desktop)
+            // let go: open your hand flat for a moment (hand tracking), press A/X (controllers), or G (desktop)
             if (Visible)
             {
-                bool drop = rig.IsXR ? !hand.GrabHeld && !GrabbedThisFrame
-                                     : Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
+                bool drop;
+                if (hand.IsOpticalHand)
+                {
+                    bool flat = hand.Grip < 0.12f && hand.Trigger < 0.1f;
+                    if (!flat) m_FlatSince = -1f;
+                    else if (m_FlatSince < 0f) m_FlatSince = Time.time;
+                    drop = m_FlatSince > 0f && Time.time - m_FlatSince > 0.1f;
+                }
+                else if (rig.IsXR) drop = hand.PrimaryDown;
+                else drop = Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
                 if (drop) { DropCurrent(hand); return; }
             }
             // pick one back up: pinch or grab it where it lies (desktop: G picks up the nearest)
@@ -334,16 +282,12 @@ namespace FrostAndFound
                 if (near) PickUp(near, hand);
                 return;
             }
-            // XR: pinch or grab one where it lies (the nearest in reach)
-            if (!hand.GrabDown || Visible || GrabbedThisFrame) return;
-            PolaroidPhoto nearest = null; float nearestD = float.MaxValue;
+            bool closed = hand.Grip > 0.6f || hand.Trigger > 0.6f;
+            if (!closed) { m_OpenTime = Time.time; return; }
+            if (Time.time - m_OpenTime > 0.8f) return;
+            var at = hand.HasJoints ? hand.PinchPoint : (hand.Palm ? hand.Palm.position : hand.Anchor.position);
             foreach (var p in Dropped)
-            {
-                if (!p || !InReach(hand, p)) continue;
-                float d = p.DistanceTo(hand.PinchPoint);
-                if (d < nearestD) { nearestD = d; nearest = p; }
-            }
-            if (nearest) Grab(nearest, hand);
+                if (p && Vector3.Distance(p.transform.position, at) < 0.11f) { PickUp(p, hand); return; }
         }
 
         void DropCurrent(HandRig hand)
@@ -351,9 +295,9 @@ namespace FrostAndFound
             var p = Current;
             Current = null;
             m_Arrived = false;
+            m_FlatSince = -1f;
             FaceTarget = null;
-            // it carries on with your hand's own motion (not a throw's boost) and spin
-            p.Drop(hand.Tracker.ReleaseVelocity(), hand.Tracker.AngularVelocity);
+            p.Drop(hand.ReleaseVelocity() * 0.5f);
             Dropped.Add(p);
             AudioDirector.PlayAt(Sfx.Whirr, p.transform.position, 0.2f, 1.9f);
             hand.Haptic(0.15f, 0.03f);
@@ -378,15 +322,6 @@ namespace FrostAndFound
             if (!rig || !Current || !m_Arrived || IsTucked) return;
             var hand = rig.FreeHand;
             if (!hand.Anchor) return;
-            if (rig.IsXR)
-            {
-                // held where you took it, riding on the pinch / palm (a touch of smoothing for tracking jitter)
-                GripFrame(hand, m_Style, out var gp, out var gr);
-                var t = Current.transform;
-                float k = 1f - Mathf.Exp(-Time.deltaTime / 0.025f);
-                t.SetPositionAndRotation(Vector3.Lerp(t.position, gp + gr * m_GrabPos, k), Quaternion.Slerp(t.rotation, gr * m_GrabRot, k));
-                return;
-            }
             m_Flip = Ease.Damp(m_Flip, FaceTarget ? 1f : 0f, 10f, Time.deltaTime);
             HeldPose(rig, hand, FaceTarget, out var pos, out var rot, m_Flip);
             Current.transform.SetPositionAndRotation(pos, rot);

@@ -154,7 +154,7 @@ namespace FrostAndFound
                     var ceramic = M(Palette.Paper, true, 0.3f);
                     P("Mug", mug, ProcMesh.Cylinder(18), ceramic, new Vector3(0, 0.04f, 0), new Vector3(0.078f, 0.085f, 0.078f));
                     P("Stripe", mug, ProcMesh.Cylinder(18), M(Palette.SledRed, false, 0.3f), new Vector3(0, 0.055f, 0), new Vector3(0.0795f, 0.014f, 0.0795f));
-                    P("Cocoa", mug, ProcMesh.Disc(16), M(Palette.Cocoa, false, 0.2f), new Vector3(0, 0.078f, 0), new Vector3(0.068f, 0.002f, 0.068f));
+                    P("Cocoa", mug, ProcMesh.Cylinder(18), M(Palette.Cocoa, false, 0.2f), new Vector3(0, 0.0435f, 0), new Vector3(0.071f, 0.08f, 0.071f));   // full to the brim: its top shows just above the mug's (solid) top, inside a thin rim
                     // a wide D of a handle: his fist closes round its outer bar and a few cm of it show between fist and cup
                     P("Handle", mug, ProcMesh.Torus(0.42f, 0.13f, 14, 6), ceramic, new Vector3(0.08f, 0.04f, 0), new Vector3(0.085f, 0.07f, 0.068f), new Vector3(90, 0, 0));
                     ThermosSteam.Attach(ProcMesh.Pivot("Steam", mug, new Vector3(0, 0.09f, 0)));

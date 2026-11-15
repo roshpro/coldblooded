@@ -149,13 +149,11 @@ namespace FrostAndFound
             if (photo.Clue != ClueId.None && photo.Clue == CurrentClue)
             {
                 Progress();
-                // step 1's second cue: the drip trail sparkles once you've taken the stain photo
-                if (photo.Clue == ClueId.CocoaStain && Frosty.Instance && Frosty.Instance.Drips) Frosty.Instance.Drips.SetSparkling(true);
             }
             else if (photo.TooFar && !m_FirstTooFarHinted && !FinaleStarted)
             {
                 m_FirstTooFarHinted = true;
-                StartCoroutine(LucyLine("lucy_nudge_close", 1.2f));
+                StartCoroutine(LucyLine("lucy_nudge_close", FrostTuning.I.lucyHintDelay));
             }
             if (photo.Blurred && FinaleStarted && !m_FinaleHintGiven) StartCoroutine(FinaleHint());
         }
@@ -301,7 +299,6 @@ namespace FrostAndFound
             Clue.Find(step.clue)?.MarkSolved();
             if (step.clue == ClueId.CocoaStain)
             {
-                if (Frosty.Instance && Frosty.Instance.Drips) Frosty.Instance.Drips.SetSparkling(false);
                 (kid as DexterKid)?.SetWhistling(false);
             }
 
@@ -350,11 +347,9 @@ namespace FrostAndFound
             var line = Lines.Get("lucy_pic" + (step + 1));
             var lucy = Kid.Find(CastId.Lucy) as LucyKid;
             if (line == null || !lucy) yield break;
-            // she's the guide throughout: wait for a quiet moment (up to ~15 s) instead of giving up on the line
+            // a request for a picture is instant: only wait for Lucy herself to finish (briefly)
             float waited = 0f;
-            while ((DialogueRunner.AnyoneSpeaking || Reacting || lucy.Busy) && waited < 15f) { waited += Time.deltaTime; yield return null; }
-            yield return new WaitForSeconds(0.4f);
-            while (DialogueRunner.IsSpeaking(CastId.Lucy) || lucy.Busy) yield return null;
+            while ((DialogueRunner.IsSpeaking(CastId.Lucy) || lucy.Busy) && waited < 4f) { waited += Time.deltaTime; yield return null; }
             if (Step != step || FinaleStarted || CaseClosed) yield break;
             var player = PlayerRig.Active;
             if (player) lucy.Face(player.Head.position, 0.3f);
@@ -404,7 +399,7 @@ namespace FrostAndFound
         {
             if (m_FinaleHintGiven) yield break;
             m_FinaleHintGiven = true;
-            yield return new WaitForSeconds(0.8f);
+            yield return new WaitForSeconds(FrostTuning.I.lucyHintDelay);
             var lucy = Kid.Find(CastId.Lucy) as LucyKid;
             if (!lucy || CaseClosed) yield break;
             lucy.StartCoroutine(lucy.GlanceAtSnow(2.5f));

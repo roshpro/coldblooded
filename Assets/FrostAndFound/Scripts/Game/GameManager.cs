@@ -33,7 +33,6 @@ namespace FrostAndFound
 
         TitleScreen m_Title;
         MenuScreen m_Pause;
-        LoadingCard m_Loading;
         PolaroidCamera m_Camera;
         CaseDirector m_Director;
 
@@ -70,7 +69,6 @@ namespace FrostAndFound
                 if (!Player) Player = xrRig.AddComponent<MetaPlayerRig>();
                 var provider = gameObject.AddComponent<MetaRoomProvider>();
                 provider.Begin(Player);
-                m_Loading = LoadingCard.Show("Finding your room…", "Reading your Space Setup. Allow spatial data if the headset asks.", provider.SkipRoomScan);
             }
             else
 #endif
@@ -83,7 +81,6 @@ namespace FrostAndFound
             }
             Debug.Log("[Frost] Player: " + (Player && Player.IsXR ? "Meta XR (Quest)" : "desktop simulation"));
             while (RoomService.Current == null) yield return null;
-            if (m_Loading) Destroy(m_Loading.gameObject);
             var r = RoomService.Current;
             Player.FloorY = r.FloorY;
             UIOverlayCamera.Attach(Player.ViewCamera);   // messages and menus always draw on top

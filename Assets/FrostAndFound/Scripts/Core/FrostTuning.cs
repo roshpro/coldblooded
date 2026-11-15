@@ -76,19 +76,21 @@ namespace FrostAndFound
 
         [Header("Finale")]
         public float tonyDazeSeconds = 4.2f;
-        public float tonyRunSpeed = 1.15f;
-        public float tonyPanicSpeed = 1.7f;
+        public float tonyRunSpeed = 1.725f;
+        public float tonyPanicSpeed = 2.55f;
         [Tooltip("If Tony still hasn't been hit this long after he bolts, he trips over his own sled (doc: by ~1:40).")]
         public float tonyTripAfterSeconds = 25f;
         public float tonyDodgeCooldown = 0.35f;
 
         [Header("Safety nets")]
         [Tooltip("Seconds of no progress before Lucy gives a vague nudge (doc: about 15 s).")]
-        public float idleNudgeSeconds = 15f;
+        public float idleNudgeSeconds = 25f;
+        [Tooltip("Seconds Lucy waits before a hint (too far away, the finale). Her requests for a picture are instant.")]
+        public float lucyHintDelay = 4f;
 
         [Header("Gesture tutorials")]
         [Tooltip("Seconds into the case before Lucy tells you to take a picture (then the pinch gesture plays).")]
-        public float cameraPromptDelay = 1.5f;
+        public float cameraPromptDelay = 0f;
         [Tooltip("Seconds without taking a photo, while the current clue still needs one, before the pinch gesture replays.")]
         public float cameraGestureIdleSeconds = 20f;
         [Tooltip("Seconds into Tony's run without a throw before the scoop & throw gesture plays.")]
@@ -98,17 +100,22 @@ namespace FrostAndFound
         [Tooltip("The same for every photo after you've shown one: only if you seem stuck.")]
         public float showGestureIdleSeconds = 12f;
 
-        [Header("Camera & photo hands")]
-        [Tooltip("Thumb-to-index gap (m) at which the camera starts fading into your hand.")]
-        public float cameraAppearGap = 0.075f;
-        [Tooltip("Thumb-to-index gap (m) at which it's fully there (closing all the way takes the picture).")]
-        public float cameraFullGap = 0.045f;
+        [Header("Camera hand")]
+        [Tooltip("The camera comes up when your thumb and index are this parallel (degrees between them), pads facing.")]
+        public float cameraParallelDeg = 30f;
+        [Tooltip("It starts fading in from this angle.")]
+        public float cameraParallelFade = 50f;
+        [Tooltip("Thumb-to-index gap (m) beyond which it isn't a pinch any more.")]
+        public float cameraMaxGap = 0.11f;
+        [Tooltip("A quick pinch takes the picture: the gap closing by this fraction of how open it was...")]
+        public float quickPinchFraction = 0.35f;
+        [Tooltip("...(and at least this many metres)...")]
+        public float quickPinchMin = 0.015f;
+        [Tooltip("...within this many seconds. The shot uses the camera's pose from just before the pinch started.")]
+        public float quickPinchWindow = 0.3f;
         [Tooltip("The camera only comes up with your hand within this many degrees of where you're looking.")]
         public float cameraViewCone = 55f;
-        [Tooltip("How close (m) your pinch or palm has to be to a photo to grab it.")]
-        public float photoGrabReach = 0.06f;
-        [Tooltip("Seconds your hand has to stay open before a held photo drops (rides out tracking glitches).")]
-        public float photoReleaseDebounce = 0.06f;
+
 
         [Header("Layout")]
         public float kidWallInset = 0.55f;

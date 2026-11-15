@@ -18,6 +18,8 @@ namespace FrostAndFound
 
         Camera m_Camera;
         bool m_MenuDown;
+        NativeGlove m_LeftGlove, m_RightGlove;
+        Material m_GloveMat;
         Coroutine[] m_Haptics = new Coroutine[2];
 
         public override Transform Head => cameraRig ? cameraRig.centerEyeAnchor : transform;
@@ -37,6 +39,11 @@ namespace FrostAndFound
         void Start()
         {
             EnsureCamera();
+            // tracked hands wear Meta's own hand mesh as the glove, so every joint shows exactly as tracked
+            m_GloveMat = new Material(FrostAssets.Shader(FrostAssets.ShaderId.Wool)) { name = "Wool (tracked hand)" };
+            m_GloveMat.SetFloat("_Inflate", 0.0035f);
+            m_LeftGlove = NativeGlove.Create(leftHand, leftSkeleton, m_GloveMat);
+            m_RightGlove = NativeGlove.Create(rightHand, rightSkeleton, m_GloveMat);
             // passthrough shows your real room, so the guardian lines aren't needed on top of it
             if (OVRManager.instance) OVRManager.instance.shouldBoundaryVisibilityBeSuppressed = true;
         }
@@ -81,6 +88,95 @@ namespace FrostAndFound
             SampleJoints(Left, leftSkeleton);
             SampleJoints(Right, rightSkeleton);
             SampleTrackers();
+            Left.HasNativeMesh = m_LeftGlove != null && Left.IsOpticalHand && Left.HasJoints && m_LeftGlove.Showing();
+            Right.HasNativeMesh = m_RightGlove != null && Right.IsOpticalHand && Right.HasJoints && m_RightGlove.Showing();
+        }
+
+        /// <summary>
+        /// The glove on a tracked hand: Meta's own hand mesh (OVRMesh + OVRMeshRenderer), skinned to the tracked
+        /// skeleton so every finger joint shows exactly as tracked, dressed in the wool shader. The mesh is puffed out
+        /// a few mm (_Inflate) so it reads as a glove; it gets vertex colours (red, with a ribbed cuff at the wrist)
+        /// and its own rest pose as UV1/UV2, which the knit is laid out on so it never stretches.
+        /// </summary>
+        sealed class NativeGlove
+        {
+            OVRHand m_Hand;
+            OVRMesh m_Mesh;
+            SkinnedMeshRenderer m_Smr;
+            Mesh m_Dressed;
+
+            public static NativeGlove Create(OVRHand hand, OVRSkeleton skel, Material mat)
+            {
+                if (!hand || !skel || skel.gameObject != hand.gameObject)
+                {
+                    Debug.LogWarning("[Frost] Tracked-hand glove needs OVRHand and OVRSkeleton on one object; using the procedural glove");
+                    return null;
+                }
+                var go = hand.gameObject;
+                var g = new NativeGlove { m_Hand = hand };
+                // the renderer first, with our material, so OVRMeshRenderer keeps it as its own
+                g.m_Smr = go.GetComponent<SkinnedMeshRenderer>();
+                if (!g.m_Smr) g.m_Smr = go.AddComponent<SkinnedMeshRenderer>();
+                g.m_Smr.sharedMaterial = mat;
+                g.m_Smr.enabled = false;
+                g.m_Smr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                g.m_Smr.receiveShadows = false;
+                g.m_Mesh = go.GetComponent<OVRMesh>();
+                if (!g.m_Mesh) g.m_Mesh = go.AddComponent<OVRMesh>();
+                if (!go.GetComponent<OVRMeshRenderer>()) go.AddComponent<OVRMeshRenderer>();
+                go.layer = Layers.PlayerHands;   // the Polaroid never photographs your hands
+                return g;
+            }
+
+            /// <summary>Drawing this frame (the mesh has loaded and is bound, and the hand is confidently tracked).</summary>
+            public bool Showing()
+            {
+                if (!m_Smr || !m_Mesh || !m_Mesh.IsInitialized || !m_Hand) return false;
+                var mesh = m_Smr.sharedMesh;
+                if (!mesh || mesh.bindposes == null || mesh.bindposes.Length == 0) return false;
+                if (mesh != m_Dressed) { Dress(mesh); m_Dressed = mesh; }
+                return m_Smr.enabled && m_Hand.IsTracked && m_Hand.IsDataValid;
+            }
+
+            static void Dress(Mesh mesh)
+            {
+                var v = mesh.vertices;
+                var n = mesh.normals;
+                int count = v.Length;
+                var b = mesh.bounds;
+                var size = b.size;
+                // the hand's own axes in its bind pose: the longest extent runs along the fingers, the thinnest
+                // through the palm; the fingers are at the end where most of the skeleton's bones are
+                int fa = size.x >= size.y && size.x >= size.z ? 0 : size.y >= size.z ? 1 : 2;
+                int ua = size.x <= size.y && size.x <= size.z ? 0 : size.y <= size.z ? 1 : 2;
+                if (ua == fa) ua = (fa + 1) % 3;
+                var fwd = Vector3.zero; fwd[fa] = 1f;
+                var up = Vector3.zero; up[ua] = 1f;
+                var bones = Vector3.zero;
+                var bp = mesh.bindposes;
+                for (int i = 0; i < bp.Length; i++) bones += (Vector3)bp[i].inverse.GetColumn(3);
+                bones /= bp.Length;
+                if (Vector3.Dot(bones - b.center, fwd) < 0f) fwd = -fwd;
+                var toRest = Quaternion.Inverse(Quaternion.LookRotation(fwd, up));
+                float wrist = float.MaxValue;
+                for (int i = 0; i < count; i++) wrist = Mathf.Min(wrist, Vector3.Dot(v[i] - b.center, fwd));
+
+                var rest = new Vector3[count];
+                var restN = new Vector3[count];
+                var col = new Color[count];
+                Color glove = Mittens.GloveColor; glove.a = 1f;   // stocking stitch
+                Color cuff = Mittens.CuffColor; cuff.a = 0f;      // ribbing
+                for (int i = 0; i < count; i++)
+                {
+                    var p = v[i] - b.center;
+                    rest[i] = toRest * p;
+                    restN[i] = n != null && n.Length == count ? toRest * n[i] : Vector3.up;
+                    col[i] = Vector3.Dot(p, fwd) - wrist < 0.022f ? cuff : glove;
+                }
+                mesh.SetUVs(1, rest);
+                mesh.SetUVs(2, restN);
+                mesh.colors = col;
+            }
         }
 
         void UpdateHand(HandRig h, OVRInput.Controller ctrl, Transform controllerAnchor, Transform handAnchor, OVRHand ovrHand, OVRSkeleton skel)
@@ -101,7 +197,6 @@ namespace FrostAndFound
                 h.UpdateTrigger(OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, ctrl));
                 h.PrimaryDown = OVRInput.GetDown(OVRInput.Button.One, ctrl);
                 h.PhotoPose = h.Trigger;
-                h.UpdateGrab(h.Trigger, h.Grip, FrostTuning.I.photoReleaseDebounce);
                 h.HasJoints = false;
             }
             else if (handTracked)
@@ -121,20 +216,34 @@ namespace FrostAndFound
                 float pinch = ovrHand.GetFingerPinchStrength(OVRHand.HandFinger.Index);
                 h.UpdateTrigger(pinch, 0.85f, 0.55f);
                 h.PrimaryDown = false;
-                // the camera starts coming in while thumb and index are still a few centimetres apart (OVR's pinch
-                // strength only moves once they're nearly touching); it's full size by a light pinch
-                var tune = FrostTuning.I;
-                h.PhotoPose = Mathf.Max(pinch, Mathf.InverseLerp(tune.cameraAppearGap, tune.cameraFullGap, h.PinchGap));
-                h.UpdateGrab(pinch, h.Grip, tune.photoReleaseDebounce);
+                h.PhotoPose = CameraPose(h);
             }
             else
             {
                 h.UpdateTrigger(0f);
                 h.PrimaryDown = false;
                 h.PhotoPose = 0f;
-                h.UpdateGrab(0f, 0f, FrostTuning.I.photoReleaseDebounce);
                 h.HasJoints = false;
             }
+        }
+
+        /// <summary>
+        /// 0..1, how much the hand is making the camera gesture: thumb and index roughly parallel with their pads
+        /// facing each other across the gap (as if holding the camera's top and bottom edges), not too far apart.
+        /// A flat hand has them roughly parallel too, but side by side in the palm's plane, so that doesn't count.
+        /// </summary>
+        static float CameraPose(HandRig h)
+        {
+            if (!h.HasJoints) return 0f;
+            var j = h.Joints;
+            var tune = FrostTuning.I;
+            Vector3 index = j[7] - j[5], thumb = j[3] - j[1], gap = j[7] - j[3];
+            if (index.sqrMagnitude < 1e-8f || thumb.sqrMagnitude < 1e-8f || gap.sqrMagnitude < 1e-8f) return 0f;
+            float parallel = Mathf.InverseLerp(tune.cameraParallelFade, tune.cameraParallelDeg, Vector3.Angle(index, thumb));
+            var palm = Vector3.Cross(j[8] - h.Wrist, j[16] - j[4]);
+            float facing = palm.sqrMagnitude > 1e-10f ? Mathf.InverseLerp(0.25f, 0.5f, Mathf.Abs(Vector3.Dot(gap.normalized, palm.normalized))) : 1f;
+            float near = Mathf.InverseLerp(tune.cameraMaxGap, tune.cameraMaxGap - 0.02f, gap.magnitude);
+            return parallel * facing * near;
         }
 
         static readonly OVRSkeleton.BoneId[][] s_XrChains =
@@ -235,6 +344,8 @@ namespace FrostAndFound
             yield return new WaitForSeconds(seconds);
             OVRInput.SetControllerVibration(0f, 0f, c);
         }
+
+        void OnDestroy() { if (m_GloveMat) Destroy(m_GloveMat); }
 
         protected override void OnDisable()
         {

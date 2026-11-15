@@ -16,8 +16,6 @@ namespace FrostAndFound
     public class MetaRoomProvider : MonoBehaviour
     {
         public float timeoutSeconds = 45f;
-        bool m_SkipRequested;
-        public void SkipRoomScan() => m_SkipRequested = true;
         bool m_Done;
 
         public void Begin(PlayerRig rig) => StartCoroutine(Run(rig));
@@ -31,7 +29,7 @@ namespace FrostAndFound
                 bool loaded = false;
                 mruk.RegisterSceneLoadedCallback(() => loaded = true);
                 float t = 0f;
-                while (!loaded && t < timeoutSeconds && !m_SkipRequested) { t += Time.unscaledDeltaTime; yield return null; }
+                while (!loaded && t < timeoutSeconds) { t += Time.unscaledDeltaTime; yield return null; }
                 var room = loaded ? mruk.GetCurrentRoom() : null;
                 if (room != null && TryBuild(room, out var info))
                 {

@@ -19,7 +19,6 @@ namespace FrostAndFound
         public Clue Stain { get; private set; }
         public Clue Glitter { get; private set; }
         public Clue Scrape { get; private set; }
-        public DripTrail Drips { get; private set; }
         Transform m_Visual;
         float m_LastHitLine;
 
@@ -287,7 +286,6 @@ namespace FrostAndFound
             go.AddComponent<SphereCollider>().radius = r * 0.95f;
         }
 
-        public void AttachDrips(DripTrail drips) => Drips = drips;
 
         public IEnumerator Reveal()
         {
@@ -369,59 +367,6 @@ namespace FrostAndFound
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             float y = SnowSurface.Instance ? SnowSurface.Instance.SurfaceHeight - frosty.position.y + 0.004f : 0.04f;
             transform.localPosition = new Vector3(0, y, 0);
-        }
-    }
-
-    /// <summary>
-    /// Step 1's extra cue: a line of brown cocoa drips runs from the stain across the snow straight to Dexter's
-    /// feet. The trail sparkles once you've taken the stain photo.
-    /// </summary>
-    public class DripTrail : MonoBehaviour
-    {
-        readonly List<Transform> m_Drops = new List<Transform>();
-        bool m_Sparkle;
-        float m_Next;
-
-        public static DripTrail Create(Vector3 from, Vector3 to, float floorY)
-        {
-            var go = new GameObject("Cocoa Drip Trail");
-            var d = go.AddComponent<DripTrail>();
-            d.Build(from, to, floorY);
-            return d;
-        }
-
-        void Build(Vector3 from, Vector3 to, float floorY)
-        {
-            var cocoa = Palette.Toon(Palette.Cocoa, false, 0.2f);
-            var light = Palette.Toon(Palette.CocoaLight, false, 0.2f);
-            var dir = (to - from).Flat();
-            float len = dir.magnitude;
-            dir /= Mathf.Max(len, 1e-3f);
-            var side = Vector3.Cross(Vector3.up, dir);
-            float y = (SnowSurface.Instance ? SnowSurface.Instance.SurfaceHeight : floorY) + 0.003f;
-            int count = Mathf.Max(6, Mathf.RoundToInt(len / 0.11f));
-            var rng = new System.Random(11);
-            for (int i = 1; i < count; i++)
-            {
-                float u = i / (float)count;
-                var p = from + dir * (len * u) + side * (Mathf.Sin(u * 7f) * 0.06f + ((float)rng.NextDouble() - 0.5f) * 0.03f);
-                p.y = y;
-                float s = Mathf.Lerp(0.045f, 0.03f, u) * (0.75f + (float)rng.NextDouble() * 0.5f);
-                var drop = ProcMesh.Part("Drip", transform, ProcMesh.Sphere(8, 5), i % 3 == 0 ? light : cocoa, p,
-                    new Vector3(s, 0.008f, s * (1.2f + (float)rng.NextDouble() * 0.4f)), new Vector3(0, (float)rng.NextDouble() * 360f, 0));
-                drop.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                m_Drops.Add(drop.transform);
-            }
-        }
-
-        public void SetSparkling(bool on) { m_Sparkle = on; m_Next = Time.time; }
-
-        void Update()
-        {
-            if (!m_Sparkle || m_Drops.Count == 0 || Time.time < m_Next) return;
-            m_Next = Time.time + Random.Range(0.15f, 0.4f);
-            var d = m_Drops[Random.Range(0, m_Drops.Count)];
-            Fx.GlintAt(d.position + Vector3.up * 0.015f, 0.035f, Palette.Glint);
         }
     }
 }

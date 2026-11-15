@@ -16,6 +16,7 @@ Shader "FrostAndFound/Wool"
         _FuzzColor ("Fuzz Color", Color) = (1,0.95,0.92,1)
         _FuzzStrength ("Fuzz Strength", Range(0,1)) = 0.35
         _Smoothness ("Smoothness", Range(0,1)) = 0.05
+        _Inflate ("Inflate (m, puffs a bare-hand mesh out into a glove)", Range(0,0.01)) = 0
     }
 
     SubShader
@@ -32,6 +33,7 @@ Shader "FrostAndFound/Wool"
             float4 _FuzzColor;
             float _FuzzStrength;
             float _Smoothness;
+            float _Inflate;
         CBUFFER_END
         ENDHLSL
 
@@ -121,10 +123,10 @@ Shader "FrostAndFound/Wool"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, o);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-                VertexPositionInputs vp = GetVertexPositionInputs(input.positionOS.xyz);
-                o.positionCS = vp.positionCS;
-                o.positionWS = vp.positionWS;
                 o.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz) + normalize(o.normalWS) * _Inflate;
+                o.positionCS = TransformWorldToHClip(positionWS);
+                o.positionWS = positionWS;
                 o.rest = input.rest;
                 o.restN = input.restN;
                 o.color = input.color;
@@ -186,8 +188,8 @@ Shader "FrostAndFound/Wool"
             {
                 V o = (V)0;
                 UNITY_SETUP_INSTANCE_ID(input);
-                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz) + normalize(normalWS) * _Inflate;
             #if _CASTING_PUNCTUAL_LIGHT_SHADOW
                 float3 lightDirectionWS = normalize(_LightPosition - positionWS);
             #else

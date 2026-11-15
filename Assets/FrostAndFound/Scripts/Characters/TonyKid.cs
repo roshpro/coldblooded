@@ -178,16 +178,11 @@ namespace FrostAndFound
         void Dodge()
         {
             var tune = FrostTuning.I;
-            int kind = m_Rng.Next(3);
             float dur = 0.65f + (float)m_Rng.NextDouble() * 0.3f;
             m_DodgeUntil = Time.time + dur;
             m_NextDodge = Time.time + dur + tune.tonyDodgeCooldown;
-            switch (kind)
-            {
-                case 0: Anim.Duck(dur); break;
-                case 1: Anim.Dive(m_Rng.NextDouble() < 0.5 ? -1f : 1f, dur); StartCoroutine(Hop(Random.value < 0.5f ? -1f : 1f, 0.35f)); break;
-                default: Anim.Duck(dur); Sled?.HideBehind(PlayerRig.Active ? PlayerRig.Active.Head.position : transform.position + transform.forward, dur); break;
-            }
+            // a quick sidestep, staying upright (no crouching or diving while he runs)
+            StartCoroutine(Hop(Random.value < 0.5f ? -1f : 1f, 0.35f));
             if (m_Rng.NextDouble() < 0.35 && !DialogueRunner.AnyoneSpeaking)
                 DialogueRunner.Say(Lines.Get("tony_dodge_" + (1 + m_Rng.Next(3))), this, false);
             AudioDirector.PlayAt(Sfx.Whoosh, ChestPoint, 0.35f, 1.4f);
