@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/license-MIT-2EA44F" alt="MIT license">
 </p>
 
-**Cold Blooded** is a mixed-reality detective comedy for **Meta Quest 3 / 3S**, made for **Immerse the Bay**. A loud thud behind you reveals Frosty's toppled body, your living room fills with snow and redwoods, and the real world drains to film-noir grey. Pinch to raise a Polaroid, photograph the clues, show each photo to the right kid, and follow their excuses all the way to the culprit. Then catch him on film.
+**Cold Blooded** is a mixed-reality detective comedy for **Meta Quest 3 / 3S**, that won **3rd place overall** at **Immerse the Bay 2026**. A loud thud behind you reveals Frosty's toppled body, your living room fills with snow and redwoods, and the real world drains to film-noir grey. Pinch to raise a Polaroid, photograph the clues, show each photo to the right kid, and follow their excuses all the way to the culprit. Then catch him on film.
 
 <table>
   <tr>
