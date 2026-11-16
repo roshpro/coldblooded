@@ -1,21 +1,58 @@
-# Cold Blooded
+<p align="center">
+  <img src="Docs/Screenshots/title_drop.jpg" alt="The Cold Blooded logo stamped into a real office, which has drained to grey around snow-covered floor and pine trees" width="820">
+</p>
 
-> A murder mystery in your own living room. The victim is a snowman, the suspects are five kids, and your only tools are a Polaroid camera and a snowball.
+<p align="center">
+  <b>Someone murdered the snowman in your own room.</b><br>
+  Snap Polaroid clues, grill shady kids, dodge snowballs, and crack the case.
+</p>
 
-Mixed-reality game for **Meta Quest 3 / 3S**, made for **Immerse the Bay**. Built with **Unity 6000.6.9f1 · URP · Meta XR All-in-One SDK v209** (Core, Interaction, MR Utility Kit, Audio, Haptics, Platform) on the OpenXR provider, plus **Unity OpenXR Meta 2.7** for the Depth API.
+<p align="center">
+  <img src="https://img.shields.io/badge/Meta%20Quest-3%20%2F%203S-0467DF?logo=meta&logoColor=white" alt="Meta Quest 3 / 3S">
+  <img src="https://img.shields.io/badge/Unity-6000.6-000000?logo=unity&logoColor=white" alt="Unity 6">
+  <img src="https://img.shields.io/badge/mixed%20reality-passthrough%20%2B%20depth-4FA3D9" alt="Mixed reality: passthrough and depth">
+  <img src="https://img.shields.io/badge/license-MIT-2EA44F" alt="MIT license">
+</p>
 
-Your real room fills with snow, snowy redwoods and a toppled snowman. You photograph clues, show the photos to the right kid, follow the chain of excuses to the culprit, and catch him on film. All five kids are fully voiced (ElevenLabs).
+**Cold Blooded** is a mixed-reality detective comedy for **Meta Quest 3 / 3S**, made for **Immerse the Bay**. A loud thud behind you reveals Frosty's toppled body, your living room fills with snow and redwoods, and the real world drains to film-noir grey. Pinch to raise a Polaroid, photograph the clues, show each photo to the right kid, and follow their excuses all the way to the culprit. Then catch him on film.
 
----
+<table>
+  <tr>
+    <td width="50%"><img src="Docs/Screenshots/pinch_camera.jpg" alt="A red-mittened hand pinching a white Polaroid camera, its viewfinder framing Frosty's head"><br><sub><b>Pinch to raise the Polaroid.</b> The viewfinder shows exactly what you'll get.</sub></td>
+    <td width="50%"><img src="Docs/Screenshots/noir_room.jpg" alt="Lucy, with a snowball splat on her cheek, says 'Assaulting a detective. Writing that down.' in a grey real-world office, while the player holds a photo"><br><sub><b>Your real room drains to noir,</b> while the suspects and the clues stay in colour.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="Docs/Screenshots/snowball_throw.jpg" alt="A snowball flies past Serena as Dexter, in the foreground, says 'Free snowballs! No charge!'"><br><sub><b>Scoop and throw snowballs</b> (Dexter is very generous with them).</sub></td>
+    <td><img src="Docs/Screenshots/snowball_fight.jpg" alt="A red SNOWBALL FIGHT! stamp hangs in the air over Serena and Dexter"><br><sub><b>Hit the same kid three times</b> and it's a snowball fight.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="Docs/Screenshots/dazed_dexter.jpg" alt="Dexter with spiral eyes and stars circling his head says 'Hey! My marshmallow! ...That one's fifty cents.'"><br><sub><b>Every kid reacts to a bonk</b> in their own way.</sub></td>
+    <td><img src="Docs/Screenshots/guilty_photo.jpg" alt="The player holds up a Polaroid of the dazed culprit, stamped GUILTY"><br><sub><b>Catch the culprit on film</b> to close the case.</sub></td>
+  </tr>
+</table>
 
-## The game in one minute
+## Inspiration
+We wanted a game that uses the spatial freedom of XR for something only XR can do. Detectives observe and explore a physical space for clues, so we gave that a comedic twist: the victim is a snowman, the suspects are five neighbourhood kids, and the crime scene is **your own room**. In mixed reality the suspects walk around your real furniture, hide behind your real sofa and knock on your real door.
 
-1. **The Knock.** On the title screen your room is untouched: just poke the floating **Play** button. A door appears (on your *real* door if Space Setup marked one) and someone knocks. Lucy wants you out building a snowman: touch the door, where the knob glows, to let her in (or she lets herself in). Snow starts falling and piles up across your floor, and the trees rise out of it. Then the music stops: *THUD*. Frosty is lying in the snow in the middle of the room. Lucy bursts in, sirens wash the room red and blue, and your real room drains to **film-noir grey** until the case is closed. Hold the menu button to skip the intro.
-2. **Investigate.** Each clue on (or near) Frosty leads to a kid: a cocoa splash → Dexter, carrot bits → Sherman, purple glitter → Serena, a red scrape → Lucy, a dented sled → Tony. **Photograph** the clue, then **show** the photo to that kid. They lean in, squint, make an excuse, and point you to the next clue, which starts to glint. Show the wrong kid and you get a joke and a nudge.
-3. **The finale.** Tony refuses to be photographed. He bolts, zig-zags, dodges your viewfinder and ducks behind your real sofa or table. Bonk him with a snowball, and while he's dazed, take the **GUILTY** photo.
-4. **CASE CLOSED.** The colour floods back into your room, the northern lights blaze overhead, and your photos are taped into a scrapbook detective journal with your stats.
+Hand tracking shaped the core of the game. There are no menus or laser pointers for the detective work: you pinch a camera into existence, snap the evidence, and hold the photo up to a suspect's face.
 
-Throw snowballs at the kids for fun, but hit the same kid three times and it's a **SNOWBALL FIGHT**: an alarm, an announcer, and everyone pelting you (and each other).
+## Highlights
+- **Your room is the crime scene.** Snow piles up on your floor, trees rise along your walls, and your furniture becomes part of the level that characters can interact with.
+- **A pinch-to-shoot Polaroid** with a live viewfinder, and prints you can hold and present to characters.
+- **Five fully voiced suspects**, each with their own excuses, poses and reactions to a snowball.
+- **A finale chase.** The culprit dodges your lens and ducks behind your furniture.
+- **Real-world occlusion** with the Depth API, so the snow and the kids hide behind your actual furniture.
+
+## Meet the suspects
+| | |
+|---|---|
+| **Lucy** | The street's self-appointed detective, and your guide. |
+| **Dexter** | Whistling innocently and always carrying a cup of cocoa. |
+| **Sherman** | Someone of a nerd, always carrying a stack of books he never puts down. |
+| **Serena** | Flips her hair for the camera. Her pom-pom hat flies off when she's snowballed. |
+| **Tony "Turbo"** | Owns a red sled with a suspiciously fresh dent. |
+
+<sub>Built with Unity 6000.6.9f1 · URP · Meta XR All-in-One SDK v209 (Core, Interaction, MR Utility Kit, Audio, Haptics, Platform) on the OpenXR provider, plus Unity OpenXR Meta 2.7 for the Depth API. Voices by ElevenLabs, character models by Meshy.</sub>
 
 ---
 
@@ -23,13 +60,13 @@ Throw snowballs at the kids for fun, but hit the same kid three times and it's a
 
 ### On a Quest 3 / 3S
 1. Run **Space Setup** first (Settings ▸ Physical Space ▸ Space Setup) and mark your walls, **doors** and **furniture**. The game uses all of it. Allow the *spatial data* permission when asked.
-2. **File ▸ Build Profiles ▸ Android**, then **Build And Run** with the headset plugged in (developer mode on). The project is already configured: OpenXR + Meta XR features, IL2CPP, ARM64, Vulkan, single-pass instanced stereo, foveation, passthrough, hand tracking, and the AR Session and AR Occlusion features for the Depth API.
+2. **File ▸ Build Profiles ▸ Android**, then **Build And Run** with the headset plugged in (developer mode on).
 3. Play in a clear space of **at least 3 × 3 m**. The layout is generated fresh every round and scales to your room.
 
 | On the headset | Hand tracking | Controllers |
 |---|---|---|
 | Start | Poke the **Play** button with a fingertip | Poke it with the controller tip |
-| Raise the Polaroid (camera hand) | Bring thumb and index together (about 6–9 cm) | Hold **grip** |
+| Raise the Polaroid (left hand) | Bring thumb and index together (about 6–9 cm) | Hold **grip** |
 | Take a photo | Pinch | **Index trigger** |
 | Get the print | It hangs from the slot at the bottom of the camera; the next shot, or putting the camera away, drops it in the snow | Same |
 | Show a photo | **Face** the kid and **push** the photo toward them (slowly is fine) | Same |
@@ -39,85 +76,13 @@ Throw snowballs at the kids for fun, but hit the same kid three times and it's a
 | Throw | Swing and open your hand | Swing and release **grip** |
 | Pause, or skip the intro | Menu gesture | Menu button (hold it to skip the intro) |
 
-Lefty mode in the pause menu swaps which hand holds the camera.
-
-### In the Editor (no headset needed)
-1. Open `Assets/FrostAndFound/Scenes/FrostAndFound.unity` in Unity **6000.6.9f1** and press **Play**. With no headset connected, the game runs in a **desktop simulation** inside a furnished stand-in living room. It has a door, a sofa, a coffee table, a shelf and a lamp, so the door and furniture features work there too.
-2. **Frost & Found ▸ Export Placeholder Audio (WAV)** writes the synthesized sounds and music to `AudioPreview/`.
-
-| Desktop | Action |
-|---|---|
-| Click the Game view | Capture the mouse (Esc releases it) |
-| Mouse / WASD or arrows / C or Ctrl | Look / walk / crouch |
-| Space or Enter | Press Play on the title |
-| Left click | Polaroid shutter (also presses buttons you aim at) |
-| Hold **F** | Push your photo toward the kid in front of you |
-| **G** | Drop your photo / pick up the nearest one |
-| **Q** | Scoop a snowball |
-| Hold and release right click | Wind up and throw |
-| Tab / P | Swap handedness / pause |
-
----
-
-## Mixed reality: how it uses your room
-
-| Feature | Where it lives |
-|---|---|
-| Room from Space Setup: floor, walls, ceiling, **doors and furniture** (tables, couches, beds, storage, screens). Snowballs splat on your real walls and furniture | `Platform/MetaRoomProvider.cs`, `Room/RoomInfo.cs` |
-| **Real-world occlusion** (Meta Depth API): a real person or piece of furniture in front of a kid, the snow or a snowball hides it. Your held camera and photos and the aurora are exempt, and so are the UI and the Polaroid's lens | `Shaders/FrostOcclusion.hlsl`, `Core/DepthOcclusion.cs` |
-| **The room tells the story** with passthrough colour grading: noir for the whole case, a flash when you take a photo, icy blue in a snowball fight (red pulses with the alarm), colour back at CASE CLOSED | `Game/PassthroughMood.cs` (runtime LUTs), `RoomTint` in `Game/OpeningSequence.cs` |
-| The opening's door stands on your real door when there is one | `Game/OpeningSequence.cs`, `GameManager.BeginCase` |
-| Kids use your furniture: Tony hides behind your sofa or table in the chase, Dexter puts his cocoa down on a table, and everyone wanders over to look at things | `Characters/TonyKid.cs`, `Characters/Suspects.cs`, `Characters/KidBrain.cs` |
-| Northern lights fade in with the snow and stay up all game; a night veil darkens your real ceiling beneath them | `Game/NorthernLights.cs` |
-| The Polaroid can't see passthrough, so photos show a snowy backdrop only the lens can see | `PhotoBackdrop` in `Game/GameManager.cs` |
-
----
-
-## How it's built
-
-| Area | Where it lives |
-|---|---|
-| The clue chain (photograph → show the right kid → excuse → next clue glints), wrong-kid lines, Lucy's hints | `Scripts/Story/CaseDirector.cs`, `Lines.cs`, `DialogueRunner.cs` |
-| The opening sequence ("The Knock") | `Scripts/Game/OpeningSequence.cs` |
-| Polaroid: viewfinder, flash, the print slot, clue detection, developing photos | `Scripts/Photo/PolaroidCamera.cs`, `Photo.cs` |
-| Showing photos (face the kid, push it forward; the kid your clue points to is favoured; one kid at a time) | `Scripts/Game/ShowPhotoDetector.cs` |
-| Snowballs, scooping, aim assist, wall splats | `Scripts/Snow/` |
-| The kids: rigged Meshy models with IK, faces, poses, stun; personalities and an AI that picks what to do next; A* walking round furniture with personal space | `Scripts/Characters/` (`Kid.cs`, `KidBrain.cs`, `KidHumanoid.cs`, `Suspects.cs`, `TonyKid.cs`) |
-| A new layout every round: Frosty behind you, the kids, sled and toys placed fresh; trees always along the walls | `Scripts/Game/LayoutDirector.cs`, `Scenery.cs` |
-| Snowball fights (three hits on one kid starts one) | `Scripts/Game/SnowballFight.cs` |
-| Case-closed journal | `ResultsScreen` in `Scripts/UI/Screens.cs` |
-| Audio: synthesized SFX and music, the Satie soundscape when installed, and 3D voices that follow each kid's head | `Scripts/Audio/` |
-| UI (Horizon-style menus, gesture hint cards, world-space text); your hands draw over the UI | `Scripts/UI/` |
-
-### Voices
-All lines live in `Scripts/Story/Lines.cs`. Clips are `Assets/FrostAndFound/Resources/Voice/<id>.mp3` and play instead of the placeholder babble; subtitles time themselves to the clip. `voice_lines_todo.csv` lists anything still unrecorded: only the announcer's "SNOWBALL FIGHT!" at the moment.
-
-### Sound effects and music
-Drop a file into `Resources/SFX/` named after the sound (e.g. `Knock.wav`, `Thud.wav`, `Jingle.wav`) to replace the synthesized one; the noir score goes in `Resources/Music/NoirScore`. Anything missing stays synthesized.
-
-### Tuning
-`Resources/FrostTuning.asset` holds the numbers worth playtesting: clue range, show range and arm extension, scoop height and grip thresholds, throw multipliers and aim assist, Tony's speeds and daze time, passthrough dim, and volumes.
-
----
-
-## Project layout
-```
-Assets/FrostAndFound/
-  Scenes/FrostAndFound.unity    the game (Meta XR rig + MRUK)
-  Scripts/Core                  palette, procedural meshes, FX, tuning, depth occlusion
-  Scripts/Input                 PlayerRig abstraction, desktop simulation
-  Scripts/Platform              Meta XR rig (hands, controllers, passthrough) + MRUK room
-  Scripts/Room Snow Photo Story Characters Frosty Audio UI Game
-  Shaders/                      toon, snow, sky, photo, particles: single-pass instanced, Depth API occlusion
-  Editor/                       Frost & Found ▸ Setup, voice script export, audio export
-  Resources/                    FrostAssets, FrostTuning, Voice/, SFX/, Music/, Title/
-```
-Code, folders and the package id (`com.immersethebay.frostandfound`) still use the original working title, *Frost & Found*.
-
-## Known limitations
-- Depth occlusion has soft edges, like the Quest's depth sensor itself; held items and anything within about 45 cm of your eyes are never occluded.
-- Without doors or furniture in Space Setup, the opening uses a free-standing door and the furniture features stay off.
-- If you recompile scripts *during* Play mode in the Editor, MRUK can log "Global context has already been created" on the next play. It's harmless: stop Play before editing code.
+## How it uses your room
+- **Your space is the level.** The game reads your walls, doors and furniture from Space Setup. Snowballs splat on your real walls, and a fresh layout is generated every round to fit your room.
+- **Real-world occlusion.** A real person or piece of furniture in front of a kid, the snow or a snowball hides it, just as it would in real life.
+- **The room tells the story.** Your passthrough drains to noir for the whole case, flashes when you take a photo, turns icy blue in a snowball fight, and gets its colour back at CASE CLOSED.
+- **The knock comes from your real door** when you've marked one.
+- **The kids use your furniture.** Tony hides behind your sofa or table in the chase, and everyone wanders over to look at things.
+- **Northern lights** shimmer overhead all game, with a night sky over your real ceiling.
 
 ## License
 The code is released under the [MIT License](LICENSE). Some assets in the repo keep their own terms: the fonts (see `Assets/FrostAndFound/Fonts/LICENSES.md`), the ElevenLabs voice clips and the Meshy character models (each under that service's terms). The Meta XR SDK, MRUK and Unity packages aren't stored here and stay under their own licenses.
